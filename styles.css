@@ -1,188 +1,361 @@
-body {
-    width: 380px;
-    min-height: 100vh;
+* {
+    box-sizing: border-box;
     margin: 0;
+    padding: 0;
+}
+
+body {
+    width: 400px;
+    min-height: 500px;
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
     background: #ffffff;
     color: #333333;
 }
 
 #content {
-    padding: 20px;
     display: flex;
     flex-direction: column;
     height: 100vh;
 }
 
-.session-controls {
+/* Header */
+.header {
     display: flex;
-    flex-direction: column;
-    gap: 12px;
-    margin-bottom: 24px;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 16px;
+    border-bottom: 1px solid #eee;
+    background: #fafbfc;
+}
+
+.app-title {
+    font-size: 15px;
+    font-weight: 600;
+    color: #1a1a1a;
+}
+
+.icon-btn {
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 6px;
+    border-radius: 6px;
+    color: #666;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.15s;
+}
+
+.icon-btn:hover {
+    background: #f0f0f0;
+    color: #333;
+}
+
+/* Session Controls */
+.session-controls {
+    padding: 12px 16px;
+    border-bottom: 1px solid #eee;
+}
+
+.session-row {
+    display: flex;
+    gap: 8px;
+    align-items: center;
 }
 
 .session-select {
-    width: 100%;
-    padding: 10px 14px;
-    border: 1px solid #e0e0e0;
-    border-radius: 8px;
-    font-size: 14px;
-    background: #f8f9fa;
+    flex: 1;
+    padding: 8px 10px;
+    border: 1px solid #ddd;
+    border-radius: 6px;
+    font-size: 13px;
+    background: #fafafa;
     color: #333;
     outline: none;
-    transition: border-color 0.2s ease;
 }
 
 .session-select:focus {
     border-color: #2196f3;
 }
 
-.button-group {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
+.add-btn {
+    font-size: 20px;
+    font-weight: 300;
+    width: 32px;
+    height: 32px;
+    border: 1px solid #ddd;
+    border-radius: 6px;
+    color: #2196f3;
 }
 
-.secondary-buttons {
-    display: flex;
-    gap: 8px;
-    justify-content: space-between;
+.add-btn:hover {
+    background: #e3f2fd;
+    border-color: #2196f3;
 }
 
-button {
-    padding: 10px 16px;
+.session-meta {
+    font-size: 12px;
+    color: #999;
+    margin-top: 6px;
+    padding: 0 2px;
+}
+
+.session-actions {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 8px;
+}
+
+.small-btn {
+    padding: 4px 10px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    background: #fff;
+    font-size: 11px;
+    cursor: pointer;
+    color: #555;
+    transition: all 0.15s;
+}
+
+.small-btn:hover {
+    border-color: #2196f3;
+    color: #2196f3;
+}
+
+.small-btn.danger:hover {
+    border-color: #f44336;
+    color: #f44336;
+}
+
+.spacer {
+    flex: 1;
+}
+
+.snippet-count {
+    font-size: 11px;
+    color: #999;
+}
+
+/* Search */
+.search-bar {
+    padding: 8px 16px 0;
+}
+
+.search-input {
+    width: 100%;
+    padding: 7px 10px;
+    border: 1px solid #ddd;
+    border-radius: 6px;
+    font-size: 12px;
+    outline: none;
+    background: #fafafa;
+}
+
+.search-input:focus {
+    border-color: #2196f3;
+    background: #fff;
+}
+
+/* Drag state */
+.snippet-item.dragging {
+    opacity: 0.4;
+    border: 1px dashed #2196f3;
+}
+
+.snippet-item.drag-over {
+    border-top: 2px solid #2196f3;
+}
+
+/* Session Content */
+.session-content {
+    flex: 1;
+    overflow-y: auto;
+    padding: 8px 16px;
+}
+
+.snippet-item {
+    background: #fafbfc;
+    border: 1px solid #eee;
+    border-radius: 8px;
+    padding: 10px 12px;
+    margin-bottom: 8px;
+    position: relative;
+    transition: all 0.15s;
+    cursor: default;
+}
+
+.snippet-item:hover {
+    border-color: #ccc;
+    background: #f5f8ff;
+}
+
+.snippet-type-badge {
+    display: inline-block;
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    padding: 2px 6px;
+    border-radius: 3px;
+    margin-bottom: 6px;
+}
+
+.snippet-type-badge.text {
+    background: #e3f2fd;
+    color: #1565c0;
+}
+
+.snippet-type-badge.link {
+    background: #e8f5e9;
+    color: #2e7d32;
+}
+
+.snippet-content {
+    font-size: 13px;
+    line-height: 1.5;
+    color: #333;
+    word-break: break-word;
+    margin-bottom: 6px;
+}
+
+.snippet-link {
+    font-size: 12px;
+    color: #1976d2;
+    text-decoration: none;
+    word-break: break-all;
+}
+
+.snippet-link:hover {
+    text-decoration: underline;
+}
+
+.snippet-meta {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 11px;
+    color: #aaa;
+    margin-top: 4px;
+    flex-wrap: wrap;
+}
+
+.snippet-source {
+    max-width: 200px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.snippet-tags {
+    display: flex;
+    gap: 4px;
+    flex-wrap: wrap;
+}
+
+.snippet-tag {
+    font-size: 10px;
+    padding: 1px 6px;
+    border-radius: 3px;
+    background: #f3e5f5;
+    color: #7b1fa2;
+    cursor: pointer;
+}
+
+.snippet-actions {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    display: flex;
+    gap: 4px;
+    opacity: 0;
+    transition: opacity 0.15s;
+}
+
+.snippet-item:hover .snippet-actions {
+    opacity: 1;
+}
+
+.snippet-action-btn {
+    background: #fff;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    padding: 2px 6px;
+    font-size: 11px;
+    cursor: pointer;
+    color: #666;
+    transition: all 0.15s;
+}
+
+.snippet-action-btn:hover {
+    border-color: #f44336;
+    color: #f44336;
+}
+
+.snippet-action-btn.move:hover {
+    border-color: #2196f3;
+    color: #2196f3;
+}
+
+/* Empty state */
+.empty-state {
+    text-align: center;
+    padding: 40px 20px;
+    color: #bbb;
+}
+
+.empty-state p {
+    font-size: 13px;
+    margin-top: 8px;
+}
+
+.empty-state .empty-icon {
+    font-size: 36px;
+    margin-bottom: 8px;
+}
+
+/* Bottom Bar */
+.bottom-bar {
+    padding: 12px 16px;
+    border-top: 1px solid #eee;
+    background: #fafbfc;
+}
+
+.action-btn {
+    width: 100%;
+    padding: 10px;
     border: none;
     border-radius: 8px;
     font-size: 14px;
     font-weight: 500;
     cursor: pointer;
-    transition: all 0.2s ease;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 6px;
+    transition: all 0.15s;
 }
 
-.primary-btn {
+.action-btn.primary {
     background: #2196f3;
-    color: white;
-    width: 100%;
+    color: #fff;
 }
 
-.secondary-btn {
-    background: #4caf50;
-    color: white;
-    flex: 1;
+.action-btn.primary:hover {
+    background: #1976d2;
 }
 
-.danger-btn {
-    background: #f44336;
-    color: white;
-    flex: 1;
-}
-
-.btn-icon {
-    font-size: 16px;
-    font-weight: bold;
-}
-
-button:hover {
-    opacity: 0.9;
-    transform: translateY(-1px);
-    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-}
-
-#sessionContent {
-    flex: 1;
-    overflow-y: auto;
-    padding: 8px 0;
-}
-
-.session-item {
-    background: #f8f9fa;
-    padding: 16px;
-    margin: 8px 0;
-    border-radius: 8px;
-    position: relative;
-    border: 1px solid #e0e0e0;
-    font-size: 14px;
-    line-height: 1.5;
-    transition: all 0.2s ease;
-}
-
-.session-item:hover {
-    border-color: #2196f3;
-    background: #f5f9ff;
-}
-
-.session-item .delete-btn {
-    position: absolute;
-    right: 8px;
-    top: 50%;
-    transform: translateY(-50%);
-    background: #ff5252;
-    color: white;
-    border: none;
-    border-radius: 4px;
-    padding: 4px 8px;
-    font-size: 12px;
-    opacity: 0;
-    transition: opacity 0.2s ease;
-}
-
-.session-item:hover .delete-btn {
-    opacity: 1;
-}
-
-.settings-link {
-    margin-top: 16px;
-    padding-top: 16px;
-    border-top: 1px solid #e0e0e0;
-    text-align: center;
-}
-
-.settings-link a {
-    color: #2196f3;
-    text-decoration: none;
-    font-size: 14px;
-    padding: 8px 16px;
-    border-radius: 6px;
-    transition: all 0.2s ease;
-}
-
-.settings-link a:hover {
-    background: #f5f9ff;
-    text-decoration: none;
-}
-
-/* 自定义滚动条样式 */
+/* Scrollbar */
 ::-webkit-scrollbar {
-    width: 6px;
+    width: 5px;
 }
 
 ::-webkit-scrollbar-track {
-    background: #f1f1f1;
-    border-radius: 3px;
+    background: transparent;
 }
 
 ::-webkit-scrollbar-thumb {
-    background: #bbb;
+    background: #ccc;
     border-radius: 3px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-    background: #888;
+    background: #aaa;
 }
-
-/* 在现有的 styles.css 中添加以下样式 */
-.chat-btn {
-    background: #673ab7;
-    color: white;
-    width: 100%;
-    margin-top: 8px;
-}
-
-.chat-btn:hover {
-    background: #5e35b1;
-}
-  

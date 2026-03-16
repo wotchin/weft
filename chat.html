@@ -2,30 +2,65 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>AI Chat</title>
+    <title>AI Chat - Cyber Assistant</title>
     <link rel="stylesheet" href="chat.css">
 </head>
 <body>
     <div class="chat-container">
         <div class="chat-header">
-            <button id="backButton" class="back-btn">←</button>
-            <h2>Chat with AI</h2>
+            <div class="header-left">
+                <h2>Chat with AI</h2>
+                <span class="session-badge" id="sessionBadge"></span>
+            </div>
+            <div class="header-right">
+                <button id="exportBtn" class="header-btn" title="Export result">Export</button>
+                <button id="clearChat" class="header-btn" title="Clear chat">Clear</button>
+            </div>
         </div>
+
+        <!-- Context panel showing session snippets -->
+        <div class="context-panel" id="contextPanel">
+            <div class="context-header">
+                <span>Session Context</span>
+                <button id="toggleContext" class="toggle-btn">Hide</button>
+            </div>
+            <div class="context-body" id="contextBody"></div>
+        </div>
+
+        <!-- Prompt template selector -->
+        <div class="template-bar" id="templateBar">
+            <select id="templateSelect" class="template-select">
+                <option value="">Select a prompt template...</option>
+                <option value="summarize">Summarize collected info</option>
+                <option value="report">Generate analysis report</option>
+                <option value="compare">Compare and contrast</option>
+                <option value="extract">Extract key points</option>
+                <option value="table">Organize into table</option>
+                <option value="translate_zh">Translate to Chinese</option>
+                <option value="translate_en">Translate to English</option>
+                <option value="custom">Custom prompt...</option>
+            </select>
+        </div>
+
         <div class="chat-messages" id="chatMessages">
             <!-- Messages will be inserted here -->
         </div>
+
         <div class="chat-input-container">
-            <textarea 
-                id="userInput" 
-                placeholder="Type your message here..." 
+            <textarea
+                id="userInput"
+                placeholder="Type your message or select a template above..."
                 rows="1"
                 class="chat-input"
             ></textarea>
-            <button id="sendMessage" class="send-btn">
-                <span class="send-icon">↑</span>
+            <button id="sendMessage" class="send-btn" title="Send">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                    <line x1="12" y1="19" x2="12" y2="5"></line>
+                    <polyline points="5 12 12 5 19 12"></polyline>
+                </svg>
             </button>
         </div>
     </div>
     <script src="chat.js"></script>
 </body>
-</html> 
+</html>
