@@ -188,14 +188,30 @@ async function updateSessionContextMenus() {
 
         const sessionNames = Object.keys(sessions);
 
-        // 删除之前的子菜单（await 每个 remove 确保完成后再创建）
-        await Promise.all(sessionMenuIds.map(id =>
-            chrome.contextMenus.remove(id).catch(() => {})
-        ));
+        // 先尝试删除所有已知的 session 菜单项（兼容 service worker 重启后内存丢失）
+        // 同时删除按 sessionNames 推算出的 ID，确保不遗漏
+        const idsToRemove = new Set([
+            ...sessionMenuIds,
+            ...sessionNames.map(n => `session-${n}`)
+        ]);
+        // 也删除可能残留的旧 session（已删除的 session 的菜单项）
+        // chrome.contextMenus.remove 对不存在的 ID 会报错，需要 catch
+        for (const id of idsToRemove) {
+            try {
+                await new Promise((resolve, reject) => {
+                    chrome.contextMenus.remove(id, () => {
+                        if (chrome.runtime.lastError) reject(chrome.runtime.lastError);
+                        else resolve();
+                    });
+                });
+            } catch (_) {
+                // Menu item doesn't exist, that's fine
+            }
+        }
         sessionMenuIds = [];
 
         // 创建新的子菜单
-        sessionNames.forEach(sessionName => {
+        for (const sessionName of sessionNames) {
             const menuId = `session-${sessionName}`;
             chrome.contextMenus.create({
                 id: menuId,
@@ -204,7 +220,7 @@ async function updateSessionContextMenus() {
                 parentId: "saveToSession"
             });
             sessionMenuIds.push(menuId);
-        });
+        }
     } catch (error) {
         console.error('Error updating context menus:', error);
     } finally {
