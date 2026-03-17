@@ -92,33 +92,88 @@ document.addEventListener('DOMContentLoaded', async function() {
         });
     }
 
-    // Build system prompt with session context (multimodal: returns content array)
-    function buildSystemMessage() {
-        const contentParts = [];
+    // 已知支持 Vision（多模态图片）的模型前缀/关键词
+    const VISION_CAPABLE_PATTERNS = [
+        /^gpt-4o/i,              // OpenAI gpt-4o, gpt-4o-mini
+        /^gpt-4-turbo/i,         // OpenAI gpt-4-turbo
+        /^gpt-4\.1/i,            // OpenAI gpt-4.1 系列
+        /^chatgpt-4o/i,          // OpenAI chatgpt-4o-latest
+        /^o1/i, /^o3/i, /^o4/i,  // OpenAI reasoning models with vision
+        /^claude-/i,             // Anthropic Claude 3+ (via compatible endpoint)
+        /^gemini/i,              // Google Gemini (via compatible endpoint)
+        /^llava/i,               // Ollama llava
+        /^bakllava/i,            // Ollama bakllava
+        /^llama.*vision/i,       // Llama vision variants
+        /^qwen.*vl/i,            // Qwen-VL 系列
+        /^qwen2\.5-vl/i,         // Qwen2.5-VL
+        /^glm-4v/i,              // GLM-4V (智谱)
+        /^yi-vision/i,           // Yi-Vision
+        /^internvl/i,            // InternVL
+        /^cogvlm/i,              // CogVLM
+        /^minicpm.*v/i,          // MiniCPM-V
+        /^step-.*v/i,            // StepFun vision models
+    ];
 
-        let textIntro = "You are a helpful AI assistant for Cyber Assistant, a browser extension that collects information snippets from web pages. ";
-        textIntro += "The user has collected the following information snippets in their current session. Use them as context when responding.\n\n";
-        textIntro += "When generating reports or structured content, you may use HTML formatting including tables, lists, headings, and SVG charts.\n\n";
+    // 判断当前模型是否支持 vision
+    async function isVisionSupported() {
+        const { visionMode = 'auto', modelName = '' } = await chrome.storage.local.get(['visionMode', 'modelName']);
+        if (visionMode === 'enabled') return true;
+        if (visionMode === 'disabled') return false;
+        // auto: 根据模型名匹配
+        return VISION_CAPABLE_PATTERNS.some(pattern => pattern.test(modelName));
+    }
 
+    // 检查 session 中是否有图片 snippet
+    function hasImageSnippets() {
+        return sessionSnippets.some(s => s.type === 'image');
+    }
+
+    // 构建 snippet 描述的文本部分（text-only 和 multimodal 共用）
+    function buildSnippetsText(visionEnabled) {
+        let text = '';
         if (sessionSnippets.length > 0) {
-            textIntro += "=== COLLECTED SNIPPETS ===\n";
+            text += "=== COLLECTED SNIPPETS ===\n";
             sessionSnippets.forEach((snippet, i) => {
                 const content = snippet.content || snippet;
                 const source = snippet.sourceTitle || snippet.sourceUrl || '';
                 const tags = (snippet.tags || []).join(', ');
                 if (snippet.type === 'image') {
-                    textIntro += `\n[Snippet ${i + 1}] (image)${tags ? ` (${tags})` : ''}${source ? ` from: ${source}` : ''}\nImage URL: ${snippet.imageUrl || '(see image below)'}\n`;
+                    if (visionEnabled) {
+                        text += `\n[Snippet ${i + 1}] (image)${tags ? ` (${tags})` : ''}${source ? ` from: ${source}` : ''}\nImage URL: ${snippet.imageUrl || '(see image below)'}\n`;
+                    } else {
+                        // 纯文本模式：尽量多描述图片信息
+                        text += `\n[Snippet ${i + 1}] (image, not displayed - model does not support vision)${tags ? ` (${tags})` : ''}${source ? ` from: ${source}` : ''}\nImage URL: ${snippet.imageUrl || '(no url)'}\nNote: This is an image snippet. The image cannot be displayed to you because the current model does not support vision/multimodal input. The user saved this image from the webpage above.\n`;
+                    }
                 } else {
-                    textIntro += `\n[Snippet ${i + 1}]${tags ? ` (${tags})` : ''}${source ? ` from: ${source}` : ''}\n${content}\n`;
+                    text += `\n[Snippet ${i + 1}]${tags ? ` (${tags})` : ''}${source ? ` from: ${source}` : ''}\n${content}\n`;
                 }
             });
-            textIntro += "\n=== END SNIPPETS ===\n";
+            text += "\n=== END SNIPPETS ===\n";
+        }
+        return text;
+    }
+
+    // Build system message: multimodal (with images) or text-only
+    async function buildSystemMessage() {
+        const visionEnabled = await isVisionSupported();
+        const useMultimodal = visionEnabled && hasImageSnippets();
+
+        let intro = "You are a helpful AI assistant for Cyber Assistant, a browser extension that collects information snippets from web pages. ";
+        intro += "The user has collected the following information snippets in their current session. Use them as context when responding.\n\n";
+        intro += "When generating reports or structured content, you may use HTML formatting including tables, lists, headings, and SVG charts.\n\n";
+
+        const snippetsText = buildSnippetsText(visionEnabled);
+
+        if (!useMultimodal) {
+            // 纯文本模式（DeepSeek 等不支持 vision 的模型）
+            return { role: "system", content: intro + snippetsText };
         }
 
-        contentParts.push({ type: "text", text: textIntro });
+        // 多模态模式（OpenAI GPT-4o、Gemini 等支持 vision 的模型）
+        const contentParts = [];
+        contentParts.push({ type: "text", text: intro + snippetsText });
 
-        // 将图片 snippet 以 image_url 格式加入，让 LLM 真正"看到"图片
-        sessionSnippets.forEach((snippet, i) => {
+        sessionSnippets.forEach((snippet) => {
             if (snippet.type === 'image') {
                 const imageSource = snippet.cachedDataUrl || snippet.imageUrl;
                 if (imageSource) {
@@ -216,7 +271,7 @@ document.addEventListener('DOMContentLoaded', async function() {
 
         // Add to conversation history
         if (conversationHistory.length === 0) {
-            conversationHistory.push(buildSystemMessage());
+            conversationHistory.push(await buildSystemMessage());
         }
         conversationHistory.push({ role: "user", content: userMessage });
 

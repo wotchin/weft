@@ -4,6 +4,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     const modelNameInput = document.getElementById('modelName');
     const maxTokensInput = document.getElementById('maxTokens');
     const temperatureInput = document.getElementById('temperature');
+    const visionModeSelect = document.getElementById('visionMode');
     const saveButton = document.getElementById('saveSettings');
     const testButton = document.getElementById('testConnection');
     const statusMessage = document.getElementById('statusMessage');
@@ -11,7 +12,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // Load saved settings
     const settings = await chrome.storage.local.get([
-        'apiBaseUrl', 'apiKey', 'modelName', 'maxTokens', 'temperature', 'provider'
+        'apiBaseUrl', 'apiKey', 'modelName', 'maxTokens', 'temperature', 'provider', 'visionMode'
     ]);
 
     if (settings.apiBaseUrl) apiBaseUrlInput.value = settings.apiBaseUrl;
@@ -19,6 +20,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (settings.modelName) modelNameInput.value = settings.modelName;
     if (settings.maxTokens) maxTokensInput.value = settings.maxTokens;
     if (settings.temperature !== undefined) temperatureInput.value = settings.temperature;
+    if (settings.visionMode) visionModeSelect.value = settings.visionMode;
 
     // Highlight active provider preset
     updatePresetHighlight(settings.provider || '');
@@ -66,6 +68,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         const modelName = modelNameInput.value.trim();
         const maxTokens = parseInt(maxTokensInput.value) || 2000;
         const temperature = parseFloat(temperatureInput.value);
+        const visionMode = visionModeSelect.value || 'auto';
 
         if (!apiKey) {
             showStatus('Please enter an API key.', 'error');
@@ -93,7 +96,8 @@ document.addEventListener('DOMContentLoaded', async () => {
                 modelName,
                 maxTokens,
                 temperature: isNaN(temperature) ? 0.7 : temperature,
-                provider
+                provider,
+                visionMode
             });
             showStatus('Settings saved successfully!', 'success');
         } catch (error) {
