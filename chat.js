@@ -153,10 +153,11 @@ document.addEventListener('DOMContentLoaded', async function() {
         return text;
     }
 
-    // Build system message: multimodal (with images) or text-only
+    // Build system message (always text-only) and optional image context message
+    // NOTE: image_url is only supported in "user" role messages by most API providers,
+    // so we must NOT put images in the system message.
     async function buildSystemMessage() {
         const visionEnabled = await isVisionSupported();
-        const useMultimodal = visionEnabled && hasImageSnippets();
 
         let intro = "You are a helpful AI assistant for Cyber Assistant, a browser extension that collects information snippets from web pages. ";
         intro += "The user has collected the following information snippets in their current session. Use them as context when responding.\n\n";
@@ -164,14 +165,18 @@ document.addEventListener('DOMContentLoaded', async function() {
 
         const snippetsText = buildSnippetsText(visionEnabled);
 
-        if (!useMultimodal) {
-            // 纯文本模式（DeepSeek 等不支持 vision 的模型）
-            return { role: "system", content: intro + snippetsText };
-        }
+        // System message is always text-only (no image_url)
+        return { role: "system", content: intro + snippetsText };
+    }
 
-        // 多模态模式（OpenAI GPT-4o、Gemini 等支持 vision 的模型）
+    // Build an optional user message containing images for vision-capable models.
+    // Returns null if no images or vision is not supported.
+    async function buildImageContextMessage() {
+        const visionEnabled = await isVisionSupported();
+        if (!visionEnabled || !hasImageSnippets()) return null;
+
         const contentParts = [];
-        contentParts.push({ type: "text", text: intro + snippetsText });
+        contentParts.push({ type: "text", text: "Here are the images from the collected snippets for reference:" });
 
         sessionSnippets.forEach((snippet) => {
             if (snippet.type === 'image') {
@@ -185,7 +190,9 @@ document.addEventListener('DOMContentLoaded', async function() {
             }
         });
 
-        return { role: "system", content: contentParts };
+        // Only return if we actually have image parts (beyond the text intro)
+        if (contentParts.length <= 1) return null;
+        return { role: "user", content: contentParts };
     }
 
     // Template selection
@@ -272,6 +279,12 @@ document.addEventListener('DOMContentLoaded', async function() {
         // Add to conversation history
         if (conversationHistory.length === 0) {
             conversationHistory.push(await buildSystemMessage());
+            // Inject image context as a user message (images only work in user role)
+            const imageCtx = await buildImageContextMessage();
+            if (imageCtx) {
+                conversationHistory.push(imageCtx);
+                conversationHistory.push({ role: "assistant", content: "I can see the images from your collected snippets. How can I help you with them?" });
+            }
         }
         conversationHistory.push({ role: "user", content: userMessage });
 
@@ -293,7 +306,12 @@ document.addEventListener('DOMContentLoaded', async function() {
 
         if (!response.ok) {
             const errorData = await response.json().catch(() => ({}));
-            throw new Error(`API Error: ${response.status} - ${errorData.error?.message || 'Unknown error'}`);
+            const errMsg = errorData.error?.message || 'Unknown error';
+            let hint = '';
+            if (response.status === 401 || response.status === 403) {
+                hint = '\nPlease check: 1) API key is valid; 2) API Base URL matches your provider; 3) The model name is accessible with your key.';
+            }
+            throw new Error(`API Error: ${response.status} - ${errMsg}${hint}`);
         }
 
         return response;
