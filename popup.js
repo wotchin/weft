@@ -50,6 +50,48 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
     }
 
+    function showTagPicker(container, snippet, sessionName) {
+        // Toggle: remove picker if already open
+        const existing = container.querySelector('.tag-picker');
+        if (existing) { existing.remove(); return; }
+
+        const picker = document.createElement('div');
+        picker.className = 'tag-picker';
+
+        const presetTags = ['quote', 'data', 'opinion', 'reference', 'key-point'];
+        presetTags.forEach(tag => {
+            if (snippet.tags && snippet.tags.includes(tag)) return;
+            const btn = document.createElement('button');
+            btn.className = 'tag-picker-btn';
+            btn.textContent = tag;
+            btn.addEventListener('click', async () => {
+                if (!snippet.tags) snippet.tags = [];
+                snippet.tags.push(tag);
+                await chrome.storage.local.set({ sessions });
+                displaySessionContent(sessionName);
+            });
+            picker.appendChild(btn);
+        });
+
+        // Custom tag input
+        const customInput = document.createElement('input');
+        customInput.className = 'tag-custom-input';
+        customInput.placeholder = 'custom...';
+        customInput.addEventListener('keydown', async (e) => {
+            if (e.key === 'Enter') {
+                const val = customInput.value.trim().toLowerCase();
+                if (val && !(snippet.tags || []).includes(val)) {
+                    if (!snippet.tags) snippet.tags = [];
+                    snippet.tags.push(val);
+                    await chrome.storage.local.set({ sessions });
+                    displaySessionContent(sessionName);
+                }
+            }
+        });
+        picker.appendChild(customInput);
+        container.appendChild(picker);
+    }
+
     function displaySessionContent(sessionName) {
         sessionContent.innerHTML = '';
         const snippets = sessions[sessionName] || [];
@@ -127,18 +169,34 @@ document.addEventListener('DOMContentLoaded', async () => {
                 meta.appendChild(source);
             }
 
-            // Tags
+            // Tags (interactive: click to remove, + to add)
+            const tagsContainer = document.createElement('div');
+            tagsContainer.className = 'snippet-tags-container';
+
             if (snippet.tags && snippet.tags.length > 0) {
-                const tagsDiv = document.createElement('div');
-                tagsDiv.className = 'snippet-tags';
-                snippet.tags.forEach(tag => {
+                snippet.tags.forEach((tag, tagIndex) => {
                     const tagEl = document.createElement('span');
                     tagEl.className = 'snippet-tag';
                     tagEl.textContent = tag;
-                    tagsDiv.appendChild(tagEl);
+                    tagEl.title = 'Click to remove';
+                    tagEl.addEventListener('click', async () => {
+                        snippet.tags.splice(tagIndex, 1);
+                        await chrome.storage.local.set({ sessions });
+                        displaySessionContent(sessionName);
+                    });
+                    tagsContainer.appendChild(tagEl);
                 });
-                meta.appendChild(tagsDiv);
             }
+
+            const addTagBtn = document.createElement('span');
+            addTagBtn.className = 'snippet-tag add-tag-btn';
+            addTagBtn.textContent = '+';
+            addTagBtn.title = 'Add tag';
+            addTagBtn.addEventListener('click', () => {
+                showTagPicker(tagsContainer, snippet, sessionName);
+            });
+            tagsContainer.appendChild(addTagBtn);
+            meta.appendChild(tagsContainer);
 
             item.appendChild(meta);
 
@@ -292,9 +350,9 @@ document.addEventListener('DOMContentLoaded', async () => {
         });
     });
 
-    // Open settings
+    // Open settings in a new tab
     document.getElementById('openSettings').addEventListener('click', () => {
-        chrome.runtime.openOptionsPage();
+        chrome.tabs.create({ url: chrome.runtime.getURL('settings.html') });
     });
 
     // Listen for storage changes to refresh

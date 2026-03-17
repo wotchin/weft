@@ -27,6 +27,23 @@ chrome.runtime.onInstalled.addListener(() => {
         });
     });
 
+    // 一键保存并打标签
+    chrome.contextMenus.create({
+        id: "saveWithTag",
+        title: "Quick Save with Tag",
+        contexts: ["selection"]
+    });
+
+    const quickTags = ["quote", "data", "opinion", "reference", "key-point"];
+    quickTags.forEach(tag => {
+        chrome.contextMenus.create({
+            id: `saveTag-${tag}`,
+            title: `Save as "${tag}"`,
+            contexts: ["selection"],
+            parentId: "saveWithTag"
+        });
+    });
+
     // 保存页面链接
     chrome.contextMenus.create({
         id: "savePageLink",
@@ -70,7 +87,7 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
         await chrome.storage.local.set({ "sessions": sessions });
 
         lastSavedSnippetInfo = { sessionName, snippetId: snippet.id };
-        sendNotification("Session Updated", `Added to session: ${sessionName}`);
+        sendNotification(`${sessionName} +1`, snippet.content.substring(0, 50));
 
     } else if (info.menuItemId === "savePageLink") {
         // 保存当前页面链接到默认 session
@@ -90,7 +107,28 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
 
         sessions[targetSession].push(snippet);
         await chrome.storage.local.set({ "sessions": sessions });
-        sendNotification("Page Saved", `Link saved to session: ${targetSession}`);
+        sendNotification(`${targetSession} +1`, 'Page link saved');
+
+    } else if (info.menuItemId.startsWith("saveTag-")) {
+        // 一键保存并打标签到默认 session
+        const tag = info.menuItemId.replace("saveTag-", "");
+        const { sessions } = await chrome.storage.local.get(["sessions"]);
+        const targetSession = Object.keys(sessions)[0] || 'default';
+
+        const snippet = {
+            id: generateId(),
+            type: 'text',
+            content: info.selectionText || '',
+            sourceUrl: tab?.url || '',
+            sourceTitle: tab?.title || '',
+            timestamp: Date.now(),
+            tags: [tag]
+        };
+
+        sessions[targetSession].push(snippet);
+        await chrome.storage.local.set({ "sessions": sessions });
+        lastSavedSnippetInfo = { sessionName: targetSession, snippetId: snippet.id };
+        sendNotification(`${targetSession} +1`, `Saved as "${tag}"`);
 
     } else if (info.menuItemId.startsWith("tag-")) {
         // 给最近保存的 snippet 打标签
@@ -173,18 +211,28 @@ function generateId() {
     return Date.now().toString(36) + Math.random().toString(36).substring(2, 8);
 }
 
-// 添加通知的函数
-function sendNotification(title, message) {
+// 轻量级页内 toast 通知，降级为 OS 通知
+async function sendNotification(title, message) {
+    try {
+        const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+        if (tab && tab.id) {
+            await chrome.tabs.sendMessage(tab.id, {
+                type: 'showToast',
+                title: title,
+                text: message
+            });
+            return;
+        }
+    } catch (e) {
+        // Content script not available (chrome:// pages, etc.)
+    }
+    // Fallback: OS notification with unique ID to avoid suppression
     if (chrome.notifications) {
-        chrome.notifications.create("cyber-assistant", {
+        chrome.notifications.create(`cyber-assistant-${Date.now()}`, {
             type: "basic",
             iconUrl: chrome.runtime.getURL("assets/icon.png"),
             title: title,
             message: message,
-        }, function(notificationId) {
-            if (chrome.runtime.lastError) {
-                console.error('Notification error:', chrome.runtime.lastError);
-            }
         });
     }
 }
@@ -222,3 +270,10 @@ async function fetchOpenAIResponse(text, apiKey) {
         sendNotification("Success", "Insight Generated! Check the popup.");
     }
 }
+
+// Sync context menus when sessions change (e.g. from popup)
+chrome.storage.onChanged.addListener((changes, areaName) => {
+    if (areaName === 'local' && changes.sessions) {
+        updateSessionContextMenus();
+    }
+});

@@ -254,6 +254,15 @@ body {
     flex-wrap: wrap;
 }
 
+.snippet-tags-container {
+    display: flex;
+    gap: 4px;
+    flex-wrap: wrap;
+    align-items: center;
+    margin-top: 4px;
+    width: 100%;
+}
+
 .snippet-tag {
     font-size: 10px;
     padding: 1px 6px;
@@ -261,6 +270,68 @@ body {
     background: #f3e5f5;
     color: #7b1fa2;
     cursor: pointer;
+    transition: all 0.15s;
+}
+
+.snippet-tag:hover {
+    opacity: 0.7;
+    text-decoration: line-through;
+}
+
+.add-tag-btn {
+    background: #e8e8e8 !important;
+    color: #666 !important;
+    font-weight: bold;
+    min-width: 18px;
+    text-align: center;
+    cursor: pointer;
+}
+
+.add-tag-btn:hover {
+    background: #d0d0d0 !important;
+    text-decoration: none !important;
+    opacity: 1 !important;
+}
+
+.tag-picker {
+    display: flex;
+    gap: 4px;
+    flex-wrap: wrap;
+    margin-top: 4px;
+    padding: 6px;
+    background: #f9f9f9;
+    border: 1px solid #eee;
+    border-radius: 6px;
+    width: 100%;
+}
+
+.tag-picker-btn {
+    font-size: 10px;
+    padding: 2px 8px;
+    border: 1px solid #ddd;
+    border-radius: 3px;
+    background: #fff;
+    cursor: pointer;
+    color: #7b1fa2;
+    transition: all 0.15s;
+}
+
+.tag-picker-btn:hover {
+    background: #f3e5f5;
+    border-color: #7b1fa2;
+}
+
+.tag-custom-input {
+    font-size: 10px;
+    padding: 2px 6px;
+    border: 1px solid #ddd;
+    border-radius: 3px;
+    width: 70px;
+    outline: none;
+}
+
+.tag-custom-input:focus {
+    border-color: #7b1fa2;
 }
 
 .snippet-actions {
