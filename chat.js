@@ -92,28 +92,45 @@ document.addEventListener('DOMContentLoaded', async function() {
         });
     }
 
-    // Build system prompt with session context
-    function buildSystemPrompt() {
-        let systemPrompt = "You are a helpful AI assistant for Cyber Assistant, a browser extension that collects information snippets from web pages. ";
-        systemPrompt += "The user has collected the following information snippets in their current session. Use them as context when responding.\n\n";
-        systemPrompt += "When generating reports or structured content, you may use HTML formatting including tables, lists, headings, and SVG charts.\n\n";
+    // Build system prompt with session context (multimodal: returns content array)
+    function buildSystemMessage() {
+        const contentParts = [];
+
+        let textIntro = "You are a helpful AI assistant for Cyber Assistant, a browser extension that collects information snippets from web pages. ";
+        textIntro += "The user has collected the following information snippets in their current session. Use them as context when responding.\n\n";
+        textIntro += "When generating reports or structured content, you may use HTML formatting including tables, lists, headings, and SVG charts.\n\n";
 
         if (sessionSnippets.length > 0) {
-            systemPrompt += "=== COLLECTED SNIPPETS ===\n";
+            textIntro += "=== COLLECTED SNIPPETS ===\n";
             sessionSnippets.forEach((snippet, i) => {
                 const content = snippet.content || snippet;
                 const source = snippet.sourceTitle || snippet.sourceUrl || '';
                 const tags = (snippet.tags || []).join(', ');
                 if (snippet.type === 'image') {
-                    systemPrompt += `\n[Snippet ${i + 1}] (image)${tags ? ` (${tags})` : ''}${source ? ` from: ${source}` : ''}\nImage URL: ${snippet.imageUrl || '(cached)'}\n`;
+                    textIntro += `\n[Snippet ${i + 1}] (image)${tags ? ` (${tags})` : ''}${source ? ` from: ${source}` : ''}\nImage URL: ${snippet.imageUrl || '(see image below)'}\n`;
                 } else {
-                    systemPrompt += `\n[Snippet ${i + 1}]${tags ? ` (${tags})` : ''}${source ? ` from: ${source}` : ''}\n${content}\n`;
+                    textIntro += `\n[Snippet ${i + 1}]${tags ? ` (${tags})` : ''}${source ? ` from: ${source}` : ''}\n${content}\n`;
                 }
             });
-            systemPrompt += "\n=== END SNIPPETS ===\n";
+            textIntro += "\n=== END SNIPPETS ===\n";
         }
 
-        return systemPrompt;
+        contentParts.push({ type: "text", text: textIntro });
+
+        // 将图片 snippet 以 image_url 格式加入，让 LLM 真正"看到"图片
+        sessionSnippets.forEach((snippet, i) => {
+            if (snippet.type === 'image') {
+                const imageSource = snippet.cachedDataUrl || snippet.imageUrl;
+                if (imageSource) {
+                    contentParts.push({
+                        type: "image_url",
+                        image_url: { url: imageSource, detail: "low" }
+                    });
+                }
+            }
+        });
+
+        return { role: "system", content: contentParts };
     }
 
     // Template selection
@@ -199,7 +216,7 @@ document.addEventListener('DOMContentLoaded', async function() {
 
         // Add to conversation history
         if (conversationHistory.length === 0) {
-            conversationHistory.push({ role: "system", content: buildSystemPrompt() });
+            conversationHistory.push(buildSystemMessage());
         }
         conversationHistory.push({ role: "user", content: userMessage });
 
