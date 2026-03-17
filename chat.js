@@ -53,13 +53,31 @@ document.addEventListener('DOMContentLoaded', async function() {
             num.className = 'context-num';
             num.textContent = `#${index + 1}`;
 
-            const text = document.createElement('span');
-            text.className = 'context-text';
-            text.textContent = snippet.content || snippet;
-            text.title = snippet.content || snippet;
-
             item.appendChild(num);
-            item.appendChild(text);
+
+            if (snippet.type === 'image') {
+                const img = document.createElement('img');
+                img.className = 'context-image';
+                img.src = snippet.cachedDataUrl || snippet.imageUrl || '';
+                img.alt = 'image snippet';
+                img.style.maxWidth = '80px';
+                img.style.maxHeight = '60px';
+                img.style.borderRadius = '4px';
+                img.style.verticalAlign = 'middle';
+                item.appendChild(img);
+
+                const urlText = document.createElement('span');
+                urlText.className = 'context-text';
+                urlText.textContent = snippet.imageUrl || '(image)';
+                urlText.title = snippet.imageUrl || '';
+                item.appendChild(urlText);
+            } else {
+                const text = document.createElement('span');
+                text.className = 'context-text';
+                text.textContent = snippet.content || snippet;
+                text.title = snippet.content || snippet;
+                item.appendChild(text);
+            }
 
             if (snippet.tags && snippet.tags.length > 0) {
                 snippet.tags.forEach(t => {
@@ -86,7 +104,11 @@ document.addEventListener('DOMContentLoaded', async function() {
                 const content = snippet.content || snippet;
                 const source = snippet.sourceTitle || snippet.sourceUrl || '';
                 const tags = (snippet.tags || []).join(', ');
-                systemPrompt += `\n[Snippet ${i + 1}]${tags ? ` (${tags})` : ''}${source ? ` from: ${source}` : ''}\n${content}\n`;
+                if (snippet.type === 'image') {
+                    systemPrompt += `\n[Snippet ${i + 1}] (image)${tags ? ` (${tags})` : ''}${source ? ` from: ${source}` : ''}\nImage URL: ${snippet.imageUrl || '(cached)'}\n`;
+                } else {
+                    systemPrompt += `\n[Snippet ${i + 1}]${tags ? ` (${tags})` : ''}${source ? ` from: ${source}` : ''}\n${content}\n`;
+                }
             });
             systemPrompt += "\n=== END SNIPPETS ===\n";
         }

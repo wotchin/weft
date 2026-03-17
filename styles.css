@@ -212,6 +212,35 @@ body {
     color: #2e7d32;
 }
 
+.snippet-type-badge.image {
+    background: #fff3e0;
+    color: #e65100;
+}
+
+.snippet-image-container {
+    margin-bottom: 6px;
+}
+
+.snippet-image {
+    max-width: 100%;
+    max-height: 200px;
+    border-radius: 6px;
+    border: 1px solid #eee;
+    object-fit: contain;
+    background: #f5f5f5;
+}
+
+.snippet-image-url {
+    font-size: 11px;
+    color: #aaa;
+    margin-top: 4px;
+    word-break: break-all;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 100%;
+}
+
 .snippet-content {
     font-size: 13px;
     line-height: 1.5;

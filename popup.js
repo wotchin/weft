@@ -170,7 +170,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             sessionContent.innerHTML = `
                 <div class="empty-state">
                     <div class="empty-icon">+</div>
-                    <p>No snippets yet.<br>Right-click to save text or links.</p>
+                    <p>No snippets yet.<br>Right-click to save text, links, or images.</p>
                 </div>`;
             return;
         }
@@ -183,7 +183,8 @@ document.addEventListener('DOMContentLoaded', async () => {
                 const content = (snippet.content || '').toLowerCase();
                 const tags = (snippet.tags || []).join(' ').toLowerCase();
                 const source = (snippet.sourceTitle || '').toLowerCase();
-                return content.includes(q) || tags.includes(q) || source.includes(q);
+                const imageUrl = (snippet.imageUrl || '').toLowerCase();
+                return content.includes(q) || tags.includes(q) || source.includes(q) || imageUrl.includes(q);
             });
         }
 
@@ -200,11 +201,46 @@ document.addEventListener('DOMContentLoaded', async () => {
             badge.textContent = snippet.type || 'text';
             item.appendChild(badge);
 
-            // Content
-            const contentDiv = document.createElement('div');
-            contentDiv.className = 'snippet-content';
-            contentDiv.textContent = snippet.content;
-            item.appendChild(contentDiv);
+            // Content: image or text
+            if (snippet.type === 'image') {
+                const imgContainer = document.createElement('div');
+                imgContainer.className = 'snippet-image-container';
+
+                const img = document.createElement('img');
+                img.className = 'snippet-image';
+                // 优先使用缓存的 base64（防止反盗链），否则用原始 URL
+                img.src = snippet.cachedDataUrl || snippet.imageUrl || '';
+                img.alt = snippet.sourceTitle || 'Saved image';
+                img.loading = 'lazy';
+                // 如果缓存版本加载失败，回退到原始 URL
+                if (snippet.cachedDataUrl) {
+                    img.addEventListener('error', () => {
+                        if (snippet.imageUrl && img.src !== snippet.imageUrl) {
+                            img.src = snippet.imageUrl;
+                        }
+                    }, { once: true });
+                }
+                // 点击图片在新标签页打开原图
+                img.style.cursor = 'pointer';
+                img.addEventListener('click', () => {
+                    chrome.tabs.create({ url: snippet.imageUrl || snippet.cachedDataUrl });
+                });
+                imgContainer.appendChild(img);
+
+                // 显示原始图片 URL
+                const urlLabel = document.createElement('div');
+                urlLabel.className = 'snippet-image-url';
+                urlLabel.textContent = snippet.imageUrl || '';
+                urlLabel.title = snippet.imageUrl || '';
+                imgContainer.appendChild(urlLabel);
+
+                item.appendChild(imgContainer);
+            } else {
+                const contentDiv = document.createElement('div');
+                contentDiv.className = 'snippet-content';
+                contentDiv.textContent = snippet.content;
+                item.appendChild(contentDiv);
+            }
 
             // Link URL if applicable
             if (snippet.linkUrl) {

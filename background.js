@@ -7,7 +7,7 @@ chrome.runtime.onInstalled.addListener(() => {
     chrome.contextMenus.create({
         id: "saveToSession",
         title: "Save to Session",
-        contexts: ["selection", "link", "page"]
+        contexts: ["selection", "link", "page", "image"]
     });
 
     // 创建标签子菜单
@@ -64,18 +64,27 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
         const { sessions } = await chrome.storage.local.get(["sessions"]);
         assert(sessions[sessionName], `Session ${sessionName} does not exist`);
 
+        // 判断 snippet 类型
+        const isImage = !!info.srcUrl;
+        const isLink = !!info.linkUrl && !isImage;
+        const snippetType = isImage ? 'image' : (isLink ? 'link' : 'text');
+
         // 构建新的 snippet 对象（带元数据）
         const snippet = {
             id: generateId(),
-            type: info.linkUrl ? 'link' : 'text',
-            content: info.selectionText || info.linkUrl || '',
+            type: snippetType,
+            content: isImage ? (info.srcUrl || '') : (info.selectionText || info.linkUrl || ''),
             sourceUrl: tab?.url || '',
             sourceTitle: tab?.title || '',
             timestamp: Date.now(),
             tags: []
         };
 
-        if (info.linkUrl) {
+        if (isImage) {
+            snippet.imageUrl = info.srcUrl;
+            // 尝试 fetch 图片并缓存为 base64（解决反盗链问题）
+            snippet.cachedDataUrl = await fetchImageAsDataUrl(info.srcUrl);
+        } else if (isLink) {
             snippet.content = info.selectionText || info.linkUrl;
             snippet.linkUrl = info.linkUrl;
         }
@@ -216,7 +225,7 @@ async function updateSessionContextMenus() {
             chrome.contextMenus.create({
                 id: menuId,
                 title: `Add to ${sessionName}`,
-                contexts: ["selection", "link", "page"],
+                contexts: ["selection", "link", "page", "image"],
                 parentId: "saveToSession"
             });
             sessionMenuIds.push(menuId);
@@ -225,6 +234,42 @@ async function updateSessionContextMenus() {
         console.error('Error updating context menus:', error);
     } finally {
         _updatingMenus = false;
+    }
+}
+
+// 尝试 fetch 图片并转为 base64 data URL（解决反盗链和图片失效问题）
+// 为节省存储空间，会将图片缩放为缩略图（最大 800px）
+async function fetchImageAsDataUrl(imageUrl) {
+    try {
+        const response = await fetch(imageUrl);
+        if (!response.ok) return null;
+        const blob = await response.blob();
+        if (!blob.type.startsWith('image/')) return null;
+
+        // 使用 OffscreenCanvas 缩放图片（service worker 中无 DOM）
+        const imageBitmap = await createImageBitmap(blob);
+        const MAX_SIZE = 800;
+        let { width, height } = imageBitmap;
+        if (width > MAX_SIZE || height > MAX_SIZE) {
+            const scale = MAX_SIZE / Math.max(width, height);
+            width = Math.round(width * scale);
+            height = Math.round(height * scale);
+        }
+        const canvas = new OffscreenCanvas(width, height);
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(imageBitmap, 0, 0, width, height);
+        imageBitmap.close();
+
+        const outBlob = await canvas.convertToBlob({ type: 'image/jpeg', quality: 0.8 });
+        return new Promise((resolve) => {
+            const reader = new FileReader();
+            reader.onloadend = () => resolve(reader.result);
+            reader.onerror = () => resolve(null);
+            reader.readAsDataURL(outBlob);
+        });
+    } catch (e) {
+        console.warn('Failed to cache image:', e);
+        return null;
     }
 }
 
