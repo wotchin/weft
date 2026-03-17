@@ -7,9 +7,8 @@
         "storage",
         "contextMenus",
         "notifications",
-        "sidePanel",
         "tabs"
-        ],
+    ],
     "host_permissions": [
         "https://*/*"
     ],
@@ -28,9 +27,6 @@
             "48": "assets/icon.png",
             "128": "assets/icon.png"
         }
-    },
-    "side_panel": {
-        "default_path": "popup.html"
     },
     "options_page": "settings.html"
 }
