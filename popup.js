@@ -6,6 +6,75 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     const searchInput = document.getElementById('searchInput');
 
+    // Custom modal elements
+    const modalOverlay = document.getElementById('modalOverlay');
+    const modalTitle = document.getElementById('modalTitle');
+    const modalInput = document.getElementById('modalInput');
+    const modalError = document.getElementById('modalError');
+    const modalCancel = document.getElementById('modalCancel');
+    const modalConfirm = document.getElementById('modalConfirm');
+    const modalBody = document.getElementById('modalBody');
+
+    // Reusable modal: returns Promise<string|null> for prompt, Promise<bool> for confirm
+    function showModal({ title, placeholder = '', defaultValue = '', showInput = true, confirmText = 'OK', confirmClass = 'confirm', validate = null }) {
+        return new Promise((resolve) => {
+            modalTitle.textContent = title;
+            modalError.textContent = '';
+            modalConfirm.textContent = confirmText;
+            modalConfirm.className = `modal-btn ${confirmClass}`;
+            modalInput.style.display = showInput ? '' : 'none';
+
+            if (showInput) {
+                modalInput.value = defaultValue;
+                modalInput.placeholder = placeholder;
+            }
+
+            modalOverlay.classList.remove('hidden');
+            if (showInput) {
+                setTimeout(() => { modalInput.focus(); modalInput.select(); }, 50);
+            }
+
+            function cleanup() {
+                modalOverlay.classList.add('hidden');
+                modalConfirm.removeEventListener('click', onConfirm);
+                modalCancel.removeEventListener('click', onCancel);
+                modalInput.removeEventListener('keydown', onKeydown);
+                modalOverlay.removeEventListener('click', onBackdrop);
+            }
+
+            function onConfirm() {
+                if (showInput) {
+                    const val = modalInput.value.trim();
+                    if (validate) {
+                        const err = validate(val);
+                        if (err) { modalError.textContent = err; return; }
+                    }
+                    cleanup();
+                    resolve(val || null);
+                } else {
+                    cleanup();
+                    resolve(true);
+                }
+            }
+
+            function onCancel() { cleanup(); resolve(showInput ? null : false); }
+
+            function onKeydown(e) {
+                if (e.key === 'Enter') { e.preventDefault(); onConfirm(); }
+                if (e.key === 'Escape') { e.preventDefault(); onCancel(); }
+            }
+
+            function onBackdrop(e) {
+                if (e.target === modalOverlay) onCancel();
+            }
+
+            modalConfirm.addEventListener('click', onConfirm);
+            modalCancel.addEventListener('click', onCancel);
+            if (showInput) modalInput.addEventListener('keydown', onKeydown);
+            modalOverlay.addEventListener('click', onBackdrop);
+        });
+    }
+
     let sessions = {};
     let searchQuery = '';
 
@@ -287,12 +356,16 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // New session
     document.getElementById('newSession').addEventListener('click', async () => {
-        const name = prompt('Enter new session name:');
+        const name = await showModal({
+            title: 'New Session',
+            placeholder: 'Enter session name...',
+            validate: (val) => {
+                if (!val) return 'Session name cannot be empty.';
+                if (sessions[val]) return 'Session name already exists.';
+                return null;
+            }
+        });
         if (!name) return;
-        if (sessions[name]) {
-            alert('Session name already exists!');
-            return;
-        }
         sessions[name] = [];
         await chrome.storage.local.set({ sessions });
         populateSelect(name);
@@ -303,10 +376,20 @@ document.addEventListener('DOMContentLoaded', async () => {
     document.getElementById('deleteSession').addEventListener('click', async () => {
         const selected = sessionSelect.value;
         if (selected === 'default') {
-            alert('Cannot delete the default session.');
+            await showModal({
+                title: 'Cannot delete the default session.',
+                showInput: false,
+                confirmText: 'OK'
+            });
             return;
         }
-        if (!confirm(`Delete session "${selected}"?`)) return;
+        const confirmed = await showModal({
+            title: `Delete session "${selected}"?`,
+            showInput: false,
+            confirmText: 'Delete',
+            confirmClass: 'danger'
+        });
+        if (!confirmed) return;
 
         delete sessions[selected];
         await chrome.storage.local.set({ sessions });
@@ -320,15 +403,25 @@ document.addEventListener('DOMContentLoaded', async () => {
     document.getElementById('renameSession').addEventListener('click', async () => {
         const selected = sessionSelect.value;
         if (selected === 'default') {
-            alert('Cannot rename the default session.');
+            await showModal({
+                title: 'Cannot rename the default session.',
+                showInput: false,
+                confirmText: 'OK'
+            });
             return;
         }
-        const newName = prompt('Enter new name:', selected);
+        const newName = await showModal({
+            title: 'Rename Session',
+            placeholder: 'Enter new name...',
+            defaultValue: selected,
+            validate: (val) => {
+                if (!val) return 'Name cannot be empty.';
+                if (val === selected) return null; // allow same name = cancel
+                if (sessions[val]) return 'Session name already exists.';
+                return null;
+            }
+        });
         if (!newName || newName === selected) return;
-        if (sessions[newName]) {
-            alert('Session name already exists!');
-            return;
-        }
         sessions[newName] = sessions[selected];
         delete sessions[selected];
         await chrome.storage.local.set({ sessions });

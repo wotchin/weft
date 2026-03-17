@@ -41,6 +41,22 @@
       </button>
     </div>
   </div>
+
+  <!-- Custom modal overlay -->
+  <div id="modalOverlay" class="modal-overlay hidden">
+    <div class="modal-card">
+      <div class="modal-title" id="modalTitle"></div>
+      <div class="modal-body" id="modalBody">
+        <input type="text" id="modalInput" class="modal-input" autocomplete="off">
+      </div>
+      <div class="modal-error" id="modalError"></div>
+      <div class="modal-buttons">
+        <button id="modalCancel" class="modal-btn cancel">Cancel</button>
+        <button id="modalConfirm" class="modal-btn confirm">OK</button>
+      </div>
+    </div>
+  </div>
+
   <script src="popup.js"></script>
 </body>
 </html>
