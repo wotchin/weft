@@ -59,9 +59,6 @@ chrome.runtime.onInstalled.addListener(() => {
 let lastSavedSnippetInfo = null;
 
 chrome.contextMenus.onClicked.addListener(async (info, tab) => {
-    // 更新右键菜单
-    updateSessionContextMenus();
-
     if (info.menuItemId.startsWith("session-")) {
         const sessionName = info.menuItemId.replace("session-", "");
         const { sessions } = await chrome.storage.local.get(["sessions"]);
@@ -152,21 +149,27 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
 });
 
 // 更新右键菜单，根据已经存在的sessionNames更新子菜单
+let _updatingMenus = false;
 async function updateSessionContextMenus() {
-    const { sessions = {} } = await chrome.storage.local.get(["sessions"]);
+    // 防止并发调用
+    if (_updatingMenus) return;
+    _updatingMenus = true;
 
-    // 如果 sessions 为空，则创建一个新的默认 session
-    if (Object.keys(sessions).length === 0) {
-        const defaultSessionName = "default";
-        sessions[defaultSessionName] = [];
-        await chrome.storage.local.set({ "sessions": sessions });
-    }
+    try {
+        const { sessions = {} } = await chrome.storage.local.get(["sessions"]);
 
-    // 数据迁移：将旧格式的纯字符串数组转换为新格式的 snippet 对象数组
-    let needsMigration = false;
-    for (const name of Object.keys(sessions)) {
-        const items = sessions[name];
-        if (items.length > 0 && typeof items[0] === 'string') {
+        // 如果 sessions 为空，则创建一个新的默认 session
+        if (Object.keys(sessions).length === 0) {
+            const defaultSessionName = "default";
+            sessions[defaultSessionName] = [];
+            await chrome.storage.local.set({ "sessions": sessions });
+        }
+
+        // 数据迁移：将旧格式的纯字符串数组转换为新格式的 snippet 对象数组
+        let needsMigration = false;
+        for (const name of Object.keys(sessions)) {
+            const items = sessions[name];
+            if (items.length > 0 && typeof items[0] === 'string') {
             sessions[name] = items.map(text => ({
                 id: generateId(),
                 type: 'text',
@@ -183,27 +186,29 @@ async function updateSessionContextMenus() {
         await chrome.storage.local.set({ "sessions": sessions });
     }
 
-    const sessionNames = Object.keys(sessions);
+        const sessionNames = Object.keys(sessions);
 
-    try {
-        // 删除之前的子菜单
-        for (const id of sessionMenuIds) {
-            chrome.contextMenus.remove(id);
-        }
+        // 删除之前的子菜单（await 每个 remove 确保完成后再创建）
+        await Promise.all(sessionMenuIds.map(id =>
+            chrome.contextMenus.remove(id).catch(() => {})
+        ));
         sessionMenuIds = [];
 
         // 创建新的子菜单
         sessionNames.forEach(sessionName => {
-            const id = chrome.contextMenus.create({
-                id: `session-${sessionName}`,
+            const menuId = `session-${sessionName}`;
+            chrome.contextMenus.create({
+                id: menuId,
                 title: `Add to ${sessionName}`,
                 contexts: ["selection", "link", "page"],
                 parentId: "saveToSession"
             });
-            sessionMenuIds.push(id);
+            sessionMenuIds.push(menuId);
         });
     } catch (error) {
         console.error('Error updating context menus:', error);
+    } finally {
+        _updatingMenus = false;
     }
 }
 
