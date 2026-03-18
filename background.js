@@ -1,16 +1,16 @@
 
 // 保存子菜单的 ID 数组，用于更新右键菜单
 let sessionMenuIds = [];
+let _updatingMenus = false;
 
-chrome.runtime.onInstalled.addListener(() => {
-    // 创建主菜单项 "Save to Session"
+// Build all static (non-session) context menus
+function createStaticMenus() {
     chrome.contextMenus.create({
         id: "saveToSession",
         title: "Save to Session",
         contexts: ["selection", "link", "page", "image"]
     });
 
-    // 创建标签子菜单
     chrome.contextMenus.create({
         id: "tagSnippet",
         title: "Tag as...",
@@ -27,7 +27,6 @@ chrome.runtime.onInstalled.addListener(() => {
         });
     });
 
-    // 一键保存并打标签
     chrome.contextMenus.create({
         id: "saveWithTag",
         title: "Quick Save with Tag",
@@ -44,12 +43,15 @@ chrome.runtime.onInstalled.addListener(() => {
         });
     });
 
-    // 保存页面链接
     chrome.contextMenus.create({
         id: "savePageLink",
         title: "Save Page Link to Session",
         contexts: ["page"]
     });
+}
+
+chrome.runtime.onInstalled.addListener(() => {
+    createStaticMenus();
 
     // 初始化右键菜单
     updateSessionContextMenus();
@@ -158,7 +160,6 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
 });
 
 // 更新右键菜单，根据已经存在的sessionNames更新子菜单
-let _updatingMenus = false;
 async function updateSessionContextMenus() {
     // 防止并发调用
     if (_updatingMenus) return;
@@ -179,47 +180,30 @@ async function updateSessionContextMenus() {
         for (const name of Object.keys(sessions)) {
             const items = sessions[name];
             if (items.length > 0 && typeof items[0] === 'string') {
-            sessions[name] = items.map(text => ({
-                id: generateId(),
-                type: 'text',
-                content: text,
-                sourceUrl: '',
-                sourceTitle: '',
-                timestamp: Date.now(),
-                tags: []
-            }));
-            needsMigration = true;
-        }
-    }
-    if (needsMigration) {
-        await chrome.storage.local.set({ "sessions": sessions });
-    }
-
-        const sessionNames = Object.keys(sessions);
-
-        // 先尝试删除所有已知的 session 菜单项（兼容 service worker 重启后内存丢失）
-        // 同时删除按 sessionNames 推算出的 ID，确保不遗漏
-        const idsToRemove = new Set([
-            ...sessionMenuIds,
-            ...sessionNames.map(n => `session-${n}`)
-        ]);
-        // 也删除可能残留的旧 session（已删除的 session 的菜单项）
-        // chrome.contextMenus.remove 对不存在的 ID 会报错，需要 catch
-        for (const id of idsToRemove) {
-            try {
-                await new Promise((resolve, reject) => {
-                    chrome.contextMenus.remove(id, () => {
-                        if (chrome.runtime.lastError) reject(chrome.runtime.lastError);
-                        else resolve();
-                    });
-                });
-            } catch (_) {
-                // Menu item doesn't exist, that's fine
+                sessions[name] = items.map(text => ({
+                    id: generateId(),
+                    type: 'text',
+                    content: text,
+                    sourceUrl: '',
+                    sourceTitle: '',
+                    timestamp: Date.now(),
+                    tags: []
+                }));
+                needsMigration = true;
             }
         }
-        sessionMenuIds = [];
+        if (needsMigration) {
+            await chrome.storage.local.set({ "sessions": sessions });
+        }
 
-        // 创建新的子菜单
+        // removeAll + full rebuild: guarantees deleted sessions are cleaned up
+        // (the old per-ID approach failed when service worker restarted and
+        //  sessionMenuIds was lost, leaving stale menu items)
+        await chrome.contextMenus.removeAll();
+        createStaticMenus();
+
+        const sessionNames = Object.keys(sessions);
+        sessionMenuIds = [];
         for (const sessionName of sessionNames) {
             const menuId = `session-${sessionName}`;
             chrome.contextMenus.create({
