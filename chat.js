@@ -178,7 +178,7 @@ document.addEventListener('DOMContentLoaded', async function() {
                 const tags = (snippet.tags || []).join(', ');
                 if (snippet.type === 'image') {
                     if (visionEnabled) {
-                        text += `\n[Snippet ${i + 1}] (image)${tags ? ` (${tags})` : ''}${source ? ` from: ${source}` : ''}\nImage URL: ${snippet.imageUrl || '(see image below)'}\n`;
+                        text += `\n[Snippet ${i + 1}] (image — embedded in the conversation)${tags ? ` (${tags})` : ''}${source ? ` from: ${source}` : ''}\n`;
                     } else {
                         // 纯文本模式：尽量多描述图片信息
                         text += `\n[Snippet ${i + 1}] (image, not displayed - model does not support vision)${tags ? ` (${tags})` : ''}${source ? ` from: ${source}` : ''}\nImage URL: ${snippet.imageUrl || '(no url)'}\nNote: This is an image snippet. The image cannot be displayed to you because the current model does not support vision/multimodal input. The user saved this image from the webpage above.\n`;
@@ -208,23 +208,20 @@ document.addEventListener('DOMContentLoaded', async function() {
         return { role: "system", content: intro + snippetsText };
     }
 
-    // Build an optional user message containing images for vision-capable models.
-    // IMPORTANT: Only sends images with cachedDataUrl (base64). Never sends HTTP URLs
-    // because LLM providers cannot access external URLs.
-    // Returns null if no images or vision is not supported.
-    async function buildImageContextMessage() {
+    // Build image content parts for vision-capable models.
+    // Returns an array of content parts (text labels + image_url objects) to be merged
+    // into the user's message. Returns null if no images or vision not supported.
+    // IMPORTANT: Only uses cachedDataUrl (base64). Never sends HTTP URLs.
+    async function buildImageContentParts() {
         const visionEnabled = await isVisionSupported();
         if (!visionEnabled || !hasImageSnippets()) return null;
 
         const contentParts = [];
         let imageCount = 0;
-        let skippedCount = 0;
 
-        // Interleave text context with images for better understanding
         sessionSnippets.forEach((snippet, i) => {
             if (snippet.type === 'image') {
                 if (snippet.cachedDataUrl) {
-                    // Add text label before each image for context
                     const source = snippet.sourceTitle || snippet.sourceUrl || 'unknown source';
                     const tags = (snippet.tags || []).join(', ');
                     contentParts.push({
@@ -237,25 +234,19 @@ document.addEventListener('DOMContentLoaded', async function() {
                     });
                     imageCount++;
                 } else {
-                    // No cached data — cannot send HTTP URL to LLM, add text note
                     contentParts.push({
                         type: "text",
                         text: `[Image ${i + 1}] (could not load — original URL: ${snippet.imageUrl || 'unknown'})`
                     });
-                    skippedCount++;
                 }
             }
         });
 
         if (imageCount === 0) return null;
 
-        // Add summary intro at the beginning
-        const intro = `Here are ${imageCount} image(s) from the user's collected snippets.` +
-            (skippedCount > 0 ? ` (${skippedCount} image(s) could not be loaded.)` : '') +
-            ` Please analyze them along with the text context provided in the system message.`;
-        contentParts.unshift({ type: "text", text: intro });
-
-        return { role: "user", content: contentParts };
+        // Brief intro at the top
+        contentParts.unshift({ type: "text", text: "Images from collected snippets:" });
+        return contentParts;
     }
 
     // Template selection
@@ -342,14 +333,27 @@ document.addEventListener('DOMContentLoaded', async function() {
         // Add to conversation history
         if (conversationHistory.length === 0) {
             conversationHistory.push(await buildSystemMessage());
-            // Inject image context as a user message (images only work in user role)
-            const imageCtx = await buildImageContextMessage();
-            if (imageCtx) {
-                conversationHistory.push(imageCtx);
-                conversationHistory.push({ role: "assistant", content: "I can see the images from your collected snippets. How can I help you with them?" });
-            }
         }
-        conversationHistory.push({ role: "user", content: userMessage });
+
+        // For the first user message, merge image content parts into the same message
+        // so the LLM sees images + query together (standard OpenAI multimodal format).
+        // For follow-up messages, images are already in conversation history.
+        const isFirstUserMessage = conversationHistory.length === 1; // only system msg
+        const imageParts = isFirstUserMessage ? await buildImageContentParts() : null;
+
+        if (imageParts) {
+            // Multimodal message: images + user text in ONE content array
+            conversationHistory.push({
+                role: "user",
+                content: [
+                    ...imageParts,
+                    { type: "text", text: userMessage }
+                ]
+            });
+        } else {
+            // Plain text message (no images, or follow-up turn)
+            conversationHistory.push({ role: "user", content: userMessage });
+        }
 
         const baseUrl = apiBaseUrl.replace(/\/+$/, '').replace(/\/v1$/, '');
         const response = await fetch(`${baseUrl}/v1/chat/completions`, {
