@@ -313,7 +313,7 @@ async function fetchOpenAIResponse(text, apiKey) {
     const { apiBaseUrl = 'https://api.openai.com', modelName = 'gpt-4o-mini' } =
         await chrome.storage.local.get(['apiBaseUrl', 'modelName']);
 
-    const baseUrl = apiBaseUrl.replace(/\/+$/, '');
+    const baseUrl = apiBaseUrl.replace(/\/+$/, '').replace(/\/v1$/, '');
     const response = await fetch(`${baseUrl}/v1/chat/completions`, {
         method: "POST",
         headers: {

@@ -205,12 +205,13 @@
                 <button class="preset-btn" data-provider="openai" data-url="https://api.openai.com" data-model="gpt-4o-mini">OpenAI</button>
                 <button class="preset-btn" data-provider="anthropic" data-url="https://api.anthropic.com" data-model="claude-sonnet-4-6">Anthropic</button>
                 <button class="preset-btn" data-provider="deepseek" data-url="https://api.deepseek.com" data-model="deepseek-chat">DeepSeek</button>
+                <button class="preset-btn" data-provider="groq" data-url="https://api.groq.com/openai" data-model="llama-3.3-70b-versatile">Groq</button>
                 <button class="preset-btn" data-provider="custom" data-url="" data-model="">Custom</button>
             </div>
             <div class="form-group">
                 <label for="apiBaseUrl">API Base URL</label>
                 <input type="text" id="apiBaseUrl" placeholder="https://api.openai.com">
-                <div class="hint">The base URL of the API endpoint (without /v1/chat/completions)</div>
+                <div class="hint">The base URL of the API endpoint, e.g. https://api.openai.com or https://api.groq.com/openai/v1 (trailing /v1 is handled automatically)</div>
             </div>
             <div class="form-group">
                 <label for="apiKey">API Key</label>

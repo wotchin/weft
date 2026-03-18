@@ -120,7 +120,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         testButton.disabled = true;
 
         try {
-            const baseUrl = apiBaseUrl.replace(/\/+$/, '');
+            const baseUrl = apiBaseUrl.replace(/\/+$/, '').replace(/\/v1$/, '');
             const response = await fetch(`${baseUrl}/v1/chat/completions`, {
                 method: 'POST',
                 headers: {
