@@ -277,42 +277,8 @@ document.addEventListener('DOMContentLoaded', async function() {
         this.style.height = Math.min(this.scrollHeight, 150) + 'px';
     });
 
-    // Simple markdown to HTML converter
-    function renderMarkdown(text) {
-        // Detect if the response contains HTML tags (for reports/tables)
-        if (/<(table|div|h[1-6]|ul|ol|svg|style|html|body|head)\b/i.test(text)) {
-            // Extract HTML content, possibly wrapped in ```html code blocks
-            let html = text.replace(/```html\s*([\s\S]*?)```/g, '$1');
-            // If there's still remaining markdown-like text mixed in, keep it
-            return html;
-        }
-
-        let html = text;
-        // Code blocks
-        html = html.replace(/```(\w*)\n([\s\S]*?)```/g, '<pre><code class="lang-$1">$2</code></pre>');
-        // Inline code
-        html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
-        // Bold
-        html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
-        // Italic
-        html = html.replace(/\*(.+?)\*/g, '<em>$1</em>');
-        // Headers
-        html = html.replace(/^### (.+)$/gm, '<h4>$1</h4>');
-        html = html.replace(/^## (.+)$/gm, '<h3>$1</h3>');
-        html = html.replace(/^# (.+)$/gm, '<h2>$1</h2>');
-        // Unordered lists
-        html = html.replace(/^[-*] (.+)$/gm, '<li>$1</li>');
-        html = html.replace(/(<li>.*<\/li>\n?)+/g, '<ul>$&</ul>');
-        // Ordered lists
-        html = html.replace(/^\d+\. (.+)$/gm, '<li>$1</li>');
-        // Links
-        html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank">$1</a>');
-        // Line breaks for remaining plain text
-        html = html.replace(/\n\n/g, '</p><p>');
-        html = html.replace(/\n/g, '<br>');
-
-        return `<p>${html}</p>`;
-    }
+    // Markdown rendering is provided by markdown.js (loaded before chat.js)
+    // renderMarkdown(text) is available as a global function
 
     // Send message with streaming
     async function sendMessageToAPI(userMessage) {

@@ -292,6 +292,41 @@ body {
     text-decoration: underline;
 }
 
+.assistant .message-content blockquote {
+    border-left: 3px solid #2196f3;
+    margin: 8px 0;
+    padding: 6px 12px;
+    background: #f5f8ff;
+    color: #444;
+    border-radius: 0 4px 4px 0;
+}
+
+.assistant .message-content blockquote p {
+    margin: 4px 0;
+}
+
+.assistant .message-content hr {
+    border: none;
+    border-top: 1px solid #ddd;
+    margin: 12px 0;
+}
+
+.assistant .message-content del {
+    text-decoration: line-through;
+    opacity: 0.6;
+}
+
+.assistant .message-content img {
+    max-width: 100%;
+    border-radius: 4px;
+    margin: 6px 0;
+}
+
+.md-table-wrap {
+    overflow-x: auto;
+    margin: 8px 0;
+}
+
 .assistant .message-content strong {
     font-weight: 600;
 }
