@@ -36,6 +36,31 @@ document.addEventListener('DOMContentLoaded', async function() {
         if (sessions && sessions[currentSession]) {
             sessionSnippets = sessions[currentSession];
             renderContextPanel();
+            // Try to re-cache any images that are missing base64 data
+            reCacheMissingImages();
+        }
+    }
+
+    // Ask background script to re-fetch images without cached base64 data
+    async function reCacheMissingImages() {
+        const hasMissing = sessionSnippets.some(s => s.type === 'image' && !s.cachedDataUrl);
+        if (!hasMissing) return;
+
+        try {
+            const result = await chrome.runtime.sendMessage({
+                type: 'reCacheImages',
+                sessionName: currentSession
+            });
+            if (result && result.updated > 0) {
+                // Reload snippets from storage to get the updated cachedDataUrl
+                const { sessions } = await chrome.storage.local.get(['sessions']);
+                if (sessions && sessions[currentSession]) {
+                    sessionSnippets = sessions[currentSession];
+                    renderContextPanel();
+                }
+            }
+        } catch (e) {
+            console.warn('Re-cache failed:', e);
         }
     }
 
@@ -65,6 +90,20 @@ document.addEventListener('DOMContentLoaded', async function() {
                 img.style.borderRadius = '4px';
                 img.style.verticalAlign = 'middle';
                 item.appendChild(img);
+
+                // Cache status indicator
+                const status = document.createElement('span');
+                status.style.cssText = 'font-size:10px; margin-left:4px; vertical-align:middle;';
+                if (snippet.cachedDataUrl) {
+                    status.textContent = '[cached]';
+                    status.style.color = '#4caf50';
+                    status.title = 'Image cached as base64 — will be sent to AI';
+                } else {
+                    status.textContent = '[not cached]';
+                    status.style.color = '#f44336';
+                    status.title = 'Image not cached — AI will not be able to see this image';
+                }
+                item.appendChild(status);
 
                 const urlText = document.createElement('span');
                 urlText.className = 'context-text';
@@ -170,28 +209,52 @@ document.addEventListener('DOMContentLoaded', async function() {
     }
 
     // Build an optional user message containing images for vision-capable models.
+    // IMPORTANT: Only sends images with cachedDataUrl (base64). Never sends HTTP URLs
+    // because LLM providers cannot access external URLs.
     // Returns null if no images or vision is not supported.
     async function buildImageContextMessage() {
         const visionEnabled = await isVisionSupported();
         if (!visionEnabled || !hasImageSnippets()) return null;
 
         const contentParts = [];
-        contentParts.push({ type: "text", text: "Here are the images from the collected snippets for reference:" });
+        let imageCount = 0;
+        let skippedCount = 0;
 
-        sessionSnippets.forEach((snippet) => {
+        // Interleave text context with images for better understanding
+        sessionSnippets.forEach((snippet, i) => {
             if (snippet.type === 'image') {
-                const imageSource = snippet.cachedDataUrl || snippet.imageUrl;
-                if (imageSource) {
+                if (snippet.cachedDataUrl) {
+                    // Add text label before each image for context
+                    const source = snippet.sourceTitle || snippet.sourceUrl || 'unknown source';
+                    const tags = (snippet.tags || []).join(', ');
+                    contentParts.push({
+                        type: "text",
+                        text: `[Image ${i + 1}]${tags ? ` (${tags})` : ''} from: ${source}`
+                    });
                     contentParts.push({
                         type: "image_url",
-                        image_url: { url: imageSource, detail: "low" }
+                        image_url: { url: snippet.cachedDataUrl, detail: "auto" }
                     });
+                    imageCount++;
+                } else {
+                    // No cached data — cannot send HTTP URL to LLM, add text note
+                    contentParts.push({
+                        type: "text",
+                        text: `[Image ${i + 1}] (could not load — original URL: ${snippet.imageUrl || 'unknown'})`
+                    });
+                    skippedCount++;
                 }
             }
         });
 
-        // Only return if we actually have image parts (beyond the text intro)
-        if (contentParts.length <= 1) return null;
+        if (imageCount === 0) return null;
+
+        // Add summary intro at the beginning
+        const intro = `Here are ${imageCount} image(s) from the user's collected snippets.` +
+            (skippedCount > 0 ? ` (${skippedCount} image(s) could not be loaded.)` : '') +
+            ` Please analyze them along with the text context provided in the system message.`;
+        contentParts.unshift({ type: "text", text: intro });
+
         return { role: "user", content: contentParts };
     }
 

@@ -82,8 +82,8 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
 
         if (isImage) {
             snippet.imageUrl = info.srcUrl;
-            // 尝试 fetch 图片并缓存为 base64（解决反盗链问题）
-            snippet.cachedDataUrl = await fetchImageAsDataUrl(info.srcUrl);
+            // 尝试多策略缓存图片为 base64（service worker fetch → content script capture）
+            snippet.cachedDataUrl = await cacheImage(info.srcUrl, tab?.id, tab?.url);
         } else if (isLink) {
             snippet.content = info.selectionText || info.linkUrl;
             snippet.linkUrl = info.linkUrl;
@@ -239,38 +239,114 @@ async function updateSessionContextMenus() {
 
 // 尝试 fetch 图片并转为 base64 data URL（解决反盗链和图片失效问题）
 // 为节省存储空间，会将图片缩放为缩略图（最大 800px）
-async function fetchImageAsDataUrl(imageUrl) {
-    try {
-        const response = await fetch(imageUrl);
-        if (!response.ok) return null;
-        const blob = await response.blob();
-        if (!blob.type.startsWith('image/')) return null;
+// Convert a blob to a base64 data URL via OffscreenCanvas (resize + JPEG compress)
+async function blobToResizedDataUrl(blob, maxSize = 1024, quality = 0.85) {
+    const imageBitmap = await createImageBitmap(blob);
+    let { width, height } = imageBitmap;
+    if (width > maxSize || height > maxSize) {
+        const scale = maxSize / Math.max(width, height);
+        width = Math.round(width * scale);
+        height = Math.round(height * scale);
+    }
+    const canvas = new OffscreenCanvas(width, height);
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(imageBitmap, 0, 0, width, height);
+    imageBitmap.close();
 
-        // 使用 OffscreenCanvas 缩放图片（service worker 中无 DOM）
-        const imageBitmap = await createImageBitmap(blob);
-        const MAX_SIZE = 800;
-        let { width, height } = imageBitmap;
-        if (width > MAX_SIZE || height > MAX_SIZE) {
-            const scale = MAX_SIZE / Math.max(width, height);
-            width = Math.round(width * scale);
-            height = Math.round(height * scale);
+    const outBlob = await canvas.convertToBlob({ type: 'image/jpeg', quality });
+    return new Promise((resolve) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve(reader.result);
+        reader.onerror = () => resolve(null);
+        reader.readAsDataURL(outBlob);
+    });
+}
+
+// Fetch image from URL and convert to base64 data URL
+// Tries multiple strategies: plain fetch, fetch with Referer, no-cors mode
+async function fetchImageAsDataUrl(imageUrl, sourcePageUrl) {
+    const strategies = [
+        // Strategy 1: plain fetch
+        () => fetch(imageUrl),
+        // Strategy 2: with Referer header (bypasses some hotlink protections)
+        () => fetch(imageUrl, {
+            headers: { 'Referer': sourcePageUrl || new URL(imageUrl).origin + '/' }
+        }),
+        // Strategy 3: no-cache to bypass stale responses
+        () => fetch(imageUrl, { cache: 'no-cache' }),
+    ];
+
+    for (const strategy of strategies) {
+        try {
+            const response = await strategy();
+            if (!response.ok) continue;
+            const blob = await response.blob();
+            if (!blob.type.startsWith('image/')) continue;
+            const result = await blobToResizedDataUrl(blob);
+            if (result) return result;
+        } catch (e) {
+            // Try next strategy
         }
-        const canvas = new OffscreenCanvas(width, height);
-        const ctx = canvas.getContext('2d');
-        ctx.drawImage(imageBitmap, 0, 0, width, height);
-        imageBitmap.close();
+    }
+    console.warn('All fetch strategies failed for image:', imageUrl);
+    return null;
+}
 
-        const outBlob = await canvas.convertToBlob({ type: 'image/jpeg', quality: 0.8 });
-        return new Promise((resolve) => {
-            const reader = new FileReader();
-            reader.onloadend = () => resolve(reader.result);
-            reader.onerror = () => resolve(null);
-            reader.readAsDataURL(outBlob);
+// Capture image from the page DOM using chrome.scripting.executeScript
+// This works for images already loaded in the page (even some CORS-restricted ones)
+async function captureImageFromTab(tabId, imageUrl) {
+    try {
+        const results = await chrome.scripting.executeScript({
+            target: { tabId },
+            args: [imageUrl],
+            func: (targetSrc) => {
+                // Find all img elements and match by src
+                const imgs = document.querySelectorAll('img');
+                for (const img of imgs) {
+                    if (img.src !== targetSrc && img.currentSrc !== targetSrc) continue;
+                    if (!img.naturalWidth || !img.naturalHeight) continue;
+                    try {
+                        const MAX = 1024;
+                        let w = img.naturalWidth, h = img.naturalHeight;
+                        if (w > MAX || h > MAX) {
+                            const s = MAX / Math.max(w, h);
+                            w = Math.round(w * s);
+                            h = Math.round(h * s);
+                        }
+                        const canvas = document.createElement('canvas');
+                        canvas.width = w;
+                        canvas.height = h;
+                        const ctx = canvas.getContext('2d');
+                        ctx.drawImage(img, 0, 0, w, h);
+                        return canvas.toDataURL('image/jpeg', 0.85);
+                    } catch (e) {
+                        // Canvas tainted by cross-origin image — cannot extract
+                        return null;
+                    }
+                }
+                return null;
+            }
         });
+        return results?.[0]?.result || null;
     } catch (e) {
-        console.warn('Failed to cache image:', e);
+        console.warn('captureImageFromTab failed:', e);
         return null;
     }
+}
+
+// Main image caching function: tries background fetch first, then content-script capture
+async function cacheImage(imageUrl, tabId, sourcePageUrl) {
+    // Strategy A: fetch from service worker (works with host_permissions)
+    let dataUrl = await fetchImageAsDataUrl(imageUrl, sourcePageUrl);
+    if (dataUrl) return dataUrl;
+
+    // Strategy B: capture from page DOM via content script
+    if (tabId) {
+        dataUrl = await captureImageFromTab(tabId, imageUrl);
+        if (dataUrl) return dataUrl;
+    }
+
+    return null;
 }
 
 function generateId() {
@@ -343,3 +419,37 @@ chrome.storage.onChanged.addListener((changes, areaName) => {
         updateSessionContextMenus();
     }
 });
+
+// Handle messages from chat.js and other extension pages
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+    if (message.type === 'reCacheImages') {
+        // Re-cache images that are missing cachedDataUrl
+        handleReCacheImages(message.sessionName).then(sendResponse);
+        return true; // keep channel open for async response
+    }
+});
+
+// Re-cache all images in a session that don't have cachedDataUrl
+async function handleReCacheImages(sessionName) {
+    const { sessions } = await chrome.storage.local.get(['sessions']);
+    if (!sessions || !sessions[sessionName]) return { updated: 0 };
+
+    const snippets = sessions[sessionName];
+    let updated = 0;
+
+    for (const snippet of snippets) {
+        if (snippet.type !== 'image' || snippet.cachedDataUrl) continue;
+        if (!snippet.imageUrl) continue;
+
+        const dataUrl = await fetchImageAsDataUrl(snippet.imageUrl, snippet.sourceUrl);
+        if (dataUrl) {
+            snippet.cachedDataUrl = dataUrl;
+            updated++;
+        }
+    }
+
+    if (updated > 0) {
+        await chrome.storage.local.set({ sessions });
+    }
+    return { updated };
+}

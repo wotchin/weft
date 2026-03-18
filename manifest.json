@@ -7,10 +7,12 @@
         "storage",
         "contextMenus",
         "notifications",
-        "tabs"
+        "tabs",
+        "scripting"
     ],
     "host_permissions": [
-        "https://*/*"
+        "https://*/*",
+        "http://*/*"
     ],
     "background": {
         "service_worker": "background.js"
