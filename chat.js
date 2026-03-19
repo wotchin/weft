@@ -192,19 +192,19 @@ document.addEventListener('DOMContentLoaded', async function() {
         return text;
     }
 
-    // Build system message (always text-only) and optional image context message
-    // NOTE: image_url is only supported in "user" role messages by most API providers,
-    // so we must NOT put images in the system message.
-    async function buildSystemMessage() {
+    // Build system message (always text-only).
+    // If ragResult is provided, uses RAGEngine's filtered text instead of all snippets.
+    async function buildSystemMessage(ragResult) {
         const visionEnabled = await isVisionSupported();
 
         let intro = "You are a helpful AI assistant for Cyber Assistant, a browser extension that collects information snippets from web pages. ";
         intro += "The user has collected the following information snippets in their current session. Use them as context when responding.\n\n";
         intro += "When generating reports or structured content, you may use HTML formatting including tables, lists, headings, and SVG charts.\n\n";
 
-        const snippetsText = buildSnippetsText(visionEnabled);
+        const snippetsText = ragResult
+            ? RAGEngine.buildFilteredSnippetsText(ragResult, visionEnabled)
+            : buildSnippetsText(visionEnabled);
 
-        // System message is always text-only (no image_url)
         return { role: "system", content: intro + snippetsText };
     }
 
@@ -296,9 +296,21 @@ document.addEventListener('DOMContentLoaded', async function() {
             throw new Error('API key not found. Please configure it in Settings.');
         }
 
-        // Add to conversation history
+        // Add to conversation history (with optional RAG filtering)
         if (conversationHistory.length === 0) {
-            conversationHistory.push(await buildSystemMessage());
+            let ragResult = null;
+            try {
+                const { ragEnabled, ragTokenBudget } = await chrome.storage.local.get(['ragEnabled', 'ragTokenBudget']);
+                if (ragEnabled && sessionSnippets.length > 0) {
+                    ragResult = await RAGEngine.retrieve(
+                        userMessage, currentSession, sessionSnippets, { ragTokenBudget }
+                    );
+                    console.log(`[RAG] mode=${ragResult.method}, ${ragResult.returnedCount}/${ragResult.totalCount} snippets, ~${ragResult.usedTokens} tokens`);
+                }
+            } catch (e) {
+                console.warn('[RAG] retrieval failed, falling back to full context:', e);
+            }
+            conversationHistory.push(await buildSystemMessage(ragResult));
         }
 
         // For the first user message, merge image content parts into the same message
@@ -544,5 +556,12 @@ h1,h2,h3,h4{margin-top:1.2em;margin-bottom:0.6em}
         a.download = `cyber-assistant-export-${new Date().toISOString().slice(0, 10)}.html`;
         a.click();
         URL.revokeObjectURL(url);
+    });
+
+    // Listen for snippet changes from background.js to invalidate RAG cache
+    chrome.runtime.onMessage.addListener((msg) => {
+        if (msg.type === 'snippetsChanged') {
+            RAGEngine.invalidateCache(msg.sessionName || currentSession);
+        }
     });
 });

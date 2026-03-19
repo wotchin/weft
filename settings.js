@@ -5,6 +5,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     const maxTokensInput = document.getElementById('maxTokens');
     const temperatureInput = document.getElementById('temperature');
     const visionModeSelect = document.getElementById('visionMode');
+    const ragEnabledInput = document.getElementById('ragEnabled');
+    const ragTokenBudgetInput = document.getElementById('ragTokenBudget');
     const saveButton = document.getElementById('saveSettings');
     const testButton = document.getElementById('testConnection');
     const statusMessage = document.getElementById('statusMessage');
@@ -12,7 +14,8 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // Load saved settings
     const settings = await chrome.storage.local.get([
-        'apiBaseUrl', 'apiKey', 'modelName', 'maxTokens', 'temperature', 'provider', 'visionMode'
+        'apiBaseUrl', 'apiKey', 'modelName', 'maxTokens', 'temperature', 'provider', 'visionMode',
+        'ragEnabled', 'ragTokenBudget'
     ]);
 
     if (settings.apiBaseUrl) apiBaseUrlInput.value = settings.apiBaseUrl;
@@ -21,6 +24,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (settings.maxTokens) maxTokensInput.value = settings.maxTokens;
     if (settings.temperature !== undefined) temperatureInput.value = settings.temperature;
     if (settings.visionMode) visionModeSelect.value = settings.visionMode;
+    ragEnabledInput.checked = !!settings.ragEnabled;
+    if (settings.ragTokenBudget) ragTokenBudgetInput.value = settings.ragTokenBudget;
 
     // Highlight active provider preset
     updatePresetHighlight(settings.provider || '');
@@ -69,6 +74,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         const maxTokens = parseInt(maxTokensInput.value) || 2000;
         const temperature = parseFloat(temperatureInput.value);
         const visionMode = visionModeSelect.value || 'auto';
+        const ragEnabled = ragEnabledInput.checked;
+        const ragTokenBudget = parseInt(ragTokenBudgetInput.value) || 12000;
 
         if (!apiKey) {
             showStatus('Please enter an API key.', 'error');
@@ -97,7 +104,9 @@ document.addEventListener('DOMContentLoaded', async () => {
                 maxTokens,
                 temperature: isNaN(temperature) ? 0.7 : temperature,
                 provider,
-                visionMode
+                visionMode,
+                ragEnabled,
+                ragTokenBudget
             });
             showStatus('Settings saved successfully!', 'success');
         } catch (error) {

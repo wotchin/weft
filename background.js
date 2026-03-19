@@ -401,6 +401,8 @@ async function fetchOpenAIResponse(text, apiKey) {
 chrome.storage.onChanged.addListener((changes, areaName) => {
     if (areaName === 'local' && changes.sessions) {
         updateSessionContextMenus();
+        // Notify chat page to invalidate RAG index cache
+        chrome.runtime.sendMessage({ type: 'snippetsChanged' }).catch(() => {});
     }
 });
 

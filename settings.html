@@ -249,6 +249,25 @@
             </div>
         </div>
 
+        <div class="settings-card">
+            <div class="card-title">
+                <span class="icon">RAG</span>
+                Smart Context Retrieval
+            </div>
+            <div class="form-group">
+                <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+                    <input type="checkbox" id="ragEnabled" style="width:auto;">
+                    Enable smart context retrieval (RAG)
+                </label>
+                <div class="hint">When enabled, only the most relevant snippets are sent to the AI based on your query. When disabled, all snippets are sent (current behavior). Useful when sessions contain many snippets to reduce token usage and improve answer quality.</div>
+            </div>
+            <div class="form-group">
+                <label for="ragTokenBudget">Context Token Budget</label>
+                <input type="number" id="ragTokenBudget" placeholder="12000" min="1000" max="100000" step="1000">
+                <div class="hint">Maximum estimated tokens to include from snippets when RAG is active. Sessions smaller than 15K tokens will always send everything regardless of this setting.</div>
+            </div>
+        </div>
+
         <div class="btn-row">
             <button id="saveSettings" class="save-btn">Save Settings</button>
             <button id="testConnection" class="test-btn">Test Connection</button>
