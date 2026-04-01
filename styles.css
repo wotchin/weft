@@ -422,12 +422,17 @@ body {
     background: #fafbfc;
 }
 
+.bottom-bar-row {
+    display: flex;
+    gap: 8px;
+}
+
 .action-btn {
-    width: 100%;
+    flex: 1;
     padding: 10px;
     border: none;
     border-radius: 8px;
-    font-size: 14px;
+    font-size: 13px;
     font-weight: 500;
     cursor: pointer;
     transition: all 0.15s;
@@ -440,6 +445,17 @@ body {
 
 .action-btn.primary:hover {
     background: #1976d2;
+}
+
+.action-btn.secondary {
+    background: #fff;
+    color: #555;
+    border: 1px solid #ddd;
+}
+
+.action-btn.secondary:hover {
+    border-color: #2196f3;
+    color: #2196f3;
 }
 
 /* Scrollbar */

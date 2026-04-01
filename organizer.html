@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Smart Organize - Cyber Assistant</title>
+    <link rel="stylesheet" href="organizer.css">
+</head>
+<body>
+    <div class="organizer-container">
+        <!-- Header toolbar -->
+        <div class="org-header">
+            <div class="org-header-left">
+                <h2>Smart Organize</h2>
+                <span class="org-session-badge" id="sessionBadge"></span>
+            </div>
+            <div class="org-header-right">
+                <button id="exportHtmlBtn" class="org-btn" title="Export as HTML file">Export HTML</button>
+                <button id="regenerateBtn" class="org-btn primary" title="Regenerate organization">Regenerate</button>
+            </div>
+        </div>
+
+        <!-- Status bar -->
+        <div class="org-status" id="statusBar">
+            <span id="statusText">Loading snippets...</span>
+        </div>
+
+        <!-- Main content area -->
+        <div class="org-content" id="orgContent">
+            <!-- Organized content will be rendered here -->
+        </div>
+    </div>
+
+    <script src="lib/tokenizer.js"></script>
+    <script src="lib/snippet-organizer.js"></script>
+    <script src="markdown.js"></script>
+    <script src="organizer.js"></script>
+</body>
+</html>

@@ -479,6 +479,20 @@ document.addEventListener('DOMContentLoaded', async () => {
         });
     });
 
+    // Open smart organize
+    document.getElementById('openOrganize').addEventListener('click', () => {
+        chrome.storage.local.set({ currentSession: sessionSelect.value }, () => {
+            chrome.windows.create({
+                url: chrome.runtime.getURL('organizer.html'),
+                type: 'popup',
+                width: 960,
+                height: 750,
+                left: Math.round((screen.width - 960) / 2),
+                top: Math.round((screen.height - 750) / 2)
+            });
+        });
+    });
+
     // Open settings in a new tab
     document.getElementById('openSettings').addEventListener('click', () => {
         chrome.tabs.create({ url: chrome.runtime.getURL('settings.html') });
