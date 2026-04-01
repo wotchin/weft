@@ -538,6 +538,20 @@ document.addEventListener('DOMContentLoaded', async () => {
         });
     });
 
+    // Open Knowledge Graph viewer
+    document.getElementById('openGraph').addEventListener('click', () => {
+        chrome.storage.local.set({ currentSession: sessionSelect.value }, () => {
+            chrome.windows.create({
+                url: chrome.runtime.getURL('graph.html'),
+                type: 'popup',
+                width: 1100,
+                height: 750,
+                left: Math.round((screen.width - 1100) / 2),
+                top: Math.round((screen.height - 750) / 2)
+            });
+        });
+    });
+
     // Show saved snippets as highlights on the current page
     document.getElementById('showOnPage').addEventListener('click', () => {
         const sessionName = sessionSelect.value;

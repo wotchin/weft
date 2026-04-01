@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Knowledge Graph - Cyber Assistant</title>
+    <link rel="stylesheet" href="graph.css">
+</head>
+<body>
+    <div class="graph-container">
+        <!-- Header -->
+        <div class="graph-header">
+            <div class="graph-header-left">
+                <h2>Knowledge Graph</h2>
+                <span class="graph-session-badge" id="sessionBadge"></span>
+            </div>
+            <div class="graph-header-right">
+                <button id="enhanceBtn" class="graph-btn ai" title="Enhance with AI - discover deeper relationships">Enhance with AI</button>
+                <button id="exportHtmlBtn" class="graph-btn" title="Export as interactive HTML">Export HTML</button>
+                <button id="exportMermaidBtn" class="graph-btn" title="Export as Mermaid diagram">Mermaid</button>
+            </div>
+        </div>
+
+        <!-- Toolbar -->
+        <div class="graph-toolbar">
+            <div class="graph-filters">
+                <label class="filter-chip active" data-type="page">
+                    <span class="chip-dot" style="background:#1565c0;"></span>
+                    Pages <span class="chip-count" id="countPages">0</span>
+                </label>
+                <label class="filter-chip active" data-type="snippet">
+                    <span class="chip-dot" style="background:#f57f17;"></span>
+                    Snippets <span class="chip-count" id="countSnippets">0</span>
+                </label>
+                <label class="filter-chip active" data-type="keyword">
+                    <span class="chip-dot" style="background:#7b1fa2;"></span>
+                    Keywords <span class="chip-count" id="countKeywords">0</span>
+                </label>
+                <label class="filter-chip active" data-type="tag">
+                    <span class="chip-dot" style="background:#2e7d32;"></span>
+                    Tags <span class="chip-count" id="countTags">0</span>
+                </label>
+            </div>
+            <div class="graph-controls">
+                <button id="zoomIn" class="ctrl-btn" title="Zoom in">+</button>
+                <button id="zoomOut" class="ctrl-btn" title="Zoom out">-</button>
+                <button id="fitBtn" class="ctrl-btn" title="Fit to view">Fit</button>
+                <button id="resetBtn" class="ctrl-btn" title="Reset layout">Reset</button>
+            </div>
+        </div>
+
+        <!-- Status bar -->
+        <div class="graph-status" id="statusBar">
+            <span id="statusText">Building graph...</span>
+        </div>
+
+        <!-- Main content: canvas + details panel -->
+        <div class="graph-body">
+            <canvas id="graphCanvas"></canvas>
+
+            <!-- Details panel (shown when a node is selected) -->
+            <div class="graph-detail-panel hidden" id="detailPanel">
+                <button class="detail-close" id="detailClose" title="Close">&times;</button>
+                <div id="detailContent"></div>
+            </div>
+        </div>
+
+        <!-- Cross-page insights (shown below graph when available) -->
+        <div class="graph-insights hidden" id="insightsPanel">
+            <h3>Cross-Page Connections</h3>
+            <div id="insightsList"></div>
+        </div>
+    </div>
+
+    <script src="lib/snippet-organizer.js"></script>
+    <script src="lib/graph-builder.js"></script>
+    <script src="graph.js"></script>
+</body>
+</html>

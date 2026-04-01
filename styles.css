@@ -497,6 +497,17 @@ body {
     color: #2196f3;
 }
 
+.action-btn.graph {
+    background: linear-gradient(135deg, #e3f2fd, #f3e5f5);
+    color: #7b1fa2;
+    border: 1px solid #e1bee7;
+}
+
+.action-btn.graph:hover {
+    background: linear-gradient(135deg, #bbdefb, #e1bee7);
+    border-color: #ce93d8;
+}
+
 /* Scrollbar */
 ::-webkit-scrollbar {
     width: 5px;
