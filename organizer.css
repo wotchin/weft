@@ -84,6 +84,21 @@ body {
     background: #1976d2;
 }
 
+.org-btn.diagram {
+    background: linear-gradient(135deg, #e3f2fd, #f3e5f5);
+    color: #7b1fa2;
+    border-color: #e1bee7;
+}
+
+.org-btn.diagram:hover {
+    background: linear-gradient(135deg, #bbdefb, #e1bee7);
+}
+
+.org-section-diagram svg {
+    max-width: 100%;
+    height: auto;
+}
+
 .org-btn:disabled {
     opacity: 0.5;
     cursor: not-allowed;

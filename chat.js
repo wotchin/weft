@@ -13,6 +13,12 @@ document.addEventListener('DOMContentLoaded', async function() {
     const askPageBtn = document.getElementById('askPageBtn');
     const takeawaysBtn = document.getElementById('takeawaysBtn');
     const deepSearchBtn = document.getElementById('deepSearchBtn');
+    const drawDiagramBtn = document.getElementById('drawDiagramBtn');
+    const diagramSelector = document.getElementById('diagramSelector');
+    const diagramTypeGrid = document.getElementById('diagramTypeGrid');
+    const diagramQuery = document.getElementById('diagramQuery');
+    const diagramSource = document.getElementById('diagramSource');
+    const cancelDiagramBtn = document.getElementById('cancelDiagram');
     const searchPlanPanel = document.getElementById('searchPlanPanel');
     const searchPlanBody = document.getElementById('searchPlanBody');
     const confirmPlanBtn = document.getElementById('confirmPlan');
@@ -647,6 +653,7 @@ document.addEventListener('DOMContentLoaded', async function() {
         askPageBtn.disabled = !enabled;
         takeawaysBtn.disabled = !enabled;
         deepSearchBtn.disabled = !enabled;
+        drawDiagramBtn.disabled = !enabled;
     }
 
     // "Ask about this page" handler
@@ -1411,6 +1418,87 @@ h1,h2,h3,h4{margin-top:1.2em;margin-bottom:0.6em}
         }
     });
 
+    // ======== Diagram Rendering Helper ========
+    function renderDiagramInChat(result, sourceContent) {
+        const messageDiv = document.createElement('div');
+        messageDiv.className = 'message assistant';
+
+        const contentDiv = document.createElement('div');
+        contentDiv.className = 'message-content';
+
+        const container = document.createElement('div');
+        container.className = 'diagram-container';
+
+        const svgDiv = document.createElement('div');
+        svgDiv.className = 'diagram-svg';
+        svgDiv.innerHTML = result.svg;
+        container.appendChild(svgDiv);
+
+        const codeBlock = document.createElement('div');
+        codeBlock.className = 'diagram-code-block';
+        codeBlock.textContent = result.code;
+        container.appendChild(codeBlock);
+
+        const actions = document.createElement('div');
+        actions.className = 'diagram-actions';
+
+        const toggleCodeBtn = document.createElement('button');
+        toggleCodeBtn.textContent = 'Show Code';
+        toggleCodeBtn.addEventListener('click', () => {
+            const isShown = codeBlock.classList.toggle('show');
+            toggleCodeBtn.textContent = isShown ? 'Hide Code' : 'Show Code';
+        });
+        actions.appendChild(toggleCodeBtn);
+
+        const copyCodeBtn = document.createElement('button');
+        copyCodeBtn.textContent = 'Copy Code';
+        copyCodeBtn.addEventListener('click', () => {
+            navigator.clipboard.writeText(result.code).then(() => {
+                copyCodeBtn.textContent = 'Copied!';
+                setTimeout(() => { copyCodeBtn.textContent = 'Copy Code'; }, 1500);
+            });
+        });
+        actions.appendChild(copyCodeBtn);
+
+        const copySvgBtn = document.createElement('button');
+        copySvgBtn.textContent = 'Copy SVG';
+        copySvgBtn.addEventListener('click', () => {
+            navigator.clipboard.writeText(result.svg).then(() => {
+                copySvgBtn.textContent = 'Copied!';
+                setTimeout(() => { copySvgBtn.textContent = 'Copy SVG'; }, 1500);
+            });
+        });
+        actions.appendChild(copySvgBtn);
+
+        if (typeof DiagramGenerator !== 'undefined') {
+            const expBtn = document.createElement('button');
+            expBtn.textContent = 'Export HTML';
+            expBtn.addEventListener('click', () => {
+                const html = DiagramGenerator.exportAsHtml(
+                    'Diagram — Cyber Assistant',
+                    result.svg,
+                    result.type !== 'svg' ? result.code : '',
+                    sourceContent?.substring(0, 500) || ''
+                );
+                const blob = new Blob([html], { type: 'text/html' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'diagram.html';
+                document.body.appendChild(a);
+                a.click();
+                setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 100);
+            });
+            actions.appendChild(expBtn);
+        }
+
+        container.appendChild(actions);
+        contentDiv.appendChild(container);
+        messageDiv.appendChild(contentDiv);
+        chatMessages.appendChild(messageDiv);
+        chatMessages.scrollTop = chatMessages.scrollHeight;
+    }
+
     // ======== Ask AI Mode ========
     // If opened with ?mode=askAI, load the selected text context and auto-send
     const urlParams = new URLSearchParams(window.location.search);
@@ -1423,6 +1511,29 @@ h1,h2,h3,h4{margin-top:1.2em;margin-bottom:0.6em}
             await chrome.storage.local.remove('askAIContext');
 
             const { selectedText, question, questionType, sourceUrl, sourceTitle } = askAIContext;
+
+            // Diagram mode: auto-generate a diagram from the selected text
+            if (questionType === 'diagram') {
+                appendMessage(`[Generate diagram for selected text from ${sourceTitle || sourceUrl || 'page'}]`, 'user');
+                showTypingIndicator();
+
+                try {
+                    const cjk = (selectedText.match(/[\u4e00-\u9fff]/g) || []).length;
+                    const lang = cjk / selectedText.length > 0.15 ? 'zh' : 'en';
+
+                    const result = await DiagramGenerator.generateAndRender(selectedText, {
+                        diagramType: 'auto',
+                        language: lang,
+                    });
+
+                    removeTypingIndicator();
+                    renderDiagramInChat(result, selectedText);
+                } catch (e) {
+                    removeTypingIndicator();
+                    appendMessage(`Error generating diagram: ${e.message}`, 'assistant');
+                }
+                return;
+            }
 
             // If freeform, pre-fill the input and let user type
             if (questionType === 'freeform' || !question) {
@@ -1522,4 +1633,125 @@ h1,h2,h3,h4{margin-top:1.2em;margin-bottom:0.6em}
     userInput.addEventListener('keypress', (e) => {
         if (e.key === 'Enter' && !e.shiftKey) handleAskAISend();
     }, true);
+
+    // ======== Draw Diagram ========
+
+    // Populate diagram type grid
+    if (typeof DiagramGenerator !== 'undefined' && diagramTypeGrid) {
+        let selectedDiagramType = 'auto';
+
+        DiagramGenerator.DIAGRAM_TYPES.forEach(dt => {
+            const btn = document.createElement('button');
+            btn.className = 'diagram-type-btn' + (dt.id === 'auto' ? ' selected' : '');
+            btn.textContent = dt.label;
+            btn.title = dt.desc;
+            btn.dataset.type = dt.id;
+            btn.addEventListener('click', () => {
+                diagramTypeGrid.querySelectorAll('.diagram-type-btn').forEach(b => b.classList.remove('selected'));
+                btn.classList.add('selected');
+                selectedDiagramType = dt.id;
+            });
+            diagramTypeGrid.appendChild(btn);
+        });
+
+        // Show/hide diagram selector
+        drawDiagramBtn.addEventListener('click', () => {
+            const isVisible = diagramSelector.style.display !== 'none';
+            diagramSelector.style.display = isVisible ? 'none' : 'block';
+        });
+
+        cancelDiagramBtn.addEventListener('click', () => {
+            diagramSelector.style.display = 'none';
+        });
+
+        // Handle Enter key in diagram query input → generate
+        diagramQuery.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                executeDiagramGeneration(selectedDiagramType);
+            }
+        });
+
+        // Also detect double-click on a type button as "generate now"
+        diagramTypeGrid.addEventListener('dblclick', (e) => {
+            const btn = e.target.closest('.diagram-type-btn');
+            if (btn) executeDiagramGeneration(btn.dataset.type);
+        });
+
+        async function executeDiagramGeneration(diagramType) {
+            if (isStreaming) return;
+
+            diagramSelector.style.display = 'none';
+            const userQuery = diagramQuery.value.trim();
+            const source = diagramSource.value;
+            diagramQuery.value = '';
+
+            isStreaming = true;
+            setQuickActionsEnabled(false);
+            drawDiagramBtn.textContent = 'Generating...';
+
+            const label = userQuery || 'Generate diagram';
+            appendMessage(`Draw Diagram: ${label} [${diagramType}]`, 'user');
+            showTypingIndicator();
+
+            try {
+                // Gather content based on source selection
+                let content = '';
+                let page = null;
+
+                if (source === 'page' || source === 'both') {
+                    try {
+                        page = await extractCurrentPage();
+                        content += `Page: ${page.title}\n${page.content.substring(0, 10000)}\n\n`;
+                    } catch (e) {
+                        content += '(Could not extract page content)\n\n';
+                    }
+                }
+
+                if (source === 'session' || source === 'both') {
+                    if (sessionSnippets.length > 0) {
+                        content += 'Session Snippets:\n';
+                        sessionSnippets.forEach((s, i) => {
+                            if (s.type === 'text' && s.content) {
+                                const tags = (s.tags || []).join(', ');
+                                content += `[${i + 1}]${tags ? ` (${tags})` : ''} ${s.content.substring(0, 500)}\n`;
+                            }
+                        });
+                    }
+                }
+
+                if (!content.trim()) {
+                    removeTypingIndicator();
+                    appendMessage('No content available to generate a diagram. Try extracting a page first or adding snippets to the session.', 'assistant');
+                    return;
+                }
+
+                // Detect language
+                const cjk = (content.match(/[\u4e00-\u9fff]/g) || []).length;
+                const language = cjk / content.length > 0.15 ? 'zh' : 'en';
+
+                // Generate diagram via LLM
+                const result = await DiagramGenerator.generateAndRender(content, {
+                    diagramType,
+                    userQuery,
+                    language,
+                });
+
+                removeTypingIndicator();
+
+                // Display the diagram in chat
+                renderDiagramInChat(result, content);
+
+            } catch (e) {
+                console.error('Diagram generation error:', e);
+                removeTypingIndicator();
+                appendMessage(`Error generating diagram: ${e.message}`, 'assistant');
+            } finally {
+                isStreaming = false;
+                setQuickActionsEnabled(true);
+                drawDiagramBtn.textContent = 'Draw Diagram';
+            }
+        }
+
+    }
 });

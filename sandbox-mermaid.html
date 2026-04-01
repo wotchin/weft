@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <style>
+        body { margin: 0; padding: 0; background: transparent; }
+        #container { width: 100%; }
+    </style>
+</head>
+<body>
+    <div id="container"></div>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+    <script>
+        mermaid.initialize({
+            startOnLoad: false,
+            theme: 'default',
+            securityLevel: 'loose',
+            fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+            flowchart: { useMaxWidth: true, htmlLabels: true },
+            mindmap: { useMaxWidth: true },
+            sequence: { useMaxWidth: true },
+        });
+
+        let renderCounter = 0;
+
+        window.addEventListener('message', async (event) => {
+            if (event.data && event.data.type === 'render-mermaid') {
+                const code = event.data.code;
+                const container = document.getElementById('container');
+                container.innerHTML = '';
+
+                try {
+                    const id = `mermaid-${++renderCounter}`;
+                    const { svg } = await mermaid.render(id, code);
+                    container.innerHTML = svg;
+                    event.source.postMessage({
+                        type: 'mermaid-result',
+                        svg: svg,
+                    }, '*');
+                } catch (err) {
+                    event.source.postMessage({
+                        type: 'mermaid-result',
+                        error: err.message || 'Mermaid rendering failed',
+                    }, '*');
+                }
+            }
+        });
+
+        // Signal ready
+        if (window.parent !== window) {
+            window.parent.postMessage({ type: 'mermaid-ready' }, '*');
+        }
+    </script>
+</body>
+</html>

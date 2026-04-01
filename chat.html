@@ -41,6 +41,27 @@
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
                 Deep Search
             </button>
+            <button class="quick-action-btn diagram-btn" id="drawDiagramBtn" title="Generate a diagram from page or session content">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect><line x1="10" y1="6.5" x2="14" y2="6.5"></line><line x1="17.5" y1="10" x2="17.5" y2="14"></line></svg>
+                Draw Diagram
+            </button>
+        </div>
+
+        <!-- Diagram type selector (hidden by default) -->
+        <div class="diagram-selector" id="diagramSelector" style="display:none;">
+            <div class="diagram-selector-header">
+                <span>Choose diagram type:</span>
+                <button id="cancelDiagram" class="plan-btn plan-cancel">Cancel</button>
+            </div>
+            <div class="diagram-type-grid" id="diagramTypeGrid"></div>
+            <div class="diagram-query-row">
+                <input type="text" id="diagramQuery" class="diagram-query-input" placeholder="Optional: describe what to visualize...">
+                <select id="diagramSource" class="diagram-source-select">
+                    <option value="page">Current Page</option>
+                    <option value="session">Session Snippets</option>
+                    <option value="both">Page + Session</option>
+                </select>
+            </div>
         </div>
 
         <!-- Search plan panel (hidden by default) -->
@@ -93,6 +114,9 @@
             </button>
         </div>
     </div>
+    <!-- Mermaid rendering sandbox (invisible) -->
+    <iframe id="mermaidSandbox" src="sandbox-mermaid.html" style="display:none;" sandbox="allow-scripts"></iframe>
+
     <script src="lib/idb.js"></script>
     <script src="lib/tokenizer.js"></script>
     <script src="lib/bm25.js"></script>
@@ -102,6 +126,7 @@
     <script src="lib/page-extractor.js"></script>
     <script src="lib/web-searcher.js"></script>
     <script src="lib/highlighter.js"></script>
+    <script src="lib/diagram-generator.js"></script>
     <script src="markdown.js"></script>
     <script src="chat.js"></script>
 </body>

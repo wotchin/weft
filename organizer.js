@@ -38,6 +38,63 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Export
     exportHtmlBtn.addEventListener('click', () => exportAsHtml());
 
+    // Add Diagrams — generate a diagram for each section using LLM
+    const addDiagramsBtn = document.getElementById('addDiagramsBtn');
+    addDiagramsBtn.addEventListener('click', async () => {
+        if (!preprocessed || !preprocessed.clusters || preprocessed.clusters.length === 0) return;
+        addDiagramsBtn.disabled = true;
+        addDiagramsBtn.textContent = 'Generating...';
+
+        try {
+            const clusters = preprocessed.clusters;
+            const cjk = (sessionSnippets.map(s => s.content || '').join('').match(/[\u4e00-\u9fff]/g) || []).length;
+            const language = cjk > 50 ? 'zh' : 'en';
+
+            for (let i = 0; i < Math.min(clusters.length, 5); i++) {
+                addDiagramsBtn.textContent = `Diagram ${i + 1}/${Math.min(clusters.length, 5)}...`;
+
+                const clusterText = clusters[i].snippets
+                    .map(s => (s.content || '').substring(0, 500))
+                    .join('\n');
+
+                if (clusterText.trim().length < 30) continue;
+
+                try {
+                    const result = await DiagramGenerator.generateAndRender(clusterText, {
+                        diagramType: 'auto',
+                        userQuery: '',
+                        language,
+                    });
+
+                    // Insert the diagram after the section header
+                    const sections = orgContent.querySelectorAll('.org-section');
+                    if (sections[i]) {
+                        const diagramDiv = document.createElement('div');
+                        diagramDiv.className = 'org-section-diagram';
+                        diagramDiv.innerHTML = `
+                            <div style="background:#fff;border:1px solid #e0e0e0;border-radius:8px;padding:12px;margin:8px 0 12px;text-align:center;overflow-x:auto;">
+                                ${result.svg}
+                            </div>`;
+                        const intro = sections[i].querySelector('.org-section-intro');
+                        if (intro) {
+                            intro.after(diagramDiv);
+                        } else {
+                            const header = sections[i].querySelector('.org-section-header');
+                            if (header) header.after(diagramDiv);
+                        }
+                    }
+                } catch (e) {
+                    console.warn(`Diagram generation failed for section ${i + 1}:`, e);
+                }
+            }
+        } catch (e) {
+            console.error('Diagram generation error:', e);
+        } finally {
+            addDiagramsBtn.disabled = false;
+            addDiagramsBtn.textContent = 'Add Diagrams';
+        }
+    });
+
     /**
      * Main pipeline: preprocess locally, call LLM for minimal augmentation, render.
      */

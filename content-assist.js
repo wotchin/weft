@@ -11,6 +11,7 @@
         { id: 'similar',     icon: '\u2261', label: 'Similar', question: 'What are similar viewpoints, arguments, or perspectives to the one expressed in this text? Search for related opinions and supporting evidence from other sources.' },
         { id: 'opposing',    icon: '\u2194', label: 'Opposing', question: 'What are the main counterarguments or opposing viewpoints to this claim? Search for credible sources that disagree with or challenge this perspective.' },
         { id: 'explain',     icon: '?',      label: 'Explain', question: 'Please explain this content in simple, easy-to-understand terms. Break down any jargon or complex concepts.' },
+        { id: 'diagram',     icon: '\u25A6', label: 'Diagram', question: '__DIAGRAM__' },
     ];
 
     let toolbar = null;
@@ -145,6 +146,23 @@
         const sel = window.getSelection();
         const selectedText = sel ? sel.toString().trim() : '';
         if (!selectedText) return;
+
+        // Diagram mode: open chat with diagram request
+        if (question === '__DIAGRAM__') {
+            chrome.storage.local.set({
+                askAIContext: {
+                    selectedText,
+                    question: '',
+                    questionType: 'diagram',
+                    sourceUrl: location.href,
+                    sourceTitle: document.title,
+                    timestamp: Date.now(),
+                }
+            }, () => {
+                chrome.runtime.sendMessage({ type: 'openChatAskAI' });
+            });
+            return;
+        }
 
         chrome.storage.local.set({
             askAIContext: {

@@ -14,6 +14,7 @@
                 <span class="org-session-badge" id="sessionBadge"></span>
             </div>
             <div class="org-header-right">
+                <button id="addDiagramsBtn" class="org-btn diagram" title="Generate diagrams for sections">Add Diagrams</button>
                 <button id="exportHtmlBtn" class="org-btn" title="Export as HTML file">Export HTML</button>
                 <button id="regenerateBtn" class="org-btn primary" title="Regenerate organization">Regenerate</button>
             </div>
@@ -30,8 +31,12 @@
         </div>
     </div>
 
+    <!-- Mermaid rendering sandbox -->
+    <iframe id="mermaidSandbox" src="sandbox-mermaid.html" style="display:none;" sandbox="allow-scripts"></iframe>
+
     <script src="lib/tokenizer.js"></script>
     <script src="lib/snippet-organizer.js"></script>
+    <script src="lib/diagram-generator.js"></script>
     <script src="markdown.js"></script>
     <script src="organizer.js"></script>
 </body>
