@@ -363,6 +363,45 @@ body {
     border-color: #7b1fa2;
 }
 
+/* Snippet comments */
+.snippet-comment {
+    font-size: 11px;
+    color: #1565c0;
+    background: #e3f2fd;
+    padding: 4px 8px;
+    border-radius: 4px;
+    margin-top: 4px;
+    line-height: 1.4;
+}
+
+.snippet-comment-label {
+    font-weight: 600;
+    font-size: 10px;
+    text-transform: uppercase;
+    color: #1976d2;
+}
+
+.snippet-comment-text:hover {
+    text-decoration: underline;
+}
+
+.snippet-add-comment-btn {
+    font-size: 10px;
+    color: #999;
+    background: none;
+    border: 1px dashed #ddd;
+    border-radius: 4px;
+    padding: 2px 8px;
+    cursor: pointer;
+    margin-top: 4px;
+    transition: all 0.15s;
+}
+
+.snippet-add-comment-btn:hover {
+    border-color: #2196f3;
+    color: #2196f3;
+}
+
 .snippet-actions {
     position: absolute;
     top: 8px;

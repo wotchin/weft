@@ -256,6 +256,51 @@ document.addEventListener('DOMContentLoaded', async () => {
                 item.appendChild(link);
             }
 
+            // Comment display
+            if (snippet.comment) {
+                const commentDiv = document.createElement('div');
+                commentDiv.className = 'snippet-comment';
+                commentDiv.innerHTML = `<span class="snippet-comment-label">Comment:</span> `;
+                const commentText = document.createElement('span');
+                commentText.className = 'snippet-comment-text';
+                commentText.textContent = snippet.comment;
+                commentText.title = 'Click to edit comment';
+                commentText.style.cursor = 'pointer';
+                commentText.addEventListener('click', async () => {
+                    const newComment = await showModal({
+                        title: 'Edit Comment',
+                        placeholder: 'Your comment...',
+                        defaultValue: snippet.comment,
+                    });
+                    if (newComment !== null) {
+                        snippet.comment = newComment;
+                        await chrome.storage.local.set({ sessions });
+                        displaySessionContent(sessionName);
+                    }
+                });
+                commentDiv.appendChild(commentText);
+                item.appendChild(commentDiv);
+            }
+
+            // Add comment button (if no comment yet)
+            if (!snippet.comment && snippet.type !== 'image') {
+                const addCommentBtn = document.createElement('button');
+                addCommentBtn.className = 'snippet-add-comment-btn';
+                addCommentBtn.textContent = '+ Comment';
+                addCommentBtn.addEventListener('click', async () => {
+                    const comment = await showModal({
+                        title: 'Add Comment',
+                        placeholder: 'Your comment on this snippet...',
+                    });
+                    if (comment) {
+                        snippet.comment = comment;
+                        await chrome.storage.local.set({ sessions });
+                        displaySessionContent(sessionName);
+                    }
+                });
+                item.appendChild(addCommentBtn);
+            }
+
             // Meta row
             const meta = document.createElement('div');
             meta.className = 'snippet-meta';

@@ -229,6 +229,13 @@ document.addEventListener('DOMContentLoaded', async () => {
             html += `<div class="org-snippet-content">${escapeHtml(content)}</div>`;
         }
 
+        // User comment
+        if (snippet.comment) {
+            html += `<div class="org-snippet-comment">
+                <span class="org-comment-label">Comment:</span> ${escapeHtml(snippet.comment)}
+            </div>`;
+        }
+
         // Source citation
         const source = snippet.sourceTitle || '';
         const url = snippet.sourceUrl || '';
@@ -337,6 +344,8 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;m
 .org-tag-image{background:#fce4ec;color:#ad1457}
 .org-tag-default{background:#f5f5f5;color:#616161}
 .org-snippet-content{font-size:14px;color:#333;white-space:pre-wrap;word-break:break-word}
+.org-snippet-comment{font-size:13px;color:#1565c0;background:#e3f2fd;border-radius:4px;padding:6px 10px;margin-top:6px;line-height:1.5}
+.org-comment-label{font-weight:600;font-size:11px;color:#1976d2;text-transform:uppercase;letter-spacing:0.3px}
 .org-snippet-image{max-width:100%;max-height:400px;border-radius:6px;margin:8px 0;display:block}
 .org-snippet-source{display:flex;align-items:center;gap:6px;font-size:11px;color:#999;margin-top:8px;padding-top:6px;border-top:1px solid #f5f5f5}
 .org-snippet-source a{color:#1976d2;text-decoration:none}

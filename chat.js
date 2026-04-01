@@ -189,15 +189,18 @@ document.addEventListener('DOMContentLoaded', async function() {
                 const content = snippet.content || snippet;
                 const source = snippet.sourceTitle || snippet.sourceUrl || '';
                 const tags = (snippet.tags || []).join(', ');
+                const comment = snippet.comment || '';
                 if (snippet.type === 'image') {
                     if (visionEnabled) {
                         text += `\n[Snippet ${i + 1}] (image — embedded in the conversation)${tags ? ` (${tags})` : ''}${source ? ` from: ${source}` : ''}\n`;
                     } else {
-                        // 纯文本模式：尽量多描述图片信息
                         text += `\n[Snippet ${i + 1}] (image, not displayed - model does not support vision)${tags ? ` (${tags})` : ''}${source ? ` from: ${source}` : ''}\nImage URL: ${snippet.imageUrl || '(no url)'}\nNote: This is an image snippet. The image cannot be displayed to you because the current model does not support vision/multimodal input. The user saved this image from the webpage above.\n`;
                     }
                 } else {
                     text += `\n[Snippet ${i + 1}]${tags ? ` (${tags})` : ''}${source ? ` from: ${source}` : ''}\n${content}\n`;
+                }
+                if (comment) {
+                    text += `[User's comment]: ${comment}\n`;
                 }
             });
             text += "\n=== END SNIPPETS ===\n";
@@ -1407,4 +1410,116 @@ h1,h2,h3,h4{margin-top:1.2em;margin-bottom:0.6em}
             RAGEngine.invalidateCache(msg.sessionName || currentSession);
         }
     });
+
+    // ======== Ask AI Mode ========
+    // If opened with ?mode=askAI, load the selected text context and auto-send
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get('mode') === 'askAI') {
+        (async () => {
+            const { askAIContext } = await chrome.storage.local.get(['askAIContext']);
+            if (!askAIContext || !askAIContext.selectedText) return;
+
+            // Clear the context so it's not re-used on next open
+            await chrome.storage.local.remove('askAIContext');
+
+            const { selectedText, question, questionType, sourceUrl, sourceTitle } = askAIContext;
+
+            // If freeform, pre-fill the input and let user type
+            if (questionType === 'freeform' || !question) {
+                // Show the selected text as context
+                appendMessage(`[Selected text from ${sourceTitle || sourceUrl || 'page'}]:\n"${selectedText}"`, 'user');
+                userInput.placeholder = 'Type your question about this text...';
+                userInput.focus();
+
+                // Store context so when user sends, we include it
+                window._askAISelectedText = selectedText;
+                window._askAISource = { url: sourceUrl, title: sourceTitle };
+                return;
+            }
+
+            // Auto-send with the pre-defined question
+            const fullMessage = `Regarding this text from "${sourceTitle || sourceUrl || 'a webpage'}":\n\n"${selectedText}"\n\n${question}`;
+
+            // Build system message with session context
+            conversationHistory = [];
+            conversationHistory.push(await buildSystemMessage());
+
+            conversationHistory.push({ role: "user", content: fullMessage });
+
+            appendMessage(`"${selectedText.substring(0, 200)}${selectedText.length > 200 ? '...' : ''}"`, 'user');
+            appendMessage(getQuestionLabel(questionType), 'user');
+            showTypingIndicator();
+
+            try {
+                const {
+                    apiKey,
+                    apiBaseUrl = 'https://api.openai.com',
+                    modelName = 'gpt-4o-mini',
+                    maxTokens = 2000,
+                    temperature = 0.7
+                } = await chrome.storage.local.get([
+                    'apiKey', 'apiBaseUrl', 'modelName', 'maxTokens', 'temperature'
+                ]);
+
+                if (!apiKey) throw new Error('API key not configured');
+
+                const baseUrl = apiBaseUrl.replace(/\/+$/, '').replace(/\/v1$/, '');
+                const response = await fetch(`${baseUrl}/v1/chat/completions`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${apiKey}`
+                    },
+                    body: JSON.stringify({
+                        model: modelName,
+                        messages: conversationHistory,
+                        temperature: parseFloat(temperature),
+                        max_tokens: parseInt(maxTokens),
+                        stream: true
+                    })
+                });
+
+                if (!response.ok) {
+                    const err = await response.json().catch(() => ({}));
+                    throw new Error(`API Error: ${response.status} - ${err.error?.message || 'Unknown'}`);
+                }
+
+                removeTypingIndicator();
+                const contentDiv = appendMessage('', 'assistant', true);
+                await processStream(response, contentDiv);
+            } catch (error) {
+                removeTypingIndicator();
+                appendMessage(`Error: ${error.message}`, 'assistant');
+            }
+        })();
+    }
+
+    function getQuestionLabel(type) {
+        const labels = {
+            'reliability': 'Check reliability & sources',
+            'similar': 'Find similar viewpoints',
+            'opposing': 'Find opposing viewpoints',
+            'explain': 'Explain in simple terms',
+            'factcheck': 'Fact-check this claim',
+        };
+        return labels[type] || 'Ask AI';
+    }
+
+    // Override handleSend to include askAI context if present
+    const _origHandleSend = handleSend;
+    // (Already defined handleSend above; we patch the input handling for freeform Ask AI)
+    const origSendClick = sendButton.onclick;
+    function handleAskAISend() {
+        if (window._askAISelectedText && userInput.value.trim()) {
+            const q = userInput.value.trim();
+            const src = window._askAISource || {};
+            userInput.value = `Regarding this text from "${src.title || src.url || 'a webpage'}":\n\n"${window._askAISelectedText}"\n\n${q}`;
+            window._askAISelectedText = null;
+            window._askAISource = null;
+        }
+    }
+    sendButton.addEventListener('click', handleAskAISend, true);
+    userInput.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter' && !e.shiftKey) handleAskAISend();
+    }, true);
 });

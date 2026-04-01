@@ -248,6 +248,25 @@ body {
     border-radius: 2px;
 }
 
+/* User comment */
+.org-snippet-comment {
+    font-size: 13px;
+    color: #1565c0;
+    background: #e3f2fd;
+    border-radius: 4px;
+    padding: 6px 10px;
+    margin-top: 6px;
+    line-height: 1.5;
+}
+
+.org-comment-label {
+    font-weight: 600;
+    font-size: 11px;
+    color: #1976d2;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+}
+
 /* Image snippet */
 .org-snippet-image {
     max-width: 100%;

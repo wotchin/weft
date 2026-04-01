@@ -48,6 +48,37 @@ function createStaticMenus() {
         title: "Save Page Link to Session",
         contexts: ["page"]
     });
+
+    // ---- Ask AI about selection ----
+    chrome.contextMenus.create({
+        id: "askAI",
+        title: "Ask AI",
+        contexts: ["selection"]
+    });
+
+    const askQuestions = [
+        { id: "askAI-freeform",    title: "Ask about this..." },
+        { id: "askAI-reliability", title: "Check reliability & sources" },
+        { id: "askAI-similar",     title: "Find similar viewpoints" },
+        { id: "askAI-opposing",    title: "Find opposing viewpoints" },
+        { id: "askAI-explain",     title: "Explain in simple terms" },
+        { id: "askAI-factcheck",   title: "Fact-check this claim" },
+    ];
+    askQuestions.forEach(q => {
+        chrome.contextMenus.create({
+            id: q.id,
+            title: q.title,
+            contexts: ["selection"],
+            parentId: "askAI"
+        });
+    });
+
+    // ---- Comment to Session ----
+    chrome.contextMenus.create({
+        id: "commentToSession",
+        title: "Comment to Session",
+        contexts: ["selection"]
+    });
 }
 
 chrome.runtime.onInstalled.addListener(() => {
@@ -138,6 +169,100 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
         lastSavedSnippetInfo = { sessionName: targetSession, snippetId: snippet.id };
         sendNotification(`${targetSession} +1`, `Saved as "${tag}"`);
 
+    } else if (info.menuItemId.startsWith("askAI-")) {
+        // Ask AI about selected text
+        const questionType = info.menuItemId.replace("askAI-", "");
+        const selectedText = info.selectionText || '';
+        if (!selectedText) return;
+
+        const questionMap = {
+            'freeform':    '', // user types their own question in chat
+            'reliability': 'Please evaluate the reliability and credibility of this information. Identify the likely source, check for potential biases, assess factual accuracy, and rate the trustworthiness. Search the web if needed to verify claims.',
+            'similar':     'What are similar viewpoints, arguments, or perspectives to the one expressed in this text? Search for related opinions and supporting evidence from other sources.',
+            'opposing':    'What are the main counterarguments or opposing viewpoints to this claim? Search for credible sources that disagree with or challenge this perspective.',
+            'explain':     'Please explain this content in simple, easy-to-understand terms. Break down any jargon or complex concepts.',
+            'factcheck':   'Please fact-check this claim. Verify the key assertions by searching for reliable sources. Provide a verdict (True/Mostly True/Misleading/False/Unverifiable) with evidence.',
+        };
+
+        const question = questionMap[questionType] || '';
+
+        // Store context for chat page to pick up
+        await chrome.storage.local.set({
+            askAIContext: {
+                selectedText,
+                question,
+                questionType,
+                sourceUrl: tab?.url || '',
+                sourceTitle: tab?.title || '',
+                timestamp: Date.now(),
+            }
+        });
+
+        // Open chat window
+        chrome.windows.create({
+            url: chrome.runtime.getURL('chat.html?mode=askAI'),
+            type: 'popup',
+            width: 900,
+            height: 700,
+            left: Math.round((screen.width - 900) / 2),
+            top: Math.round((screen.height - 700) / 2)
+        });
+
+    } else if (info.menuItemId.startsWith("comment-")) {
+        // Comment to Session — prompt user for comment via content script
+        const sessionName = info.menuItemId.replace("comment-", "");
+        const selectedText = info.selectionText || '';
+        if (!selectedText || !tab?.id) return;
+
+        // Ask the content script to show a comment input popup
+        try {
+            const result = await chrome.tabs.sendMessage(tab.id, {
+                type: 'showCommentInput',
+                selectedText,
+                sessionName,
+            });
+
+            if (result && result.comment !== undefined) {
+                // Save snippet with comment
+                const { sessions } = await chrome.storage.local.get(["sessions"]);
+                if (!sessions[sessionName]) return;
+
+                const snippet = {
+                    id: generateId(),
+                    type: 'text',
+                    content: selectedText,
+                    comment: result.comment || '',
+                    sourceUrl: tab?.url || '',
+                    sourceTitle: tab?.title || '',
+                    timestamp: Date.now(),
+                    tags: [],
+                };
+
+                sessions[sessionName].push(snippet);
+                await chrome.storage.local.set({ sessions });
+                lastSavedSnippetInfo = { sessionName, snippetId: snippet.id };
+                sendNotification(`${sessionName} +1`, result.comment ? `With comment: ${result.comment.substring(0, 40)}` : 'Saved');
+            }
+        } catch (e) {
+            console.warn('Comment input failed:', e);
+            // Fallback: save without comment
+            const { sessions } = await chrome.storage.local.get(["sessions"]);
+            if (!sessions[sessionName]) return;
+            const snippet = {
+                id: generateId(),
+                type: 'text',
+                content: selectedText,
+                comment: '',
+                sourceUrl: tab?.url || '',
+                sourceTitle: tab?.title || '',
+                timestamp: Date.now(),
+                tags: [],
+            };
+            sessions[sessionName].push(snippet);
+            await chrome.storage.local.set({ sessions });
+            sendNotification(`${sessionName} +1`, 'Saved (comment skipped)');
+        }
+
     } else if (info.menuItemId.startsWith("tag-")) {
         // 给最近保存的 snippet 打标签
         const tag = info.menuItemId.replace("tag-", "");
@@ -213,6 +338,14 @@ async function updateSessionContextMenus() {
                 parentId: "saveToSession"
             });
             sessionMenuIds.push(menuId);
+
+            // Comment to Session submenu
+            chrome.contextMenus.create({
+                id: `comment-${sessionName}`,
+                title: sessionName,
+                contexts: ["selection"],
+                parentId: "commentToSession"
+            });
         }
     } catch (error) {
         console.error('Error updating context menus:', error);
@@ -409,9 +542,19 @@ chrome.storage.onChanged.addListener((changes, areaName) => {
 // Handle messages from chat.js and other extension pages
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (message.type === 'reCacheImages') {
-        // Re-cache images that are missing cachedDataUrl
         handleReCacheImages(message.sessionName).then(sendResponse);
-        return true; // keep channel open for async response
+        return true;
+    }
+
+    if (message.type === 'openChatAskAI') {
+        chrome.windows.create({
+            url: chrome.runtime.getURL('chat.html?mode=askAI'),
+            type: 'popup',
+            width: 900,
+            height: 700,
+            left: Math.round((screen.width - 900) / 2),
+            top: Math.round((screen.height - 700) / 2)
+        });
     }
 });
 
