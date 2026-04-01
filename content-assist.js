@@ -270,6 +270,195 @@
         });
     }
 
+    // ---- Tag-based Snippet Highlighting ----
+    const TAG_COLORS = {
+        'data':       { underline: '#2e7d32', bg: 'rgba(46, 125, 50, 0.08)',  badge: '#e8f5e9', text: '#2e7d32' },
+        'quote':      { underline: '#e65100', bg: 'rgba(230, 81, 0, 0.08)',   badge: '#fff3e0', text: '#e65100' },
+        'opinion':    { underline: '#c62828', bg: 'rgba(198, 40, 40, 0.08)',   badge: '#fce4ec', text: '#c62828' },
+        'reference':  { underline: '#1565c0', bg: 'rgba(21, 101, 192, 0.08)', badge: '#e3f2fd', text: '#1565c0' },
+        'key-point':  { underline: '#7b1fa2', bg: 'rgba(123, 31, 162, 0.08)', badge: '#f3e5f5', text: '#7b1fa2' },
+        'definition': { underline: '#00838f', bg: 'rgba(0, 131, 143, 0.08)',  badge: '#e0f7fa', text: '#00838f' },
+        'example':    { underline: '#f57f17', bg: 'rgba(245, 127, 23, 0.08)', badge: '#fff8e1', text: '#f57f17' },
+        'default':    { underline: '#616161', bg: 'rgba(97, 97, 97, 0.08)',   badge: '#f5f5f5', text: '#616161' },
+    };
+
+    function highlightSnippetsOnPage(snippets) {
+        // Inject styles once
+        if (!document.getElementById('cyber-snippet-hl-styles')) {
+            const style = document.createElement('style');
+            style.id = 'cyber-snippet-hl-styles';
+            style.textContent = `
+                [data-cyber-snippet-hl] {
+                    position: relative;
+                    padding: 1px 0;
+                    border-radius: 2px;
+                    transition: background 0.15s;
+                }
+                [data-cyber-snippet-hl]:hover {
+                    filter: brightness(0.96);
+                }
+                .cyber-tag-badge {
+                    position: absolute;
+                    top: -8px;
+                    right: -2px;
+                    font-size: 9px;
+                    font-weight: 600;
+                    line-height: 1;
+                    padding: 2px 5px;
+                    border-radius: 3px;
+                    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+                    white-space: nowrap;
+                    pointer-events: none;
+                    z-index: 1000;
+                    opacity: 0;
+                    transition: opacity 0.15s;
+                    text-transform: uppercase;
+                    letter-spacing: 0.3px;
+                    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+                }
+                [data-cyber-snippet-hl]:hover .cyber-tag-badge {
+                    opacity: 1;
+                }
+            `;
+            document.head.appendChild(style);
+        }
+
+        let highlighted = 0;
+
+        for (const snippet of snippets) {
+            if (snippet.type !== 'text' || !snippet.content || snippet.content.trim().length < 8) continue;
+
+            const tag = (snippet.tags && snippet.tags[0]) || 'default';
+            const tc = TAG_COLORS[tag] || TAG_COLORS['default'];
+            const found = findAndHighlightSnippetText(
+                snippet.content.trim(), tc.underline, tc.bg,
+                snippet.id, snippet.tags || [], tc.badge, tc.text
+            );
+            if (found) highlighted++;
+        }
+
+        return { highlighted, total: snippets.length };
+    }
+
+    function findAndHighlightSnippetText(searchText, underlineColor, bgColor, snippetId, tags, badgeBg, badgeText) {
+        const normalizedSearch = searchText.replace(/\s+/g, ' ').trim();
+        if (!normalizedSearch || normalizedSearch.length < 8) return false;
+
+        // Use first 200 chars for matching long content
+        const matchText = normalizedSearch.length > 200
+            ? normalizedSearch.substring(0, 200) : normalizedSearch;
+
+        const walker = document.createTreeWalker(
+            document.body, NodeFilter.SHOW_TEXT, {
+                acceptNode: (node) => {
+                    const parent = node.parentElement;
+                    if (!parent) return NodeFilter.FILTER_REJECT;
+                    if (['SCRIPT','STYLE','NOSCRIPT','IFRAME'].includes(parent.tagName))
+                        return NodeFilter.FILTER_REJECT;
+                    if (parent.closest('[data-cyber-snippet-hl]') || parent.closest('[data-cyber-highlight]'))
+                        return NodeFilter.FILTER_REJECT;
+                    return NodeFilter.FILTER_ACCEPT;
+                }
+            }
+        );
+
+        const textNodes = [];
+        let node;
+        while ((node = walker.nextNode())) textNodes.push(node);
+
+        // Strategy 1: single text node
+        for (const textNode of textNodes) {
+            const nodeText = textNode.textContent;
+            const normalizedNode = nodeText.replace(/\s+/g, ' ');
+            const idx = normalizedNode.toLowerCase().indexOf(matchText.toLowerCase());
+            if (idx === -1) continue;
+            const matchStart = mapNormIdx(nodeText, idx);
+            const matchEnd = mapNormIdx(nodeText, idx + matchText.length);
+            return wrapSnippetRange(textNode, matchStart, matchEnd, underlineColor, bgColor, snippetId, tags, badgeBg, badgeText);
+        }
+
+        // Strategy 2: cross-node
+        const fullText = textNodes.map(n => n.textContent).join('');
+        const normalizedFull = fullText.replace(/\s+/g, ' ');
+        const fullIdx = normalizedFull.toLowerCase().indexOf(matchText.toLowerCase());
+        if (fullIdx === -1) return false;
+
+        let charOffset = 0;
+        let startNode = null, startOffset = 0;
+        let endNode = null, endOffset = 0;
+        const normalizedLens = textNodes.map(n => n.textContent.replace(/\s+/g, ' ').length);
+
+        for (let i = 0; i < textNodes.length; i++) {
+            const nLen = normalizedLens[i];
+            if (!startNode && charOffset + nLen > fullIdx) {
+                startNode = textNodes[i];
+                startOffset = mapNormIdx(startNode.textContent, fullIdx - charOffset);
+            }
+            if (startNode && charOffset + nLen >= fullIdx + matchText.length) {
+                endNode = textNodes[i];
+                endOffset = mapNormIdx(endNode.textContent, fullIdx + matchText.length - charOffset);
+                break;
+            }
+            charOffset += nLen;
+        }
+
+        if (!startNode || !endNode) return false;
+        if (startNode === endNode) {
+            return wrapSnippetRange(startNode, startOffset, endOffset, underlineColor, bgColor, snippetId, tags, badgeBg, badgeText);
+        }
+
+        try {
+            const range = document.createRange();
+            range.setStart(startNode, startOffset);
+            range.setEnd(endNode, endOffset);
+            const span = makeSnippetSpan(underlineColor, bgColor, snippetId, tags, badgeBg, badgeText);
+            range.surroundContents(span);
+            return true;
+        } catch (e) {
+            return wrapSnippetRange(startNode, startOffset, startNode.textContent.length, underlineColor, bgColor, snippetId, tags, badgeBg, badgeText);
+        }
+    }
+
+    function makeSnippetSpan(underlineColor, bgColor, snippetId, tags, badgeBg, badgeText) {
+        const span = document.createElement('span');
+        span.setAttribute('data-cyber-snippet-hl', 'true');
+        span.setAttribute('data-cyber-snippet-id', snippetId);
+        span.setAttribute('data-cyber-tags', (tags || []).join(','));
+        span.style.cssText = `background:${bgColor};border-bottom:2px solid ${underlineColor};padding:1px 0;border-radius:2px;position:relative;`;
+
+        if (tags && tags.length > 0) {
+            const badge = document.createElement('span');
+            badge.className = 'cyber-tag-badge';
+            badge.textContent = tags.slice(0, 2).join(' \u00b7 ');
+            badge.style.cssText += `background:${badgeBg};color:${badgeText};`;
+            span.appendChild(badge);
+        }
+
+        return span;
+    }
+
+    function wrapSnippetRange(textNode, start, end, underlineColor, bgColor, snippetId, tags, badgeBg, badgeText) {
+        if (start >= end || start < 0) return false;
+        try {
+            const range = document.createRange();
+            range.setStart(textNode, Math.min(start, textNode.textContent.length));
+            range.setEnd(textNode, Math.min(end, textNode.textContent.length));
+            const span = makeSnippetSpan(underlineColor, bgColor, snippetId, tags, badgeBg, badgeText);
+            range.surroundContents(span);
+            return true;
+        } catch (e) { return false; }
+    }
+
+    function mapNormIdx(original, normalizedIdx) {
+        let ni = 0, inSpace = false;
+        for (let i = 0; i < original.length; i++) {
+            if (ni >= normalizedIdx) return i;
+            if (/\s/.test(original[i])) { if (!inSpace) { ni++; inSpace = true; } }
+            else { ni++; inSpace = false; }
+        }
+        return original.length;
+    }
+
     // ---- Message Listener ----
     chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         if (message.type === 'showToast') {
@@ -283,6 +472,12 @@
                 sendResponse(result);
             });
             return true; // async response
+        }
+
+        if (message.type === 'highlightSnippets') {
+            const result = highlightSnippetsOnPage(message.snippets || []);
+            sendResponse(result);
+            return false;
         }
     });
 

@@ -538,6 +538,24 @@ document.addEventListener('DOMContentLoaded', async () => {
         });
     });
 
+    // Show saved snippets as highlights on the current page
+    document.getElementById('showOnPage').addEventListener('click', () => {
+        const sessionName = sessionSelect.value;
+        if (!sessionName) return;
+        chrome.runtime.sendMessage(
+            { type: 'highlightSessionOnPage', sessionName },
+            (result) => {
+                if (result && result.highlighted > 0) {
+                    // Brief visual feedback on the button
+                    const btn = document.getElementById('showOnPage');
+                    btn.textContent = `${result.highlighted} shown`;
+                    btn.style.color = '#2e7d32';
+                    setTimeout(() => { btn.textContent = 'Show on Page'; btn.style.color = ''; }, 2000);
+                }
+            }
+        );
+    });
+
     // Open settings in a new tab
     document.getElementById('openSettings').addEventListener('click', () => {
         chrome.tabs.create({ url: chrome.runtime.getURL('settings.html') });

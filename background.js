@@ -128,6 +128,9 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
         lastSavedSnippetInfo = { sessionName, snippetId: snippet.id };
         sendNotification(`${sessionName} +1`, snippet.content.substring(0, 50));
 
+        // Auto-highlight the saved snippet on the page
+        autoHighlightSnippet(tab, snippet);
+
     } else if (info.menuItemId === "savePageLink") {
         // 保存当前页面链接到默认 session
         const { sessions } = await chrome.storage.local.get(["sessions"]);
@@ -168,6 +171,9 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
         await chrome.storage.local.set({ "sessions": sessions });
         lastSavedSnippetInfo = { sessionName: targetSession, snippetId: snippet.id };
         sendNotification(`${targetSession} +1`, `Saved as "${tag}"`);
+
+        // Auto-highlight the saved snippet on the page
+        autoHighlightSnippet(tab, snippet);
 
     } else if (info.menuItemId.startsWith("askAI-")) {
         // Ask AI about selected text
@@ -242,6 +248,9 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
                 await chrome.storage.local.set({ sessions });
                 lastSavedSnippetInfo = { sessionName, snippetId: snippet.id };
                 sendNotification(`${sessionName} +1`, result.comment ? `With comment: ${result.comment.substring(0, 40)}` : 'Saved');
+
+                // Auto-highlight the saved snippet on the page
+                autoHighlightSnippet(tab, snippet);
             }
         } catch (e) {
             console.warn('Comment input failed:', e);
@@ -539,10 +548,79 @@ chrome.storage.onChanged.addListener((changes, areaName) => {
     }
 });
 
+/**
+ * Auto-highlight a single saved snippet on the page using tag-based underlines.
+ * Sends a message to the content script to perform the highlight.
+ */
+async function autoHighlightSnippet(tab, snippet) {
+    if (!tab || !tab.id) return;
+    if (snippet.type !== 'text' || !snippet.content || snippet.content.trim().length < 8) return;
+
+    try {
+        await chrome.tabs.sendMessage(tab.id, {
+            type: 'highlightSnippets',
+            snippets: [snippet],
+        });
+    } catch (e) {
+        // Content script not available — silently ignore
+    }
+}
+
+/**
+ * Highlight all snippets from a session that match the current page URL.
+ * Called on-demand from popup or content script.
+ */
+async function highlightSessionSnippetsOnPage(sessionName, tabId, tabUrl) {
+    const { sessions } = await chrome.storage.local.get(['sessions']);
+    if (!sessions || !sessions[sessionName]) return { highlighted: 0, total: 0 };
+
+    // Filter snippets that were saved from this page
+    const pageSnippets = sessions[sessionName].filter(s =>
+        s.type === 'text' && s.content && s.content.trim().length >= 8 &&
+        s.sourceUrl && tabUrl && samePage(s.sourceUrl, tabUrl)
+    );
+
+    if (pageSnippets.length === 0) return { highlighted: 0, total: 0 };
+
+    try {
+        await chrome.tabs.sendMessage(tabId, {
+            type: 'highlightSnippets',
+            snippets: pageSnippets,
+        });
+        return { highlighted: pageSnippets.length, total: pageSnippets.length };
+    } catch (e) {
+        return { highlighted: 0, total: pageSnippets.length };
+    }
+}
+
+/** Check if two URLs point to the same page (ignoring hash/query differences) */
+function samePage(url1, url2) {
+    try {
+        const a = new URL(url1);
+        const b = new URL(url2);
+        return a.origin === b.origin && a.pathname === b.pathname;
+    } catch (e) {
+        return url1 === url2;
+    }
+}
+
 // Handle messages from chat.js and other extension pages
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (message.type === 'reCacheImages') {
         handleReCacheImages(message.sessionName).then(sendResponse);
+        return true;
+    }
+
+    if (message.type === 'highlightSessionOnPage') {
+        // On-demand: highlight all session snippets from the current page
+        (async () => {
+            const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+            if (!tab) { sendResponse({ highlighted: 0, total: 0 }); return; }
+            const result = await highlightSessionSnippetsOnPage(
+                message.sessionName, tab.id, tab.url
+            );
+            sendResponse(result);
+        })();
         return true;
     }
 
