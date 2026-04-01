@@ -708,16 +708,71 @@ body {
 }
 
 .takeaway-footer {
-    margin-top: 8px;
-    text-align: right;
+    margin-top: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 8px;
+}
+
+.takeaway-edit-hint {
+    display: flex;
+    align-items: flex-start;
+    gap: 6px;
+    font-size: 11px;
+    color: #888;
+    background: #fafafa;
+    border: 1px dashed #ddd;
+    border-radius: 6px;
+    padding: 6px 10px;
+    margin-bottom: 10px;
+    line-height: 1.5;
+}
+
+.takeaway-edit-hint svg {
+    flex-shrink: 0;
+    margin-top: 2px;
+}
+
+.takeaway-regen-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 5px 14px;
+    border: 1px solid #1976d2;
+    border-radius: 4px;
+    background: #e3f2fd;
+    font-size: 12px;
+    cursor: pointer;
+    color: #1565c0;
+    font-weight: 500;
+    transition: all 0.15s;
+}
+
+.takeaway-regen-btn:hover {
+    background: #bbdefb;
+}
+
+.takeaway-regen-btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+.takeaway-regen-btn .spin-icon {
+    animation: spin-anim 1s linear infinite;
+}
+
+@keyframes spin-anim {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
 }
 
 .takeaway-clear-btn {
-    padding: 4px 10px;
+    padding: 5px 12px;
     border: 1px solid #ddd;
     border-radius: 4px;
     background: #fff;
-    font-size: 11px;
+    font-size: 12px;
     cursor: pointer;
     color: #888;
     transition: all 0.15s;

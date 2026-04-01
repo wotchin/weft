@@ -707,7 +707,15 @@ document.addEventListener('DOMContentLoaded', async function() {
                 console.warn('Highlighting failed:', e);
             }
 
-            // Phase 3: Render rich takeaway cards in chat
+            // Phase 3: Enable selection toolbar so user can adjust highlights
+            try {
+                const groupTitles = takeawaysData.takeaways.map(t => t.title);
+                await Highlighter.enableSelectionMode(takeawaysData.takeaways.length, groupTitles);
+            } catch (e) {
+                console.warn('Selection mode failed:', e);
+            }
+
+            // Phase 4: Render rich takeaway cards in chat
             renderTakeawayCards(takeawaysData, hlResult);
 
         } catch (e) {
@@ -793,8 +801,8 @@ Generate 3-7 takeaways. Each must have at least 1 quote.`;
     }
 
     /**
-     * Render rich takeaway cards in the chat area with color indicators
-     * and clickable source references.
+     * Render rich takeaway cards in the chat area with color indicators,
+     * clickable source references, editing hint, and regenerate button.
      */
     function renderTakeawayCards(data, hlResult) {
         const messageDiv = document.createElement('div');
@@ -812,10 +820,16 @@ Generate 3-7 takeaways. Each must have at least 1 quote.`;
         }
         html += `</div>`;
 
+        // Hint: user can edit highlights
+        html += `<div class="takeaway-edit-hint">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
+            You can select text on the page to adjust highlights — assign to a group or remove. Click <strong>Regenerate</strong> to update takeaways based on your changes.
+        </div>`;
+
         // Takeaway cards
         data.takeaways.forEach((t, i) => {
             const color = Highlighter.getColor(i);
-            const colorDot = `<span class="takeaway-color-dot" style="background:${color.border};"></span>`;
+            const colorDot = `<span class="takeaway-color-dot" style="background:${color.border};" title="Click to locate in page"></span>`;
             const quotesHtml = (t.quotes || []).map(q =>
                 `<span class="takeaway-quote" data-group="${i}" title="Click to locate in page">"${escapeHtml(q)}"</span>`
             ).join(' ');
@@ -832,9 +846,13 @@ Generate 3-7 takeaways. Each must have at least 1 quote.`;
             </div>`;
         });
 
-        // Clear highlights button
+        // Footer with action buttons
         html += `<div class="takeaway-footer">
-            <button class="takeaway-clear-btn" id="clearHighlightsBtn">Clear page highlights</button>
+            <button class="takeaway-regen-btn" data-action="regenerate">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"></polyline><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path></svg>
+                Regenerate
+            </button>
+            <button class="takeaway-clear-btn" data-action="clear">Clear highlights</button>
         </div>`;
 
         contentDiv.innerHTML = html;
@@ -875,12 +893,19 @@ Generate 3-7 takeaways. Each must have at least 1 quote.`;
         });
 
         // Clear highlights button
-        contentDiv.querySelector('#clearHighlightsBtn')?.addEventListener('click', async () => {
+        contentDiv.querySelector('[data-action="clear"]')?.addEventListener('click', async () => {
             try {
                 await Highlighter.clearAll();
-                const btn = contentDiv.querySelector('#clearHighlightsBtn');
+                const btn = contentDiv.querySelector('[data-action="clear"]');
                 if (btn) { btn.textContent = 'Cleared!'; btn.disabled = true; }
+                const regenBtn = contentDiv.querySelector('[data-action="regenerate"]');
+                if (regenBtn) { regenBtn.disabled = true; regenBtn.title = 'Highlights cleared'; }
             } catch (e) { console.warn('Clear failed:', e); }
+        });
+
+        // Regenerate button — collect current highlights from page, re-ask LLM
+        contentDiv.querySelector('[data-action="regenerate"]')?.addEventListener('click', async () => {
+            await handleRegenerate(contentDiv);
         });
 
         // Add to conversation history for context
@@ -888,6 +913,147 @@ Generate 3-7 takeaways. Each must have at least 1 quote.`;
             `${i + 1}. ${t.title}: ${t.summary}`
         ).join('\n');
         conversationHistory.push({ role: 'assistant', content: `Key Takeaways for "${data.topic}":\n${textSummary}` });
+    }
+
+    /**
+     * Regenerate takeaways based on user-adjusted highlights.
+     * 1. Collect current highlights from page (user may have added/removed/reassigned)
+     * 2. Send highlighted excerpts + page content to LLM
+     * 3. Get updated takeaways, re-highlight, and render new cards
+     */
+    async function handleRegenerate(prevContentDiv) {
+        if (isStreaming) return;
+
+        const regenBtn = prevContentDiv.querySelector('[data-action="regenerate"]');
+        if (regenBtn) {
+            regenBtn.disabled = true;
+            regenBtn.innerHTML = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="spin-icon"><polyline points="23 4 23 10 17 10"></polyline><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path></svg> Regenerating...';
+        }
+
+        try {
+            // Step 1: Collect current highlight state from the page
+            const currentGroups = await Highlighter.collectHighlights();
+            const page = pageContent;
+            if (!page) throw new Error('Page content not available');
+
+            // Step 2: Ask LLM to regenerate based on user-curated highlights
+            const updatedData = await requestRegeneratedTakeaways(page, currentGroups);
+
+            if (!updatedData || !updatedData.takeaways || updatedData.takeaways.length === 0) {
+                appendMessage('Could not regenerate takeaways. The highlighted content may be insufficient.', 'assistant');
+                return;
+            }
+
+            // Step 3: Re-highlight the page with updated quotes
+            try { await Highlighter.clearAll(); } catch (e) { /* ok */ }
+
+            const hlGroups = updatedData.takeaways.map((t, i) => ({
+                groupIndex: i,
+                quotes: t.quotes || [],
+            }));
+
+            let hlResult = { highlighted: 0, total: 0 };
+            try {
+                hlResult = await Highlighter.highlightGroups(hlGroups);
+            } catch (e) { console.warn('Re-highlight failed:', e); }
+
+            // Re-enable selection mode with new group titles
+            try {
+                const groupTitles = updatedData.takeaways.map(t => t.title);
+                await Highlighter.enableSelectionMode(updatedData.takeaways.length, groupTitles);
+            } catch (e) { /* ok */ }
+
+            // Step 4: Render new takeaway cards
+            renderTakeawayCards(updatedData, hlResult);
+
+        } catch (e) {
+            console.error('Regenerate error:', e);
+            appendMessage(`Regenerate failed: ${e.message}`, 'assistant');
+        } finally {
+            if (regenBtn) {
+                regenBtn.disabled = false;
+                regenBtn.innerHTML = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"></polyline><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path></svg> Regenerate';
+            }
+        }
+    }
+
+    /**
+     * Ask LLM to regenerate takeaways based on user-curated highlights.
+     * The highlights represent what the user considers important — the LLM
+     * should organize them into coherent takeaways.
+     */
+    async function requestRegeneratedTakeaways(page, currentGroups) {
+        const {
+            apiKey,
+            apiBaseUrl = 'https://api.openai.com',
+            modelName = 'gpt-4o-mini',
+            temperature = 0.3,
+        } = await chrome.storage.local.get(['apiKey', 'apiBaseUrl', 'modelName', 'temperature']);
+
+        if (!apiKey) throw new Error('API key not configured');
+
+        // Build a description of what's currently highlighted
+        let highlightDesc = 'The user has reviewed and adjusted the highlighted passages on the webpage. Here are the current highlights organized by color group:\n\n';
+        if (currentGroups.length === 0) {
+            highlightDesc += '(No highlights remaining — the user may have removed all of them. Generate fresh takeaways from the page content.)\n';
+        } else {
+            currentGroups.forEach(g => {
+                const color = Highlighter.getColor(g.groupIndex);
+                highlightDesc += `Group ${g.groupIndex + 1} (${color.name}):\n`;
+                g.quotes.forEach(q => { highlightDesc += `  - "${q}"\n`; });
+                highlightDesc += '\n';
+            });
+        }
+
+        const systemPrompt = `You are an expert analyst. The user has used a highlighting tool to mark important passages on a webpage. Some highlights may have been auto-generated and then adjusted by the user (added, removed, or reassigned to different groups).
+
+Your task: Based on the user's curated highlights AND the full page content, generate updated key takeaways. Respect the user's highlight choices — they indicate what the user finds important. Organize the takeaways around the highlighted content, but you may refine groupings and add relevant quotes the user may have missed.
+
+IMPORTANT: The "quotes" field must contain EXACT substrings from the page content, 15-100 characters each, for re-highlighting.
+
+Output ONLY valid JSON:
+{
+  "topic": "Brief topic description",
+  "takeaways": [
+    {
+      "title": "Short title",
+      "summary": "1-2 sentence explanation",
+      "quotes": ["exact quote from page"]
+    }
+  ]
+}
+
+Generate 3-7 takeaways.`;
+
+        const baseUrl = apiBaseUrl.replace(/\/+$/, '').replace(/\/v1$/, '');
+        const response = await fetch(`${baseUrl}/v1/chat/completions`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${apiKey}`
+            },
+            body: JSON.stringify({
+                model: modelName,
+                messages: [
+                    { role: 'system', content: systemPrompt },
+                    { role: 'user', content: `${highlightDesc}\n\n=== FULL PAGE CONTENT ===\nTitle: ${page.title}\nURL: ${page.url}\n\n${page.content.substring(0, 35000)}` }
+                ],
+                temperature: parseFloat(temperature),
+                max_tokens: 3000,
+            })
+        });
+
+        if (!response.ok) {
+            const err = await response.json().catch(() => ({}));
+            throw new Error(err.error?.message || `HTTP ${response.status}`);
+        }
+
+        const data = await response.json();
+        const content = data.choices?.[0]?.message?.content || '';
+        const jsonMatch = content.match(/\{[\s\S]*\}/);
+        if (!jsonMatch) return null;
+        try { return JSON.parse(jsonMatch[0]); }
+        catch (e) { console.warn('Regen parse failed:', e); return null; }
     }
 
     function escapeHtml(text) {
@@ -1205,7 +1371,7 @@ Example output:
         // Remove page indicator
         const indicator = contextBody.querySelector('.context-page-indicator');
         if (indicator) indicator.remove();
-        // Clear any page highlights
+        // Clear any page highlights and selection toolbar
         try { Highlighter.clearAll(); } catch (e) { /* ok */ }
     });
 
