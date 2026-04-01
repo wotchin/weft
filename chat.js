@@ -667,24 +667,234 @@ document.addEventListener('DOMContentLoaded', async function() {
         }
     });
 
-    // "Key Takeaways" handler
+    // "Key Takeaways" handler — structured JSON with source quotes + highlights
     takeawaysBtn.addEventListener('click', async () => {
+        if (isStreaming) return;
         try {
             takeawaysBtn.disabled = true;
             takeawaysBtn.textContent = 'Extracting...';
             const page = await extractCurrentPage();
-            takeawaysBtn.textContent = 'Key Takeaways';
 
             showPageIndicator(page);
+            takeawaysBtn.textContent = 'Analyzing...';
 
-            const prompt = `Based on the current webpage content, extract the key takeaways and main insights. Please organize them as:\n\n1. **Main Topic/Theme**: What is this page about?\n2. **Key Points**: List the most important points (5-10 bullet points)\n3. **Key Data/Facts**: Any specific numbers, statistics, or factual claims\n4. **Author's Perspective**: What viewpoint or argument is being made?\n5. **Actionable Insights**: What can the reader do with this information?\n\nBe concise but thorough.`;
-            await sendWithPageContext(prompt, page);
+            // Clear previous highlights
+            try { await Highlighter.clearAll(); } catch (e) { /* ok */ }
+
+            // Phase 1: Ask LLM for structured takeaways with source quotes
+            const takeawaysData = await requestStructuredTakeaways(page);
+
+            if (!takeawaysData || !takeawaysData.takeaways || takeawaysData.takeaways.length === 0) {
+                // Fallback: do a normal text-based takeaway
+                takeawaysBtn.textContent = 'Key Takeaways';
+                const fallbackPrompt = `Based on the current webpage content, extract the key takeaways and main insights. Please organize them as:\n\n1. **Main Topic/Theme**: What is this page about?\n2. **Key Points**: List the most important points (5-10 bullet points)\n3. **Key Data/Facts**: Any specific numbers, statistics, or factual claims\n4. **Author's Perspective**: What viewpoint or argument is being made?\n5. **Actionable Insights**: What can the reader do with this information?\n\nBe concise but thorough.`;
+                await sendWithPageContext(fallbackPrompt, page);
+                return;
+            }
+
+            // Phase 2: Inject highlights into the webpage
+            takeawaysBtn.textContent = 'Highlighting...';
+            const hlGroups = takeawaysData.takeaways.map((t, i) => ({
+                groupIndex: i,
+                quotes: t.quotes || [],
+            }));
+
+            let hlResult = { highlighted: 0, total: 0 };
+            try {
+                hlResult = await Highlighter.highlightGroups(hlGroups);
+                console.log(`[Highlight] ${hlResult.highlighted}/${hlResult.total} quotes highlighted`);
+            } catch (e) {
+                console.warn('Highlighting failed:', e);
+            }
+
+            // Phase 3: Render rich takeaway cards in chat
+            renderTakeawayCards(takeawaysData, hlResult);
+
         } catch (e) {
+            console.error('Key takeaways error:', e);
+            appendMessage(`Error: ${e.message}`, 'assistant');
+        } finally {
             takeawaysBtn.textContent = 'Key Takeaways';
             takeawaysBtn.disabled = false;
-            appendMessage(`Error extracting page: ${e.message}`, 'assistant');
         }
     });
+
+    /**
+     * Ask LLM to return structured takeaways with exact source quotes.
+     * Non-streaming call that returns parsed JSON.
+     */
+    async function requestStructuredTakeaways(page) {
+        const {
+            apiKey,
+            apiBaseUrl = 'https://api.openai.com',
+            modelName = 'gpt-4o-mini',
+            temperature = 0.3,
+        } = await chrome.storage.local.get(['apiKey', 'apiBaseUrl', 'modelName', 'temperature']);
+
+        if (!apiKey) throw new Error('API key not configured');
+
+        const systemPrompt = `You are an expert analyst. Given a webpage's content, extract the key takeaways. For EACH takeaway, provide exact quotes from the original text that support it.
+
+IMPORTANT: The "quotes" field must contain EXACT substrings copied from the provided page content. These will be used to locate and highlight the text in the original webpage. Each quote should be 15-100 characters long — long enough to be unique but not entire paragraphs. Extract 2-5 quotes per takeaway.
+
+Output ONLY valid JSON in this exact format:
+{
+  "topic": "Brief description of the page's main topic",
+  "takeaways": [
+    {
+      "title": "Short title for this takeaway",
+      "summary": "1-2 sentence explanation of this point",
+      "quotes": ["exact quote from page text", "another exact quote supporting this point"]
+    }
+  ]
+}
+
+Generate 3-7 takeaways. Each must have at least 1 quote.`;
+
+        const baseUrl = apiBaseUrl.replace(/\/+$/, '').replace(/\/v1$/, '');
+        const response = await fetch(`${baseUrl}/v1/chat/completions`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${apiKey}`
+            },
+            body: JSON.stringify({
+                model: modelName,
+                messages: [
+                    { role: 'system', content: systemPrompt },
+                    { role: 'user', content: `Analyze the following webpage content and extract structured key takeaways with exact source quotes.\n\nTitle: ${page.title}\nURL: ${page.url}\n\n${page.content.substring(0, 40000)}` }
+                ],
+                temperature: parseFloat(temperature),
+                max_tokens: 3000,
+            })
+        });
+
+        if (!response.ok) {
+            const err = await response.json().catch(() => ({}));
+            throw new Error(err.error?.message || `HTTP ${response.status}`);
+        }
+
+        const data = await response.json();
+        const content = data.choices?.[0]?.message?.content || '';
+
+        // Parse JSON (handle markdown code fences)
+        const jsonMatch = content.match(/\{[\s\S]*\}/);
+        if (!jsonMatch) {
+            console.warn('No JSON found in LLM response:', content);
+            return null;
+        }
+
+        try {
+            return JSON.parse(jsonMatch[0]);
+        } catch (e) {
+            console.warn('Failed to parse takeaways JSON:', e, content);
+            return null;
+        }
+    }
+
+    /**
+     * Render rich takeaway cards in the chat area with color indicators
+     * and clickable source references.
+     */
+    function renderTakeawayCards(data, hlResult) {
+        const messageDiv = document.createElement('div');
+        messageDiv.className = 'message assistant';
+
+        const contentDiv = document.createElement('div');
+        contentDiv.className = 'message-content takeaway-content';
+
+        // Topic header
+        let html = `<div class="takeaway-header">
+            <h3>Key Takeaways</h3>
+            <span class="takeaway-topic">${escapeHtml(data.topic || '')}</span>`;
+        if (hlResult.highlighted > 0) {
+            html += `<span class="takeaway-hl-badge">${hlResult.highlighted} passages highlighted in page</span>`;
+        }
+        html += `</div>`;
+
+        // Takeaway cards
+        data.takeaways.forEach((t, i) => {
+            const color = Highlighter.getColor(i);
+            const colorDot = `<span class="takeaway-color-dot" style="background:${color.border};"></span>`;
+            const quotesHtml = (t.quotes || []).map(q =>
+                `<span class="takeaway-quote" data-group="${i}" title="Click to locate in page">"${escapeHtml(q)}"</span>`
+            ).join(' ');
+
+            html += `<div class="takeaway-card" data-group="${i}">
+                <div class="takeaway-card-header">
+                    ${colorDot}
+                    <strong>${escapeHtml(t.title)}</strong>
+                </div>
+                <div class="takeaway-card-summary">${escapeHtml(t.summary)}</div>
+                ${quotesHtml ? `<div class="takeaway-card-quotes">
+                    <span class="quotes-label">Sources:</span> ${quotesHtml}
+                </div>` : ''}
+            </div>`;
+        });
+
+        // Clear highlights button
+        html += `<div class="takeaway-footer">
+            <button class="takeaway-clear-btn" id="clearHighlightsBtn">Clear page highlights</button>
+        </div>`;
+
+        contentDiv.innerHTML = html;
+        messageDiv.appendChild(contentDiv);
+
+        // Copy button row
+        const btnRow = document.createElement('div');
+        btnRow.className = 'message-actions';
+        const copyBtn = document.createElement('button');
+        copyBtn.className = 'copy-btn';
+        copyBtn.textContent = 'Copy';
+        copyBtn.addEventListener('click', () => {
+            navigator.clipboard.writeText(contentDiv.innerText).then(() => {
+                copyBtn.textContent = 'Copied!';
+                setTimeout(() => { copyBtn.textContent = 'Copy'; }, 1500);
+            });
+        });
+        btnRow.appendChild(copyBtn);
+        messageDiv.appendChild(btnRow);
+
+        chatMessages.appendChild(messageDiv);
+        chatMessages.scrollTop = chatMessages.scrollHeight;
+
+        // Attach event: click quote to scroll in page
+        contentDiv.querySelectorAll('.takeaway-quote').forEach(el => {
+            el.addEventListener('click', () => {
+                const groupIdx = parseInt(el.dataset.group);
+                Highlighter.scrollToGroup(groupIdx);
+            });
+        });
+
+        // Attach event: click card header color dot to scroll
+        contentDiv.querySelectorAll('.takeaway-card').forEach(el => {
+            el.querySelector('.takeaway-color-dot')?.addEventListener('click', () => {
+                const groupIdx = parseInt(el.dataset.group);
+                Highlighter.scrollToGroup(groupIdx);
+            });
+        });
+
+        // Clear highlights button
+        contentDiv.querySelector('#clearHighlightsBtn')?.addEventListener('click', async () => {
+            try {
+                await Highlighter.clearAll();
+                const btn = contentDiv.querySelector('#clearHighlightsBtn');
+                if (btn) { btn.textContent = 'Cleared!'; btn.disabled = true; }
+            } catch (e) { console.warn('Clear failed:', e); }
+        });
+
+        // Add to conversation history for context
+        const textSummary = data.takeaways.map((t, i) =>
+            `${i + 1}. ${t.title}: ${t.summary}`
+        ).join('\n');
+        conversationHistory.push({ role: 'assistant', content: `Key Takeaways for "${data.topic}":\n${textSummary}` });
+    }
+
+    function escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
 
     // Show page indicator in context panel
     function showPageIndicator(page) {
@@ -995,6 +1205,8 @@ Example output:
         // Remove page indicator
         const indicator = contextBody.querySelector('.context-page-indicator');
         if (indicator) indicator.remove();
+        // Clear any page highlights
+        try { Highlighter.clearAll(); } catch (e) { /* ok */ }
     });
 
     // Export

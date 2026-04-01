@@ -598,6 +598,141 @@ body {
     color: #888;
 }
 
+/* Takeaway Cards */
+.takeaway-content {
+    padding: 12px 14px !important;
+}
+
+.takeaway-header {
+    margin-bottom: 10px;
+}
+
+.takeaway-header h3 {
+    font-size: 15px;
+    margin: 0 0 4px;
+    color: #1a1a1a;
+}
+
+.takeaway-topic {
+    font-size: 12px;
+    color: #666;
+    display: block;
+    margin-bottom: 4px;
+}
+
+.takeaway-hl-badge {
+    display: inline-block;
+    font-size: 11px;
+    padding: 2px 8px;
+    background: #e8f5e9;
+    color: #2e7d32;
+    border-radius: 10px;
+    margin-top: 4px;
+}
+
+.takeaway-card {
+    background: #fff;
+    border: 1px solid #e8e8e8;
+    border-radius: 8px;
+    padding: 10px 12px;
+    margin-bottom: 8px;
+    transition: box-shadow 0.15s;
+}
+
+.takeaway-card:hover {
+    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+}
+
+.takeaway-card-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 4px;
+    font-size: 13px;
+}
+
+.takeaway-color-dot {
+    display: inline-block;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    cursor: pointer;
+    transition: transform 0.15s;
+}
+
+.takeaway-color-dot:hover {
+    transform: scale(1.4);
+}
+
+.takeaway-card-summary {
+    font-size: 13px;
+    color: #444;
+    line-height: 1.5;
+    margin-bottom: 6px;
+}
+
+.takeaway-card-quotes {
+    font-size: 11px;
+    color: #888;
+    line-height: 1.6;
+    border-top: 1px solid #f0f0f0;
+    padding-top: 6px;
+}
+
+.quotes-label {
+    font-weight: 600;
+    color: #999;
+    margin-right: 2px;
+}
+
+.takeaway-quote {
+    display: inline;
+    color: #666;
+    font-style: italic;
+    cursor: pointer;
+    border-bottom: 1px dashed #bbb;
+    padding-bottom: 1px;
+    transition: color 0.15s, border-color 0.15s;
+}
+
+.takeaway-quote:hover {
+    color: #1976d2;
+    border-bottom-color: #1976d2;
+}
+
+.takeaway-quote + .takeaway-quote::before {
+    content: " \00B7 ";
+    font-style: normal;
+    color: #ccc;
+}
+
+.takeaway-footer {
+    margin-top: 8px;
+    text-align: right;
+}
+
+.takeaway-clear-btn {
+    padding: 4px 10px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    background: #fff;
+    font-size: 11px;
+    cursor: pointer;
+    color: #888;
+    transition: all 0.15s;
+}
+
+.takeaway-clear-btn:hover {
+    border-color: #f44336;
+    color: #f44336;
+}
+
+.takeaway-clear-btn:disabled {
+    opacity: 0.5;
+    cursor: default;
+}
+
 /* Page content indicator in context panel */
 .context-page-indicator {
     display: flex;
