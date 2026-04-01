@@ -10,10 +10,23 @@ document.addEventListener('DOMContentLoaded', async function() {
     const toggleContext = document.getElementById('toggleContext');
     const templateSelect = document.getElementById('templateSelect');
 
+    const askPageBtn = document.getElementById('askPageBtn');
+    const takeawaysBtn = document.getElementById('takeawaysBtn');
+    const deepSearchBtn = document.getElementById('deepSearchBtn');
+    const searchPlanPanel = document.getElementById('searchPlanPanel');
+    const searchPlanBody = document.getElementById('searchPlanBody');
+    const confirmPlanBtn = document.getElementById('confirmPlan');
+    const cancelPlanBtn = document.getElementById('cancelPlan');
+    const searchProgress = document.getElementById('searchProgress');
+    const progressFill = document.getElementById('progressFill');
+    const progressText = document.getElementById('progressText');
+
     let currentSession = null;
     let sessionSnippets = [];
     let conversationHistory = [];
     let isStreaming = false;
+    let pageContent = null; // cached page extraction result
+    let pendingSearchPlan = null; // LLM-generated search plan awaiting confirmation
 
     // Prompt templates
     const promptTemplates = {
@@ -515,6 +528,452 @@ document.addEventListener('DOMContentLoaded', async function() {
         }
     }
 
+    // ======== Page Extraction & Quick Actions ========
+
+    // Extract current page content (with caching)
+    async function extractCurrentPage() {
+        if (pageContent) return pageContent;
+        try {
+            pageContent = await PageExtractor.extract();
+            return pageContent;
+        } catch (e) {
+            console.error('Page extraction failed:', e);
+            throw e;
+        }
+    }
+
+    // Build system message with page content included
+    async function buildSystemMessageWithPage(page, ragResult) {
+        const visionEnabled = await isVisionSupported();
+
+        let intro = "You are a helpful AI assistant for Cyber Assistant, a browser extension that collects information snippets from web pages. ";
+        intro += "The user has collected the following information snippets in their current session. Use them as context when responding.\n\n";
+        intro += "When generating reports or structured content, you may use HTML formatting including tables, lists, headings, and SVG charts.\n\n";
+
+        const snippetsText = ragResult
+            ? RAGEngine.buildFilteredSnippetsText(ragResult, visionEnabled)
+            : buildSnippetsText(visionEnabled);
+
+        // Append page content
+        let pageText = '';
+        if (page && page.content) {
+            pageText += "\n=== CURRENT PAGE CONTENT ===\n";
+            pageText += `Title: ${page.title}\n`;
+            pageText += `URL: ${page.url}\n`;
+            if (page.description) pageText += `Description: ${page.description}\n`;
+            pageText += `\n${page.content.substring(0, 50000)}\n`;
+            pageText += "=== END PAGE CONTENT ===\n";
+        }
+
+        return { role: "system", content: intro + snippetsText + pageText };
+    }
+
+    // Send a message with page context (used by quick action buttons)
+    async function sendWithPageContext(userMessage, page) {
+        if (isStreaming) return;
+        isStreaming = true;
+        sendButton.disabled = true;
+        setQuickActionsEnabled(false);
+
+        appendMessage(userMessage, 'user');
+        showTypingIndicator();
+
+        try {
+            // Reset conversation for page-context queries
+            conversationHistory = [];
+            conversationHistory.push(await buildSystemMessageWithPage(page));
+
+            const imageParts = await buildImageContentParts();
+            if (imageParts) {
+                conversationHistory.push({
+                    role: "user",
+                    content: [...imageParts, { type: "text", text: userMessage }]
+                });
+            } else {
+                conversationHistory.push({ role: "user", content: userMessage });
+            }
+
+            const {
+                apiKey,
+                apiBaseUrl = 'https://api.openai.com',
+                modelName = 'gpt-4o-mini',
+                maxTokens = 2000,
+                temperature = 0.7
+            } = await chrome.storage.local.get([
+                'apiKey', 'apiBaseUrl', 'modelName', 'maxTokens', 'temperature'
+            ]);
+
+            if (!apiKey) throw new Error('API key not found. Please configure it in Settings.');
+
+            const baseUrl = apiBaseUrl.replace(/\/+$/, '').replace(/\/v1$/, '');
+            const response = await fetch(`${baseUrl}/v1/chat/completions`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${apiKey}`
+                },
+                body: JSON.stringify({
+                    model: modelName,
+                    messages: conversationHistory,
+                    temperature: parseFloat(temperature),
+                    max_tokens: parseInt(maxTokens),
+                    stream: true
+                })
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({}));
+                throw new Error(`API Error: ${response.status} - ${errorData.error?.message || 'Unknown'}`);
+            }
+
+            removeTypingIndicator();
+            const contentDiv = appendMessage('', 'assistant', true);
+            await processStream(response, contentDiv);
+        } catch (error) {
+            console.error('Error:', error);
+            removeTypingIndicator();
+            appendMessage(`Error: ${error.message}`, 'assistant');
+        } finally {
+            isStreaming = false;
+            sendButton.disabled = false;
+            setQuickActionsEnabled(true);
+        }
+    }
+
+    function setQuickActionsEnabled(enabled) {
+        askPageBtn.disabled = !enabled;
+        takeawaysBtn.disabled = !enabled;
+        deepSearchBtn.disabled = !enabled;
+    }
+
+    // "Ask about this page" handler
+    askPageBtn.addEventListener('click', async () => {
+        try {
+            askPageBtn.disabled = true;
+            askPageBtn.textContent = 'Extracting...';
+            const page = await extractCurrentPage();
+            askPageBtn.textContent = 'Ask about this page';
+
+            // Show page info in context panel
+            showPageIndicator(page);
+
+            const question = userInput.value.trim() || 'Please analyze this webpage content and provide a comprehensive summary. What is the main topic, key arguments, and important details?';
+            userInput.value = '';
+            await sendWithPageContext(question, page);
+        } catch (e) {
+            askPageBtn.textContent = 'Ask about this page';
+            askPageBtn.disabled = false;
+            appendMessage(`Error extracting page: ${e.message}`, 'assistant');
+        }
+    });
+
+    // "Key Takeaways" handler
+    takeawaysBtn.addEventListener('click', async () => {
+        try {
+            takeawaysBtn.disabled = true;
+            takeawaysBtn.textContent = 'Extracting...';
+            const page = await extractCurrentPage();
+            takeawaysBtn.textContent = 'Key Takeaways';
+
+            showPageIndicator(page);
+
+            const prompt = `Based on the current webpage content, extract the key takeaways and main insights. Please organize them as:\n\n1. **Main Topic/Theme**: What is this page about?\n2. **Key Points**: List the most important points (5-10 bullet points)\n3. **Key Data/Facts**: Any specific numbers, statistics, or factual claims\n4. **Author's Perspective**: What viewpoint or argument is being made?\n5. **Actionable Insights**: What can the reader do with this information?\n\nBe concise but thorough.`;
+            await sendWithPageContext(prompt, page);
+        } catch (e) {
+            takeawaysBtn.textContent = 'Key Takeaways';
+            takeawaysBtn.disabled = false;
+            appendMessage(`Error extracting page: ${e.message}`, 'assistant');
+        }
+    });
+
+    // Show page indicator in context panel
+    function showPageIndicator(page) {
+        // Remove existing indicator
+        const existing = contextBody.querySelector('.context-page-indicator');
+        if (existing) existing.remove();
+
+        const indicator = document.createElement('div');
+        indicator.className = 'context-page-indicator';
+        indicator.innerHTML = `
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>
+            <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${page.title} (${page.wordCount} words)</span>
+        `;
+        contextBody.insertBefore(indicator, contextBody.firstChild);
+    }
+
+    // ======== Deep Search / Search Planning ========
+
+    // "Deep Search" handler — ask LLM to generate a search plan
+    deepSearchBtn.addEventListener('click', async () => {
+        if (isStreaming) return;
+
+        const userQuery = userInput.value.trim();
+        if (!userQuery) {
+            appendMessage('Please enter a question or topic in the input field, then click Deep Search.', 'assistant');
+            return;
+        }
+
+        try {
+            deepSearchBtn.disabled = true;
+            deepSearchBtn.textContent = 'Planning...';
+
+            // Optionally extract page for context
+            let page = pageContent;
+            try { page = await extractCurrentPage(); } catch (e) { /* no page context is OK */ }
+
+            // Ask LLM to generate a search plan
+            const plan = await generateSearchPlan(userQuery, page);
+            if (plan && plan.length > 0) {
+                pendingSearchPlan = { query: userQuery, plan, page };
+                showSearchPlan(plan);
+            } else {
+                appendMessage('Could not generate a search plan. Try rephrasing your question.', 'assistant');
+            }
+        } catch (e) {
+            console.error('Search plan error:', e);
+            appendMessage(`Error generating search plan: ${e.message}`, 'assistant');
+        } finally {
+            deepSearchBtn.textContent = 'Deep Search';
+            deepSearchBtn.disabled = false;
+        }
+    });
+
+    // Ask LLM to generate search queries
+    async function generateSearchPlan(userQuery, page) {
+        const {
+            apiKey,
+            apiBaseUrl = 'https://api.openai.com',
+            modelName = 'gpt-4o-mini',
+        } = await chrome.storage.local.get(['apiKey', 'apiBaseUrl', 'modelName']);
+
+        if (!apiKey) throw new Error('API key not configured');
+
+        let contextHint = '';
+        if (page) {
+            contextHint = `\n\nThe user is currently on a webpage titled "${page.title}" (${page.url}).`;
+            contextHint += `\nPage description: ${page.description || 'N/A'}`;
+            contextHint += `\nPage excerpt: ${page.content.substring(0, 1000)}...`;
+        }
+        if (sessionSnippets.length > 0) {
+            contextHint += `\n\nThe user has ${sessionSnippets.length} collected snippets in their session.`;
+        }
+
+        const baseUrl = apiBaseUrl.replace(/\/+$/, '').replace(/\/v1$/, '');
+        const response = await fetch(`${baseUrl}/v1/chat/completions`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${apiKey}`
+            },
+            body: JSON.stringify({
+                model: modelName,
+                messages: [
+                    {
+                        role: "system",
+                        content: `You are a search planning assistant. Given a user's question and context, generate a list of web search queries that would help find the missing information needed to answer the question comprehensively.
+
+Output ONLY a JSON array of objects, each with "query" (the search query string) and "reason" (brief explanation of why this search is needed). Generate 2-5 search queries. Be specific and targeted.
+
+Example output:
+[{"query": "React server components vs client components performance comparison 2024", "reason": "Compare performance characteristics"}, {"query": "Next.js app router migration guide best practices", "reason": "Find migration best practices"}]`
+                    },
+                    {
+                        role: "user",
+                        content: `Question: ${userQuery}${contextHint}\n\nGenerate search queries to find information needed to answer this question comprehensively.`
+                    }
+                ],
+                temperature: 0.3,
+                max_tokens: 500
+            })
+        });
+
+        if (!response.ok) {
+            const err = await response.json().catch(() => ({}));
+            throw new Error(err.error?.message || `HTTP ${response.status}`);
+        }
+
+        const data = await response.json();
+        const content = data.choices?.[0]?.message?.content || '';
+
+        // Parse JSON from response (handle markdown code blocks)
+        const jsonMatch = content.match(/\[[\s\S]*\]/);
+        if (!jsonMatch) return [];
+
+        try {
+            return JSON.parse(jsonMatch[0]);
+        } catch (e) {
+            console.warn('Failed to parse search plan JSON:', content);
+            return [];
+        }
+    }
+
+    // Display search plan for user confirmation
+    function showSearchPlan(plan) {
+        searchPlanBody.innerHTML = '';
+        plan.forEach((item, i) => {
+            const div = document.createElement('div');
+            div.className = 'plan-item';
+            div.innerHTML = `
+                <span class="plan-item-num">${i + 1}.</span>
+                <div>
+                    <div class="plan-item-query">${item.query}</div>
+                    <div class="plan-item-reason">${item.reason}</div>
+                </div>
+            `;
+            searchPlanBody.appendChild(div);
+        });
+        searchProgress.style.display = 'none';
+        searchPlanPanel.style.display = 'block';
+    }
+
+    // Confirm search plan
+    confirmPlanBtn.addEventListener('click', async () => {
+        if (!pendingSearchPlan) return;
+        const { query, plan, page } = pendingSearchPlan;
+        pendingSearchPlan = null;
+
+        confirmPlanBtn.disabled = true;
+        cancelPlanBtn.disabled = true;
+        searchProgress.style.display = 'block';
+
+        try {
+            // Execute search plan
+            const searchResults = await WebSearcher.executePlan(plan, (step, total, msg) => {
+                const pct = Math.round((step / total) * 100);
+                progressFill.style.width = pct + '%';
+                progressText.textContent = `(${step}/${total}) ${msg}`;
+            });
+
+            progressFill.style.width = '100%';
+            progressText.textContent = 'Searches complete. Generating answer...';
+
+            // Build augmented context and send to LLM
+            await sendWithSearchResults(query, page, searchResults);
+        } catch (e) {
+            appendMessage(`Search execution error: ${e.message}`, 'assistant');
+        } finally {
+            searchPlanPanel.style.display = 'none';
+            confirmPlanBtn.disabled = false;
+            cancelPlanBtn.disabled = false;
+        }
+    });
+
+    // Cancel search plan
+    cancelPlanBtn.addEventListener('click', () => {
+        pendingSearchPlan = null;
+        searchPlanPanel.style.display = 'none';
+    });
+
+    // Send user's question with search results as augmented context
+    async function sendWithSearchResults(userQuery, page, searchResults) {
+        if (isStreaming) return;
+        isStreaming = true;
+        sendButton.disabled = true;
+        setQuickActionsEnabled(false);
+
+        appendMessage(userQuery, 'user');
+        showTypingIndicator();
+
+        try {
+            // Build search context text
+            let searchContext = "\n=== WEB SEARCH RESULTS ===\n";
+            for (const sr of searchResults) {
+                searchContext += `\nSearch query: "${sr.query}"\n`;
+                if (sr.error) {
+                    searchContext += `(Search failed: ${sr.error})\n`;
+                    continue;
+                }
+                for (const r of sr.results) {
+                    searchContext += `\n--- ${r.title} ---\nURL: ${r.url}\n`;
+                    if (r.content) {
+                        searchContext += r.content.substring(0, 3000) + '\n';
+                    } else if (r.snippet) {
+                        searchContext += r.snippet + '\n';
+                    }
+                }
+            }
+            searchContext += "\n=== END SEARCH RESULTS ===\n";
+
+            // Build system message with page + search results
+            const visionEnabled = await isVisionSupported();
+            let intro = "You are a helpful AI assistant for Cyber Assistant. ";
+            intro += "The user has asked a question. Below is context from their session snippets, the current webpage, and web search results gathered to help answer the question.\n";
+            intro += "Synthesize all available information to provide a comprehensive, well-structured answer. Cite sources when possible.\n\n";
+
+            const snippetsText = buildSnippetsText(visionEnabled);
+            let pageText = '';
+            if (page && page.content) {
+                pageText += "\n=== CURRENT PAGE CONTENT ===\n";
+                pageText += `Title: ${page.title}\nURL: ${page.url}\n`;
+                pageText += page.content.substring(0, 30000) + '\n';
+                pageText += "=== END PAGE CONTENT ===\n";
+            }
+
+            conversationHistory = [];
+            conversationHistory.push({
+                role: "system",
+                content: intro + snippetsText + pageText + searchContext
+            });
+
+            const imageParts = await buildImageContentParts();
+            if (imageParts) {
+                conversationHistory.push({
+                    role: "user",
+                    content: [...imageParts, { type: "text", text: userQuery }]
+                });
+            } else {
+                conversationHistory.push({ role: "user", content: userQuery });
+            }
+
+            const {
+                apiKey,
+                apiBaseUrl = 'https://api.openai.com',
+                modelName = 'gpt-4o-mini',
+                maxTokens = 2000,
+                temperature = 0.7
+            } = await chrome.storage.local.get([
+                'apiKey', 'apiBaseUrl', 'modelName', 'maxTokens', 'temperature'
+            ]);
+
+            if (!apiKey) throw new Error('API key not configured');
+
+            const baseUrl = apiBaseUrl.replace(/\/+$/, '').replace(/\/v1$/, '');
+            const response = await fetch(`${baseUrl}/v1/chat/completions`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${apiKey}`
+                },
+                body: JSON.stringify({
+                    model: modelName,
+                    messages: conversationHistory,
+                    temperature: parseFloat(temperature),
+                    max_tokens: parseInt(maxTokens),
+                    stream: true
+                })
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({}));
+                throw new Error(`API Error: ${response.status} - ${errorData.error?.message || 'Unknown'}`);
+            }
+
+            removeTypingIndicator();
+            const contentDiv = appendMessage('', 'assistant', true);
+            await processStream(response, contentDiv);
+        } catch (error) {
+            console.error('Error:', error);
+            removeTypingIndicator();
+            appendMessage(`Error: ${error.message}`, 'assistant');
+        } finally {
+            isStreaming = false;
+            sendButton.disabled = false;
+            setQuickActionsEnabled(true);
+        }
+    }
+
+    // ======== Event Listeners ========
+
     // Event listeners
     sendButton.addEventListener('click', handleSend);
 
@@ -530,6 +989,12 @@ document.addEventListener('DOMContentLoaded', async function() {
         if (!confirm('Clear chat history?')) return;
         chatMessages.innerHTML = '';
         conversationHistory = [];
+        pageContent = null;
+        pendingSearchPlan = null;
+        searchPlanPanel.style.display = 'none';
+        // Remove page indicator
+        const indicator = contextBody.querySelector('.context-page-indicator');
+        if (indicator) indicator.remove();
     });
 
     // Export

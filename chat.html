@@ -27,6 +27,38 @@
             <div class="context-body" id="contextBody"></div>
         </div>
 
+        <!-- Quick action buttons -->
+        <div class="quick-actions" id="quickActions">
+            <button class="quick-action-btn" id="askPageBtn" title="Extract current page content and ask AI about it">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>
+                Ask about this page
+            </button>
+            <button class="quick-action-btn" id="takeawaysBtn" title="Extract key takeaways from current page">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3L22 4"></path><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path></svg>
+                Key Takeaways
+            </button>
+            <button class="quick-action-btn" id="deepSearchBtn" title="Search the web to supplement information">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+                Deep Search
+            </button>
+        </div>
+
+        <!-- Search plan panel (hidden by default) -->
+        <div class="search-plan-panel" id="searchPlanPanel" style="display:none;">
+            <div class="search-plan-header">
+                <span>Search Plan</span>
+                <div class="search-plan-actions">
+                    <button id="confirmPlan" class="plan-btn plan-confirm">Execute</button>
+                    <button id="cancelPlan" class="plan-btn plan-cancel">Cancel</button>
+                </div>
+            </div>
+            <div class="search-plan-body" id="searchPlanBody"></div>
+            <div class="search-plan-progress" id="searchProgress" style="display:none;">
+                <div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
+                <span class="progress-text" id="progressText"></span>
+            </div>
+        </div>
+
         <!-- Prompt template selector -->
         <div class="template-bar" id="templateBar">
             <select id="templateSelect" class="template-select">
@@ -67,6 +99,8 @@
     <script src="lib/vector-index.js"></script>
     <script src="lib/rag-indexer.js"></script>
     <script src="lib/rag-engine.js"></script>
+    <script src="lib/page-extractor.js"></script>
+    <script src="lib/web-searcher.js"></script>
     <script src="markdown.js"></script>
     <script src="chat.js"></script>
 </body>
