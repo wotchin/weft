@@ -11,9 +11,6 @@
         "scripting",
         "alarms"
     ],
-    "optional_permissions": [
-        "sidePanel"
-    ],
     "host_permissions": [
         "https://*/*",
         "http://*/*"

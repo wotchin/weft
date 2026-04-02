@@ -7,7 +7,15 @@
 (() => {
     // Guard: check if extension context is still valid (survives extension reload)
     function contextValid() {
-        try { return !!chrome.runtime.id; } catch { return false; }
+        try {
+            // chrome.runtime.id is undefined when context is invalidated;
+            // accessing chrome.runtime itself may throw after full GC.
+            const id = chrome.runtime?.id;
+            if (!id) return false;
+            // Double-check by touching an API that throws immediately
+            void chrome.runtime.getURL('');
+            return true;
+        } catch { return false; }
     }
 
     // ---- Configuration ----
@@ -166,8 +174,10 @@
 
         try {
             chrome.storage.local.set({ askAIContext: ctx }, () => {
-                if (chrome.runtime.lastError) return;
-                chrome.runtime.sendMessage({ type: 'openChatAskAI' });
+                try {
+                    if (chrome.runtime.lastError) return;
+                    chrome.runtime.sendMessage({ type: 'openChatAskAI' });
+                } catch { /* context invalidated between set and callback */ }
             });
         } catch { /* extension context invalidated */ }
     }
