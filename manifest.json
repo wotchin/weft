@@ -44,5 +44,8 @@
     "options_page": "settings.html",
     "sandbox": {
         "pages": ["sandbox-mermaid.html"]
+    },
+    "content_security_policy": {
+        "sandbox": "sandbox allow-scripts allow-forms allow-popups allow-modals; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net"
     }
 }

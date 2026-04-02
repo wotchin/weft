@@ -5,6 +5,11 @@
  * 2. Comment input popup when triggered from context menu
  */
 (() => {
+    // Guard: check if extension context is still valid (survives extension reload)
+    function contextValid() {
+        try { return !!chrome.runtime.id; } catch { return false; }
+    }
+
     // ---- Configuration ----
     const QUICK_QUESTIONS = [
         { id: 'reliability', icon: '\u2714', label: 'Verify', question: 'Please evaluate the reliability and credibility of this information. Identify the likely source, check for potential biases, assess factual accuracy, and rate the trustworthiness. Search the web if needed to verify claims.' },
@@ -19,16 +24,18 @@
     let customQuestions = [];
 
     // Load custom questions from storage
-    chrome.storage.local.get(['customAskQuestions'], (data) => {
-        customQuestions = data.customAskQuestions || [];
-    });
+    try {
+        chrome.storage.local.get(['customAskQuestions'], (data) => {
+            customQuestions = (data && data.customAskQuestions) || [];
+        });
 
-    // Listen for storage changes to update custom questions
-    chrome.storage.onChanged.addListener((changes) => {
-        if (changes.customAskQuestions) {
-            customQuestions = changes.customAskQuestions.newValue || [];
-        }
-    });
+        // Listen for storage changes to update custom questions
+        chrome.storage.onChanged.addListener((changes) => {
+            if (changes.customAskQuestions) {
+                customQuestions = changes.customAskQuestions.newValue || [];
+            }
+        });
+    } catch { /* extension context invalidated */ }
 
     // ---- Floating Ask AI Toolbar ----
     function createToolbar() {
@@ -143,39 +150,26 @@
      * Send selected text + question to the chat window via background.
      */
     function askAI(question, questionType) {
+        if (!contextValid()) return;
         const sel = window.getSelection();
         const selectedText = sel ? sel.toString().trim() : '';
         if (!selectedText) return;
 
-        // Diagram mode: open chat with diagram request
-        if (question === '__DIAGRAM__') {
-            chrome.storage.local.set({
-                askAIContext: {
-                    selectedText,
-                    question: '',
-                    questionType: 'diagram',
-                    sourceUrl: location.href,
-                    sourceTitle: document.title,
-                    timestamp: Date.now(),
-                }
-            }, () => {
+        const ctx = {
+            selectedText,
+            question: question === '__DIAGRAM__' ? '' : question,
+            questionType: question === '__DIAGRAM__' ? 'diagram' : questionType,
+            sourceUrl: location.href,
+            sourceTitle: document.title,
+            timestamp: Date.now(),
+        };
+
+        try {
+            chrome.storage.local.set({ askAIContext: ctx }, () => {
+                if (chrome.runtime.lastError) return;
                 chrome.runtime.sendMessage({ type: 'openChatAskAI' });
             });
-            return;
-        }
-
-        chrome.storage.local.set({
-            askAIContext: {
-                selectedText,
-                question,
-                questionType,
-                sourceUrl: location.href,
-                sourceTitle: document.title,
-                timestamp: Date.now(),
-            }
-        }, () => {
-            chrome.runtime.sendMessage({ type: 'openChatAskAI' });
-        });
+        } catch { /* extension context invalidated */ }
     }
 
     // Listen for mouseup to show toolbar
@@ -478,6 +472,7 @@
     }
 
     // ---- Message Listener ----
+    if (!contextValid()) return;
     chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         if (message.type === 'showToast') {
             showToast(message.title, message.text);
