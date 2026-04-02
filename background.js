@@ -256,8 +256,6 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
             type: 'popup',
             width: 900,
             height: 700,
-            left: Math.round((screen.width - 900) / 2),
-            top: Math.round((screen.height - 700) / 2)
         });
 
     } else if (info.menuItemId.startsWith("comment-")) {
@@ -698,8 +696,6 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
             type: 'popup',
             width: 900,
             height: 700,
-            left: Math.round((screen.width - 900) / 2),
-            top: Math.round((screen.height - 700) / 2)
         });
     }
 });
