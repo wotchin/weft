@@ -30,6 +30,7 @@
     let toolbar = null;
     let commentModal = null;
     let customQuestions = [];
+    let cachedSelection = ''; // captured when toolbar shows, before click clears it
 
     // Load custom questions from storage
     try {
@@ -133,6 +134,10 @@
     }
 
     function showToolbar(x, y) {
+        // Capture selection NOW — clicking a toolbar button may clear it
+        const sel = window.getSelection();
+        cachedSelection = sel ? sel.toString().trim() : '';
+
         const tb = createToolbar();
         tb.style.display = 'block';
 
@@ -159,8 +164,11 @@
      */
     function askAI(question, questionType) {
         if (!contextValid()) return;
+        // Use cached selection (captured when toolbar appeared) as primary,
+        // fall back to current selection
         const sel = window.getSelection();
-        const selectedText = sel ? sel.toString().trim() : '';
+        const selectedText = cachedSelection || (sel ? sel.toString().trim() : '');
+        cachedSelection = ''; // consume
         if (!selectedText) return;
 
         const ctx = {

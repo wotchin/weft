@@ -1534,8 +1534,8 @@ h1,h2,h3,h4{margin-top:1.2em;margin-bottom:0.6em}
                     if (typeof RAGEngine !== 'undefined' && sessionSnippets.length > 0) {
                         try {
                             const ragQuery = (pageData.title || '') + ' ' + (pageData.description || '') + ' ' + (pageData.headings || []).join(' ');
-                            const ragResult = RAGEngine.retrieve(ragQuery, sessionSnippets, { topK: 8, maxTokens: 3000 });
-                            if (ragResult && ragResult.results.length > 0) {
+                            const ragResult = await RAGEngine.retrieve(ragQuery, currentSession, sessionSnippets, { ragTokenBudget: 3000 });
+                            if (ragResult && ragResult.snippets && ragResult.snippets.length > 0) {
                                 const visionEnabled = await isVisionSupported();
                                 ragInfo = RAGEngine.buildFilteredSnippetsText(ragResult, visionEnabled);
                                 sysContent += "=== USER'S RELATED KNOWLEDGE BASE ===\n" + ragInfo + "\n=== END KNOWLEDGE BASE ===\n\n";
@@ -1559,7 +1559,8 @@ h1,h2,h3,h4{margin-top:1.2em;margin-bottom:0.6em}
                         } catch (e) { console.warn('Graph for page insight:', e); }
                     }
 
-                    // Include page content
+                    // Include page content (capped to avoid token limit / timeout)
+                    const pageText = (pageData.content || '').substring(0, 15000);
                     sysContent += "=== CURRENT WEBPAGE ===\n";
                     sysContent += `Title: ${pageData.title || ''}\n`;
                     sysContent += `URL: ${pageData.url || sourceUrl || ''}\n`;
@@ -1567,7 +1568,7 @@ h1,h2,h3,h4{margin-top:1.2em;margin-bottom:0.6em}
                     if (pageData.headings && pageData.headings.length > 0) {
                         sysContent += `Structure: ${pageData.headings.join(' > ')}\n`;
                     }
-                    sysContent += `\n${(pageData.content || '').substring(0, 40000)}\n`;
+                    sysContent += `\n${pageText}\n`;
                     sysContent += "=== END WEBPAGE ===\n";
 
                     conversationHistory.push({ role: "system", content: sysContent });

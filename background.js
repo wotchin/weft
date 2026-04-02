@@ -345,7 +345,7 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
                         title: document.title,
                         url: location.href,
                         description: meta ? meta.content : '',
-                        content: text.substring(0, 50000),
+                        content: text.substring(0, 20000),
                         headings,
                         wordCount: text.split(/\s+/).length,
                         selectedText: window.getSelection().toString().trim(),
