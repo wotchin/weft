@@ -73,6 +73,13 @@ function createStaticMenus() {
         });
     });
 
+    // ---- AI Page Insight (top-level, separate from tree) ----
+    chrome.contextMenus.create({
+        id: "aiPageInsight",
+        title: "✦ AI Insight — Analyze This Page",
+        contexts: ["page", "selection", "link", "image"]
+    });
+
     // ---- Comment to Session ----
     chrome.contextMenus.create({
         id: "commentToSession",
@@ -314,6 +321,61 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
             sessions[sessionName].push(snippet);
             await chrome.storage.local.set({ sessions });
             sendNotification(`${sessionName} +1`, 'Saved (comment skipped)');
+        }
+
+    } else if (info.menuItemId === "aiPageInsight") {
+        // AI Page Insight — extract page content and open chat with full context
+        if (!tab?.id) return;
+
+        try {
+            const results = await chrome.scripting.executeScript({
+                target: { tabId: tab.id },
+                func: () => {
+                    // Lightweight page extraction inline
+                    const REMOVE = ['script','style','noscript','iframe','svg','nav','footer','header','.ad','.ads','.sidebar','.menu','.comments','#comments'];
+                    const clone = document.body.cloneNode(true);
+                    REMOVE.forEach(s => { try { clone.querySelectorAll(s).forEach(el => el.remove()); } catch {} });
+
+                    const main = clone.querySelector('article,main,[role="main"],.article,.post,.content,.entry-content,#content,#main') || clone;
+                    const text = main.innerText || main.textContent || '';
+                    const headings = [...document.querySelectorAll('h1,h2,h3')].map(h => h.textContent.trim()).filter(Boolean).slice(0, 20);
+                    const meta = document.querySelector('meta[name="description"]');
+
+                    return {
+                        title: document.title,
+                        url: location.href,
+                        description: meta ? meta.content : '',
+                        content: text.substring(0, 50000),
+                        headings,
+                        wordCount: text.split(/\s+/).length,
+                        selectedText: window.getSelection().toString().trim(),
+                    };
+                }
+            });
+
+            const pageData = results?.[0]?.result;
+            if (!pageData) return;
+
+            await chrome.storage.local.set({
+                askAIContext: {
+                    selectedText: pageData.selectedText || '',
+                    question: '__PAGE_INSIGHT__',
+                    questionType: 'page-insight',
+                    sourceUrl: pageData.url,
+                    sourceTitle: pageData.title,
+                    pageData,
+                    timestamp: Date.now(),
+                }
+            });
+
+            chrome.windows.create({
+                url: chrome.runtime.getURL('chat.html?mode=askAI'),
+                type: 'popup',
+                width: 900,
+                height: 700,
+            });
+        } catch (e) {
+            console.warn('AI Page Insight extraction failed:', e);
         }
 
     } else if (info.menuItemId.startsWith("tag-")) {

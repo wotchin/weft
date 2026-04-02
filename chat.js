@@ -1505,12 +1505,132 @@ h1,h2,h3,h4{margin-top:1.2em;margin-bottom:0.6em}
     if (urlParams.get('mode') === 'askAI') {
         (async () => {
             const { askAIContext } = await chrome.storage.local.get(['askAIContext']);
-            if (!askAIContext || !askAIContext.selectedText) return;
+            if (!askAIContext) return;
 
             // Clear the context so it's not re-used on next open
             await chrome.storage.local.remove('askAIContext');
 
             const { selectedText, question, questionType, sourceUrl, sourceTitle } = askAIContext;
+
+            // ---- Page Insight mode: full-page AI analysis with RAG + graph ----
+            if (questionType === 'page-insight') {
+                const pageData = askAIContext.pageData || {};
+                const title = pageData.title || sourceTitle || 'this page';
+
+                appendMessage(`Analyzing: **${title}**`, 'user');
+                showTypingIndicator();
+
+                try {
+                    // Build rich context: session snippets (RAG) + page content + graph connections
+                    conversationHistory = [];
+
+                    // Construct enhanced system prompt with all available intelligence
+                    let sysContent = "You are a powerful AI research assistant integrated into the Cyber Assistant browser extension. ";
+                    sysContent += "You have access to the user's knowledge base (saved snippets from their research sessions) and the full content of the webpage they are currently viewing.\n\n";
+                    sysContent += "Your task: provide a comprehensive, insightful analysis of this webpage. Combine the page content with the user's existing knowledge base to deliver maximum value.\n\n";
+
+                    // Include session snippets via RAG if available
+                    let ragInfo = '';
+                    if (typeof RAGEngine !== 'undefined' && sessionSnippets.length > 0) {
+                        try {
+                            const ragQuery = (pageData.title || '') + ' ' + (pageData.description || '') + ' ' + (pageData.headings || []).join(' ');
+                            const ragResult = RAGEngine.retrieve(ragQuery, sessionSnippets, { topK: 8, maxTokens: 3000 });
+                            if (ragResult && ragResult.results.length > 0) {
+                                const visionEnabled = await isVisionSupported();
+                                ragInfo = RAGEngine.buildFilteredSnippetsText(ragResult, visionEnabled);
+                                sysContent += "=== USER'S RELATED KNOWLEDGE BASE ===\n" + ragInfo + "\n=== END KNOWLEDGE BASE ===\n\n";
+                            }
+                        } catch (e) { console.warn('RAG for page insight:', e); }
+                    }
+
+                    // Include knowledge graph connections if available
+                    if (typeof GraphBuilder !== 'undefined' && sessionSnippets.length >= 3) {
+                        try {
+                            const graph = new GraphBuilder();
+                            graph.buildGraph(sessionSnippets);
+                            const shared = graph.findSharedKeywords();
+                            if (shared.length > 0) {
+                                sysContent += "=== CROSS-PAGE CONNECTIONS (from knowledge graph) ===\n";
+                                shared.slice(0, 10).forEach(s => {
+                                    sysContent += `• Keyword "${s.keyword}" connects: ${s.pages.join(' ↔ ')}\n`;
+                                });
+                                sysContent += "=== END CONNECTIONS ===\n\n";
+                            }
+                        } catch (e) { console.warn('Graph for page insight:', e); }
+                    }
+
+                    // Include page content
+                    sysContent += "=== CURRENT WEBPAGE ===\n";
+                    sysContent += `Title: ${pageData.title || ''}\n`;
+                    sysContent += `URL: ${pageData.url || sourceUrl || ''}\n`;
+                    if (pageData.description) sysContent += `Description: ${pageData.description}\n`;
+                    if (pageData.headings && pageData.headings.length > 0) {
+                        sysContent += `Structure: ${pageData.headings.join(' > ')}\n`;
+                    }
+                    sysContent += `\n${(pageData.content || '').substring(0, 40000)}\n`;
+                    sysContent += "=== END WEBPAGE ===\n";
+
+                    conversationHistory.push({ role: "system", content: sysContent });
+
+                    // Build user prompt — with selected text focus if available
+                    let userPrompt = "Please analyze this webpage and provide:\n";
+                    userPrompt += "1. **Key Insights** — the most important points and takeaways\n";
+                    userPrompt += "2. **Connections** — how this page relates to my existing knowledge base (if any relevant snippets found)\n";
+                    userPrompt += "3. **Critical Assessment** — reliability, potential biases, missing perspectives\n";
+                    userPrompt += "4. **Action Items** — suggested follow-up research or actions\n";
+
+                    if (selectedText) {
+                        userPrompt += `\nPay special attention to this selected passage:\n"${selectedText.substring(0, 2000)}"\n`;
+                    }
+
+                    // Detect language from page content
+                    const cjk = ((pageData.content || '').match(/[\u4e00-\u9fff]/g) || []).length;
+                    const totalLen = (pageData.content || ' ').length;
+                    if (cjk / totalLen > 0.15) {
+                        userPrompt += "\nPlease respond in 中文.";
+                    }
+
+                    conversationHistory.push({ role: "user", content: userPrompt });
+
+                    const {
+                        apiKey,
+                        apiBaseUrl = 'https://api.openai.com',
+                        modelName = 'gpt-4o-mini',
+                        maxTokens = 4000,
+                        temperature = 0.7
+                    } = await chrome.storage.local.get([
+                        'apiKey', 'apiBaseUrl', 'modelName', 'maxTokens', 'temperature'
+                    ]);
+
+                    if (!apiKey) throw new Error('API key not configured. Go to Settings.');
+
+                    const baseUrl = apiBaseUrl.replace(/\/+$/, '').replace(/\/v1$/, '');
+                    const response = await fetch(`${baseUrl}/v1/chat/completions`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': `Bearer ${apiKey}`
+                        },
+                        body: JSON.stringify({
+                            model: modelName,
+                            messages: conversationHistory,
+                            max_tokens: parseInt(maxTokens) || 4000,
+                            temperature: parseFloat(temperature) || 0.7,
+                            stream: true,
+                        }),
+                    });
+
+                    removeTypingIndicator();
+                    const contentDiv = appendMessage('', 'assistant', true);
+                    await processStream(response, contentDiv);
+                } catch (e) {
+                    removeTypingIndicator();
+                    appendMessage(`Error: ${e.message}`, 'assistant');
+                }
+                return;
+            }
+
+            if (!selectedText) return;
 
             // Diagram mode: auto-generate a diagram from the selected text
             if (questionType === 'diagram') {
