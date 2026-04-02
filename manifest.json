@@ -2,13 +2,15 @@
     "manifest_version": 3,
     "name": "Cyber Assistant",
     "description": "Collect web snippets and generate AI-powered reports, summaries, and insights.",
-    "version": "2.0",
+    "version": "2.1",
     "permissions": [
         "storage",
         "contextMenus",
         "notifications",
         "tabs",
-        "scripting"
+        "scripting",
+        "sidePanel",
+        "alarms"
     ],
     "host_permissions": [
         "https://*/*",
@@ -29,6 +31,9 @@
             "48": "assets/icon.png",
             "128": "assets/icon.png"
         }
+    },
+    "side_panel": {
+        "default_path": "sidepanel.html"
     },
     "content_scripts": [
         {

@@ -570,6 +570,29 @@ document.addEventListener('DOMContentLoaded', async () => {
         );
     });
 
+    // Open Knowledge Replay
+    document.getElementById('openReplay').addEventListener('click', () => {
+        chrome.storage.local.set({ currentSession: sessionSelect.value }, () => {
+            chrome.windows.create({
+                url: chrome.runtime.getURL('replay.html'),
+                type: 'popup',
+                width: 700,
+                height: 600,
+                left: Math.round((screen.width - 700) / 2),
+                top: Math.round((screen.height - 600) / 2)
+            });
+        });
+    });
+
+    // Show replay due badge
+    chrome.runtime.sendMessage({ type: 'getReplayDueCount' }, (response) => {
+        if (response && response.dueCount > 0) {
+            const badge = document.getElementById('replayBadge');
+            badge.textContent = response.dueCount;
+            badge.style.display = '';
+        }
+    });
+
     // Open settings in a new tab
     document.getElementById('openSettings').addEventListener('click', () => {
         chrome.tabs.create({ url: chrome.runtime.getURL('settings.html') });

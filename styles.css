@@ -508,6 +508,32 @@ body {
     border-color: #ce93d8;
 }
 
+.action-btn.replay {
+    background: linear-gradient(135deg, #f3e5f5, #ede7f6);
+    color: #4a148c;
+    border: 1px solid #d1c4e9;
+    position: relative;
+}
+
+.action-btn.replay:hover {
+    background: linear-gradient(135deg, #e1bee7, #d1c4e9);
+    border-color: #b39ddb;
+}
+
+.replay-badge {
+    display: inline-block;
+    background: #c62828;
+    color: #fff;
+    font-size: 10px;
+    font-weight: 700;
+    border-radius: 8px;
+    padding: 1px 5px;
+    min-width: 16px;
+    text-align: center;
+    margin-left: 4px;
+    line-height: 14px;
+}
+
 /* Scrollbar */
 ::-webkit-scrollbar {
     width: 5px;

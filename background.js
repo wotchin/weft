@@ -86,7 +86,52 @@ chrome.runtime.onInstalled.addListener(() => {
 
     // 初始化右键菜单
     updateSessionContextMenus();
+
+    // Enable side panel to open on action click (user can toggle via settings)
+    if (chrome.sidePanel) {
+        chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: false }).catch(() => {});
+    }
+
+    // Set up Knowledge Replay alarm (check every 6 hours)
+    chrome.alarms.create('knowledgeReplay', { periodInMinutes: 360 });
 });
+
+// Knowledge Replay alarm handler
+chrome.alarms.onAlarm.addListener(async (alarm) => {
+    if (alarm.name === 'knowledgeReplay') {
+        await checkAndNotifyReplay();
+    }
+});
+
+async function checkAndNotifyReplay() {
+    const { replayData = {} } = await chrome.storage.local.get(['replayData']);
+    const now = Date.now();
+    let dueCount = 0;
+
+    for (const items of Object.values(replayData)) {
+        for (const item of items) {
+            if (item.nextReview && item.nextReview <= now) dueCount++;
+        }
+    }
+
+    if (dueCount > 0) {
+        // Update badge
+        chrome.action.setBadgeText({ text: String(dueCount) });
+        chrome.action.setBadgeBackgroundColor({ color: '#7b1fa2' });
+
+        // Notification
+        if (chrome.notifications) {
+            chrome.notifications.create(`replay-${now}`, {
+                type: 'basic',
+                iconUrl: chrome.runtime.getURL('assets/icon.png'),
+                title: 'Knowledge Replay',
+                message: `You have ${dueCount} item${dueCount > 1 ? 's' : ''} due for review!`,
+            });
+        }
+    } else {
+        chrome.action.setBadgeText({ text: '' });
+    }
+}
 
 // 最近一次保存的 snippet（用于给最近保存的内容打标签）
 let lastSavedSnippetInfo = null;
@@ -620,6 +665,28 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
                 message.sessionName, tab.id, tab.url
             );
             sendResponse(result);
+        })();
+        return true;
+    }
+
+    if (message.type === 'openSidePanel') {
+        if (chrome.sidePanel) {
+            chrome.sidePanel.open({ windowId: sender.tab?.windowId }).catch(() => {});
+        }
+        return false;
+    }
+
+    if (message.type === 'getReplayDueCount') {
+        (async () => {
+            const { replayData = {} } = await chrome.storage.local.get(['replayData']);
+            const now = Date.now();
+            let dueCount = 0;
+            for (const items of Object.values(replayData)) {
+                for (const item of items) {
+                    if (item.nextReview && item.nextReview <= now) dueCount++;
+                }
+            }
+            sendResponse({ dueCount });
         })();
         return true;
     }
