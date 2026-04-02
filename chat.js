@@ -390,6 +390,21 @@ document.addEventListener('DOMContentLoaded', async function() {
         const decoder = new TextDecoder();
         let fullContent = '';
         let buffer = '';
+        let dirty = false;            // new content since last render
+        let renderTimer = null;
+        const RENDER_INTERVAL = 80;   // ms — throttle markdown re-renders
+
+        function scheduleRender() {
+            if (renderTimer) return;   // already scheduled
+            renderTimer = setTimeout(() => {
+                renderTimer = null;
+                if (dirty) {
+                    dirty = false;
+                    messageContentEl.innerHTML = renderMarkdown(fullContent);
+                    chatMessages.scrollTop = chatMessages.scrollHeight;
+                }
+            }, RENDER_INTERVAL);
+        }
 
         try {
             while (true) {
@@ -411,9 +426,8 @@ document.addEventListener('DOMContentLoaded', async function() {
                         const delta = json.choices?.[0]?.delta?.content;
                         if (delta) {
                             fullContent += delta;
-                            // Live render markdown
-                            messageContentEl.innerHTML = renderMarkdown(fullContent);
-                            chatMessages.scrollTop = chatMessages.scrollHeight;
+                            dirty = true;
+                            scheduleRender();
                         }
                     } catch (e) {
                         // Skip malformed chunks
@@ -424,8 +438,10 @@ document.addEventListener('DOMContentLoaded', async function() {
             if (error.name !== 'AbortError') throw error;
         }
 
-        // Final render
+        // Cancel pending timer and do final render
+        if (renderTimer) { clearTimeout(renderTimer); renderTimer = null; }
         messageContentEl.innerHTML = renderMarkdown(fullContent);
+        chatMessages.scrollTop = chatMessages.scrollHeight;
 
         // Add to conversation history
         conversationHistory.push({ role: "assistant", content: fullContent });
