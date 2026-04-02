@@ -19,6 +19,7 @@ document.addEventListener('DOMContentLoaded', async function() {
     const diagramQuery = document.getElementById('diagramQuery');
     const diagramSource = document.getElementById('diagramSource');
     const cancelDiagramBtn = document.getElementById('cancelDiagram');
+    const generateDiagramBtn = document.getElementById('generateDiagramBtn');
     const searchPlanPanel = document.getElementById('searchPlanPanel');
     const searchPlanBody = document.getElementById('searchPlanBody');
     const confirmPlanBtn = document.getElementById('confirmPlan');
@@ -1111,13 +1112,22 @@ Generate 3-7 takeaways.`;
 
         const userQuery = userInput.value.trim();
         if (!userQuery) {
-            appendMessage('Please enter a question or topic in the input field, then click Deep Search.', 'assistant');
+            // Focus input with contextual placeholder instead of showing error
+            userInput.placeholder = 'What do you want to research? Type here then click Deep Search again...';
+            userInput.focus();
+            userInput.classList.add('input-highlight');
+            deepSearchBtn.classList.add('btn-waiting');
+            setTimeout(() => {
+                userInput.classList.remove('input-highlight');
+                deepSearchBtn.classList.remove('btn-waiting');
+            }, 3000);
             return;
         }
 
         try {
             deepSearchBtn.disabled = true;
             deepSearchBtn.textContent = 'Planning...';
+            userInput.placeholder = 'Type your message or select a template above...';
 
             // Optionally extract page for context
             let page = pageContent;
@@ -1146,14 +1156,15 @@ Generate 3-7 takeaways.`;
             apiKey,
             apiBaseUrl = 'https://api.openai.com',
             modelName = 'gpt-4o-mini',
-        } = await chrome.storage.local.get(['apiKey', 'apiBaseUrl', 'modelName']);
+            temperature = 0.7,
+        } = await chrome.storage.local.get(['apiKey', 'apiBaseUrl', 'modelName', 'temperature']);
 
         if (!apiKey) throw new Error('API key not configured');
 
         let contextHint = '';
-        if (page) {
+        if (page && page.content) {
             contextHint = `\n\nThe user is currently on a webpage titled "${page.title}" (${page.url}).`;
-            contextHint += `\nPage description: ${page.description || 'N/A'}`;
+            if (page.description) contextHint += `\nPage description: ${page.description}`;
             contextHint += `\nPage excerpt: ${page.content.substring(0, 1000)}...`;
         }
         if (sessionSnippets.length > 0) {
@@ -1184,14 +1195,21 @@ Example output:
                         content: `Question: ${userQuery}${contextHint}\n\nGenerate search queries to find information needed to answer this question comprehensively.`
                     }
                 ],
-                temperature: 0.3,
+                temperature: Math.min(parseFloat(temperature) || 0.7, 0.3),
                 max_tokens: 500
             })
         });
 
         if (!response.ok) {
-            const err = await response.json().catch(() => ({}));
-            throw new Error(err.error?.message || `HTTP ${response.status}`);
+            const errBody = await response.text().catch(() => '');
+            let errMsg = `HTTP ${response.status}`;
+            try {
+                const errObj = JSON.parse(errBody);
+                errMsg = errObj.error?.message || errObj.message || errMsg;
+            } catch {
+                if (errBody) errMsg += `: ${errBody.substring(0, 200)}`;
+            }
+            throw new Error(errMsg);
         }
 
         const data = await response.json();
@@ -1307,7 +1325,7 @@ Example output:
             if (page && page.content) {
                 pageText += "\n=== CURRENT PAGE CONTENT ===\n";
                 pageText += `Title: ${page.title}\nURL: ${page.url}\n`;
-                pageText += page.content.substring(0, 30000) + '\n';
+                pageText += page.content.substring(0, 15000) + '\n';
                 pageText += "=== END PAGE CONTENT ===\n";
             }
 
@@ -1814,6 +1832,13 @@ h1,h2,h3,h4{margin-top:1.2em;margin-bottom:0.6em}
             const btn = e.target.closest('.diagram-type-btn');
             if (btn) executeDiagramGeneration(btn.dataset.type);
         });
+
+        // Generate button (explicit action)
+        if (generateDiagramBtn) {
+            generateDiagramBtn.addEventListener('click', () => {
+                executeDiagramGeneration(selectedDiagramType);
+            });
+        }
 
         async function executeDiagramGeneration(diagramType) {
             if (isStreaming) return;

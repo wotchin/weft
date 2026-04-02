@@ -50,17 +50,22 @@
         <!-- Diagram type selector (hidden by default) -->
         <div class="diagram-selector" id="diagramSelector" style="display:none;">
             <div class="diagram-selector-header">
-                <span>Choose diagram type:</span>
+                <span>Generate Diagram</span>
                 <button id="cancelDiagram" class="plan-btn plan-cancel">Cancel</button>
             </div>
+            <div class="diagram-selector-step">1. Pick a diagram type (or leave Auto):</div>
             <div class="diagram-type-grid" id="diagramTypeGrid"></div>
+            <div class="diagram-selector-step">2. What to visualize?</div>
             <div class="diagram-query-row">
-                <input type="text" id="diagramQuery" class="diagram-query-input" placeholder="Optional: describe what to visualize...">
+                <input type="text" id="diagramQuery" class="diagram-query-input" placeholder="e.g. &quot;system architecture&quot;, &quot;user flow&quot;, &quot;comparison of X vs Y&quot;...">
                 <select id="diagramSource" class="diagram-source-select">
-                    <option value="page">Current Page</option>
                     <option value="session">Session Snippets</option>
+                    <option value="page">Current Page</option>
                     <option value="both">Page + Session</option>
                 </select>
+            </div>
+            <div class="diagram-action-row">
+                <button id="generateDiagramBtn" class="plan-btn plan-confirm">Generate</button>
             </div>
         </div>
 

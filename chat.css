@@ -911,6 +911,37 @@ body {
     color: #555;
 }
 
+.diagram-selector-step {
+    font-size: 11px;
+    color: #888;
+    margin-bottom: 6px;
+    font-weight: 500;
+}
+
+.diagram-action-row {
+    margin-top: 10px;
+    text-align: right;
+}
+
+/* Deep Search input highlight animation */
+.input-highlight {
+    animation: input-pulse 0.6s ease 2;
+}
+
+@keyframes input-pulse {
+    0%, 100% { border-color: #ddd; box-shadow: none; }
+    50% { border-color: #2196f3; box-shadow: 0 0 0 3px rgba(33,150,243,0.15); }
+}
+
+.btn-waiting {
+    animation: btn-pulse 1s ease infinite;
+}
+
+@keyframes btn-pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.6; }
+}
+
 /* Diagram display inside chat messages */
 .diagram-container {
     margin: 8px 0;
