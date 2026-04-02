@@ -87,8 +87,9 @@ chrome.runtime.onInstalled.addListener(() => {
     // 初始化右键菜单
     updateSessionContextMenus();
 
-    // Enable side panel to open on action click (user can toggle via settings)
+    // Enable side panel if the API is available (Chrome 114+)
     if (chrome.sidePanel) {
+        chrome.sidePanel.setOptions({ path: 'sidepanel.html', enabled: true }).catch(() => {});
         chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: false }).catch(() => {});
     }
 
