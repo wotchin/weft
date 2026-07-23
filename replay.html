@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Knowledge Replay — Cyber Assistant</title>
+    <link rel="stylesheet" href="replay.css">
+</head>
+<body>
+    <div class="replay-container">
+        <div class="replay-header">
+            <h1 class="replay-title">Knowledge Replay</h1>
+            <div class="replay-header-right">
+                <select id="sessionSelect" class="replay-session-select"></select>
+                <button id="refreshBtn" class="replay-icon-btn" title="Refresh">↻</button>
+            </div>
+        </div>
+
+        <div class="replay-stats" id="statsBar">
+            <div class="stat-item">
+                <span class="stat-value" id="statDue">0</span>
+                <span class="stat-label">Due</span>
+            </div>
+            <div class="stat-item">
+                <span class="stat-value" id="statReviewed">0</span>
+                <span class="stat-label">Reviewed</span>
+            </div>
+            <div class="stat-item">
+                <span class="stat-value" id="statMastered">0</span>
+                <span class="stat-label">Mastered</span>
+            </div>
+            <div class="stat-item">
+                <span class="stat-value" id="statTotal">0</span>
+                <span class="stat-label">Total</span>
+            </div>
+        </div>
+
+        <div class="replay-progress" id="progressBar">
+            <div class="progress-fill" id="progressFill"></div>
+        </div>
+
+        <!-- Empty state -->
+        <div class="replay-empty" id="emptyState">
+            <div class="empty-icon">✓</div>
+            <p>All caught up! No items due for review.</p>
+            <p class="empty-sub">Items will become due based on the spaced repetition schedule.</p>
+        </div>
+
+        <!-- Card -->
+        <div class="replay-card" id="cardArea" style="display:none">
+            <div class="card-counter" id="cardCounter"></div>
+
+            <div class="card-snippet" id="cardSnippet"></div>
+
+            <div class="card-question-area" id="questionArea" style="display:none">
+                <div class="card-question-label">Review Question</div>
+                <div class="card-question" id="cardQuestion"></div>
+                <button class="card-show-answer" id="showAnswerBtn">Show Answer</button>
+                <div class="card-answer" id="cardAnswer" style="display:none"></div>
+            </div>
+
+            <div class="card-meta" id="cardMeta"></div>
+
+            <div class="card-actions">
+                <button class="card-btn again" id="againBtn" title="Reset to level 0, review tomorrow">Again</button>
+                <button class="card-btn got-it" id="gotItBtn" title="Advance to next interval">Got it</button>
+            </div>
+
+            <div class="card-level" id="cardLevel"></div>
+        </div>
+
+        <!-- Done state -->
+        <div class="replay-done" id="doneState" style="display:none">
+            <div class="done-icon">🎉</div>
+            <p>Session complete!</p>
+            <p class="done-sub" id="doneStats"></p>
+        </div>
+    </div>
+
+    <script src="lib/replay-scheduler.js"></script>
+    <script src="replay.js"></script>
+</body>
+</html>

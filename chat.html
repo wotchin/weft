@@ -2,30 +2,137 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>AI Chat</title>
+    <title>AI Chat - Cyber Assistant</title>
     <link rel="stylesheet" href="chat.css">
 </head>
 <body>
     <div class="chat-container">
         <div class="chat-header">
-            <button id="backButton" class="back-btn">←</button>
-            <h2>Chat with AI</h2>
+            <div class="header-left">
+                <h2>Chat with AI</h2>
+                <span class="session-badge" id="sessionBadge"></span>
+            </div>
+            <div class="header-right">
+                <button id="exportBtn" class="header-btn" title="Export result">Export</button>
+                <button id="clearChat" class="header-btn" title="Clear chat">Clear</button>
+            </div>
         </div>
+
+        <!-- Context panel showing session snippets -->
+        <div class="context-panel" id="contextPanel">
+            <div class="context-header">
+                <span>Session Context</span>
+                <button id="toggleContext" class="toggle-btn">Hide</button>
+            </div>
+            <div class="context-body" id="contextBody"></div>
+        </div>
+
+        <!-- Quick action buttons -->
+        <div class="quick-actions" id="quickActions">
+            <button class="quick-action-btn" id="askPageBtn" title="Extract current page content and ask AI about it">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>
+                Ask about this page
+            </button>
+            <button class="quick-action-btn" id="takeawaysBtn" title="Extract key takeaways from current page">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3L22 4"></path><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path></svg>
+                Key Takeaways
+            </button>
+            <button class="quick-action-btn" id="deepSearchBtn" title="Search the web to supplement information">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+                Deep Search
+            </button>
+            <button class="quick-action-btn diagram-btn" id="drawDiagramBtn" title="Generate a diagram from page or session content">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect><line x1="10" y1="6.5" x2="14" y2="6.5"></line><line x1="17.5" y1="10" x2="17.5" y2="14"></line></svg>
+                Draw Diagram
+            </button>
+        </div>
+
+        <!-- Diagram type selector (hidden by default) -->
+        <div class="diagram-selector" id="diagramSelector" style="display:none;">
+            <div class="diagram-selector-header">
+                <span>Generate Diagram</span>
+                <button id="cancelDiagram" class="plan-btn plan-cancel">Cancel</button>
+            </div>
+            <div class="diagram-selector-step">1. Pick a diagram type (or leave Auto):</div>
+            <div class="diagram-type-grid" id="diagramTypeGrid"></div>
+            <div class="diagram-selector-step">2. What to visualize?</div>
+            <div class="diagram-query-row">
+                <input type="text" id="diagramQuery" class="diagram-query-input" placeholder="e.g. &quot;system architecture&quot;, &quot;user flow&quot;, &quot;comparison of X vs Y&quot;...">
+                <select id="diagramSource" class="diagram-source-select">
+                    <option value="session">Session Snippets</option>
+                    <option value="page">Current Page</option>
+                    <option value="both">Page + Session</option>
+                </select>
+            </div>
+            <div class="diagram-action-row">
+                <button id="generateDiagramBtn" class="plan-btn plan-confirm">Generate</button>
+            </div>
+        </div>
+
+        <!-- Search plan panel (hidden by default) -->
+        <div class="search-plan-panel" id="searchPlanPanel" style="display:none;">
+            <div class="search-plan-header">
+                <span>Search Plan</span>
+                <div class="search-plan-actions">
+                    <button id="confirmPlan" class="plan-btn plan-confirm">Execute</button>
+                    <button id="cancelPlan" class="plan-btn plan-cancel">Cancel</button>
+                </div>
+            </div>
+            <div class="search-plan-body" id="searchPlanBody"></div>
+            <div class="search-plan-progress" id="searchProgress" style="display:none;">
+                <div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
+                <span class="progress-text" id="progressText"></span>
+            </div>
+        </div>
+
+        <!-- Prompt template selector -->
+        <div class="template-bar" id="templateBar">
+            <select id="templateSelect" class="template-select">
+                <option value="">Select a prompt template...</option>
+                <option value="summarize">Summarize collected info</option>
+                <option value="report">Generate analysis report</option>
+                <option value="compare">Compare and contrast</option>
+                <option value="extract">Extract key points</option>
+                <option value="table">Organize into table</option>
+                <option value="translate_zh">Translate to Chinese</option>
+                <option value="translate_en">Translate to English</option>
+                <option value="custom">Custom prompt...</option>
+            </select>
+        </div>
+
         <div class="chat-messages" id="chatMessages">
             <!-- Messages will be inserted here -->
         </div>
+
         <div class="chat-input-container">
-            <textarea 
-                id="userInput" 
-                placeholder="Type your message here..." 
+            <textarea
+                id="userInput"
+                placeholder="Type your message or select a template above..."
                 rows="1"
                 class="chat-input"
             ></textarea>
-            <button id="sendMessage" class="send-btn">
-                <span class="send-icon">↑</span>
+            <button id="sendMessage" class="send-btn" title="Send">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                    <line x1="12" y1="19" x2="12" y2="5"></line>
+                    <polyline points="5 12 12 5 19 12"></polyline>
+                </svg>
             </button>
         </div>
     </div>
+    <!-- Mermaid rendering sandbox (invisible) -->
+    <iframe id="mermaidSandbox" src="sandbox-mermaid.html" style="display:none;" sandbox="allow-scripts"></iframe>
+
+    <script src="lib/idb.js"></script>
+    <script src="lib/tokenizer.js"></script>
+    <script src="lib/bm25.js"></script>
+    <script src="lib/vector-index.js"></script>
+    <script src="lib/rag-indexer.js"></script>
+    <script src="lib/rag-engine.js"></script>
+    <script src="lib/page-extractor.js"></script>
+    <script src="lib/web-searcher.js"></script>
+    <script src="lib/highlighter.js"></script>
+    <script src="lib/diagram-generator.js"></script>
+    <script src="markdown.js"></script>
     <script src="chat.js"></script>
 </body>
-</html> 
+</html>

@@ -7,28 +7,68 @@
 </head>
 <body>
   <div id="content">
-    <div class="session-controls">
-      <select id="sessionSelect" class="session-select"></select>
-      <div class="button-group">
-        <button id="newSession" class="primary-btn">
-          <span class="btn-icon">+</span>
-          New Session
-        </button>
-        <div class="secondary-buttons">
-          <button id="renameSession" class="secondary-btn">Rename</button>
-          <button id="deleteSession" class="danger-btn">Delete</button>
-        </div>
-      </div>
-      <button id="openChat" class="chat-btn">
-        <span class="btn-icon">💬</span>
-        Chat with AI
+    <div class="header">
+      <h1 class="app-title">Cyber Assistant</h1>
+      <button id="openSettings" class="icon-btn" title="Settings">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="3"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/>
+        </svg>
       </button>
     </div>
-    <div id="sessionContent"></div>
-    <div class="settings-link">
-      <a href="#" id="openSettings">Settings</a>
+
+    <div class="session-controls">
+      <div class="session-row">
+        <select id="sessionSelect" class="session-select"></select>
+        <button id="newSession" class="icon-btn add-btn" title="New Session">+</button>
+      </div>
+      <div class="session-meta" id="sessionMeta"></div>
+      <div class="session-actions">
+        <button id="renameSession" class="small-btn">Rename</button>
+        <button id="deleteSession" class="small-btn danger">Delete</button>
+        <button id="showOnPage" class="small-btn" title="Highlight saved snippets on the current page">Show on Page</button>
+        <div class="spacer"></div>
+        <span class="snippet-count" id="snippetCount">0 snippets</span>
+      </div>
+    </div>
+
+    <div class="search-bar">
+      <input type="text" id="searchInput" placeholder="Search snippets..." class="search-input">
+    </div>
+    <div id="sessionContent" class="session-content"></div>
+
+    <div class="bottom-bar">
+      <div class="bottom-bar-row">
+        <button id="openChat" class="action-btn primary">
+          Chat with AI
+        </button>
+        <button id="openOrganize" class="action-btn secondary">
+          Smart Organize
+        </button>
+        <button id="openGraph" class="action-btn graph" title="Visualize snippet relationships as a knowledge graph">
+          Knowledge Graph
+        </button>
+        <button id="openReplay" class="action-btn replay" title="Spaced repetition review of your saved knowledge">
+          Replay <span id="replayBadge" class="replay-badge" style="display:none"></span>
+        </button>
+      </div>
     </div>
   </div>
+
+  <!-- Custom modal overlay -->
+  <div id="modalOverlay" class="modal-overlay hidden">
+    <div class="modal-card">
+      <div class="modal-title" id="modalTitle"></div>
+      <div class="modal-body" id="modalBody">
+        <input type="text" id="modalInput" class="modal-input" autocomplete="off">
+      </div>
+      <div class="modal-error" id="modalError"></div>
+      <div class="modal-buttons">
+        <button id="modalCancel" class="modal-btn cancel">Cancel</button>
+        <button id="modalConfirm" class="modal-btn confirm">OK</button>
+      </div>
+    </div>
+  </div>
+
   <script src="popup.js"></script>
 </body>
 </html>
