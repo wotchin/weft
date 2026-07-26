@@ -1,0 +1,422 @@
+{
+  "extName": {
+    "message": "Weft"
+  },
+  "extDescription": {
+    "message": "Collect fragments from across your tabs and weave them into cited reports, rewrites, diagrams and fact-checks."
+  },
+  "settings_provider_title": {
+    "message": "LLM Provider"
+  },
+  "settings_provider_label": {
+    "message": "Provider"
+  },
+  "settings_provider_hint": {
+    "message": "Pick a provider to prefill its endpoint and a default model. Bring your own key — it never leaves your machine except to this endpoint."
+  },
+  "settings_key_label": {
+    "message": "API Key"
+  },
+  "settings_model_label": {
+    "message": "Model Name"
+  },
+  "settings_model_hint": {
+    "message": "Model identifier. Editable — model names change often."
+  },
+  "settings_baseurl_label": {
+    "message": "API Base URL (advanced)"
+  },
+  "settings_baseurl_hint": {
+    "message": "Prefilled from the provider. Only change for self-hosted or proxy endpoints."
+  },
+  "popup_open_workbench": {
+    "message": "Open Workbench"
+  },
+  "popup_show_on_page": {
+    "message": "Show on Page"
+  },
+  "action_copy": {
+    "message": "Copy"
+  },
+  "action_copy_html": {
+    "message": "Copy HTML"
+  },
+  "action_export_html": {
+    "message": "Export HTML"
+  },
+  "action_save_snippet": {
+    "message": "Save as snippet"
+  },
+  "settings_search_title": {
+    "message": "Web Search (optional)"
+  },
+  "settings_search_label": {
+    "message": "Search provider"
+  },
+  "settings_search_hint": {
+    "message": "Powers Deep Search and online cross-checking. Queries go only to the provider you pick. Weft never scrapes Google or Bing — that breaks their terms and gets extensions rejected."
+  },
+  "settings_search_key": {
+    "message": "Search API Key"
+  },
+  "settings_search_endpoint": {
+    "message": "SearXNG address"
+  },
+  "wb_title": {
+    "message": "Weft Workbench"
+  },
+  "wb_expand": {
+    "message": "Expand"
+  },
+  "wb_export": {
+    "message": "Export"
+  },
+  "wb_clear": {
+    "message": "Clear"
+  },
+  "wb_ask_page": {
+    "message": "Ask about this page"
+  },
+  "wb_takeaways": {
+    "message": "Key Takeaways"
+  },
+  "wb_deep_search": {
+    "message": "Deep Search"
+  },
+  "wb_diagram": {
+    "message": "Diagram"
+  },
+  "wb_context_title": {
+    "message": "Session context"
+  },
+  "wb_input_placeholder": {
+    "message": "Type your message or select a scenario above…"
+  },
+  "wb_web_search": {
+    "message": "🌐 Search web"
+  },
+  "wb_planning": {
+    "message": "Planning…"
+  },
+  "wb_custom_placeholder": {
+    "message": "Enter your custom prompt…"
+  },
+  "wb_error_prefix": {
+    "message": "Error"
+  },
+  "wb_page_unavailable": {
+    "message": "Not available on browser pages — open a normal web page to use this."
+  },
+  "cite_no_source": {
+    "message": "No source page saved for this citation."
+  },
+  "cite_passage_changed": {
+    "message": "Opened the source — the original passage may have changed."
+  },
+  "cite_open_failed": {
+    "message": "Could not open the source page"
+  },
+  "action_cancel": {
+    "message": "Cancel"
+  },
+  "action_ok": {
+    "message": "OK"
+  },
+  "popup_settings": {
+    "message": "Settings"
+  },
+  "popup_active_session": {
+    "message": "Active session"
+  },
+  "popup_snippet_count": {
+    "message": "%s snippets collected"
+  },
+  "popup_no_session": {
+    "message": "No session yet — create one in the Workbench."
+  },
+  "popup_empty": {
+    "message": "Nothing collected yet.\nSelect text on a page and click Save in the toolbar."
+  },
+  "popup_image": {
+    "message": "(image)"
+  },
+  "popup_hint": {
+    "message": "Select text on any page — a toolbar appears with Save and quick analyses."
+  },
+  "popup_shown": {
+    "message": "%s shown"
+  },
+  "popup_shown_none": {
+    "message": "None on this page"
+  },
+  "time_just_now": {
+    "message": "just now"
+  },
+  "time_minutes": {
+    "message": "%s min ago"
+  },
+  "time_hours": {
+    "message": "%s h ago"
+  },
+  "time_days": {
+    "message": "%s d ago"
+  },
+  "wb_settings": {
+    "message": "Settings"
+  },
+  "wb_switch_session": {
+    "message": "Switch session"
+  },
+  "wb_new_session": {
+    "message": "New session"
+  },
+  "wb_rename_session": {
+    "message": "Rename session"
+  },
+  "wb_delete_session": {
+    "message": "Delete session"
+  },
+  "wb_show_on_page": {
+    "message": "Highlight this session's snippets on the current page"
+  },
+  "wb_search_snippets": {
+    "message": "Search snippets…"
+  },
+  "wb_no_snippets": {
+    "message": "No snippets in this session yet."
+  },
+  "wb_no_matches": {
+    "message": "No snippets match your search."
+  },
+  "wb_open_source": {
+    "message": "Open source page"
+  },
+  "wb_edit_tags": {
+    "message": "Tags (comma separated)"
+  },
+  "wb_edit_comment": {
+    "message": "Comment"
+  },
+  "wb_delete_snippet": {
+    "message": "Delete snippet"
+  },
+  "wb_session_exists": {
+    "message": "A session with that name already exists."
+  },
+  "wb_delete_confirm": {
+    "message": "Delete session “%s” and all its snippets?"
+  },
+  "wb_type_to_confirm": {
+    "message": "Type %s to confirm."
+  },
+  "wb_highlighted": {
+    "message": "Highlighted %s passages on this page."
+  },
+  "wb_highlight_none": {
+    "message": "No snippets from this session found on this page."
+  },
+  "wb_need_snippets": {
+    "message": "Collect a few snippets first — then run a scenario."
+  },
+  "wb_using_snippets": {
+    "message": "%s snippets"
+  },
+  "wb_reading_page": {
+    "message": "Reading page…"
+  },
+  "wb_analysing": {
+    "message": "Analysing…"
+  },
+  "wb_highlighting": {
+    "message": "Highlighting…"
+  },
+  "wb_analyse_page": {
+    "message": "Analyse this page"
+  },
+  "sc_report": {
+    "message": "Report"
+  },
+  "sc_rewrite": {
+    "message": "Rewrite"
+  },
+  "sc_verify": {
+    "message": "Verify"
+  },
+  "sc_summarize": {
+    "message": "Summary"
+  },
+  "sc_more": {
+    "message": "More…"
+  },
+  "sc_compare": {
+    "message": "Compare & contrast"
+  },
+  "sc_extract": {
+    "message": "Extract key points"
+  },
+  "sc_table": {
+    "message": "Organize into a table"
+  },
+  "sc_to_zh": {
+    "message": "Translate to Chinese"
+  },
+  "sc_to_en": {
+    "message": "Translate to English"
+  },
+  "settings_back_banner": {
+    "message": "Click the Weft icon in your toolbar to return to the extension popup."
+  },
+  "settings_title": {
+    "message": "Weft Settings"
+  },
+  "settings_subtitle": {
+    "message": "Configure your LLM API connection and preferences"
+  },
+  "settings_gen_title": {
+    "message": "Generation Options"
+  },
+  "settings_max_tokens": {
+    "message": "Max Tokens"
+  },
+  "settings_temperature": {
+    "message": "Temperature"
+  },
+  "settings_temperature_hint": {
+    "message": "0 = deterministic, higher = more creative (0-2)"
+  },
+  "settings_vision": {
+    "message": "Vision (Image Understanding)"
+  },
+  "settings_rag_title": {
+    "message": "Smart Context Retrieval"
+  },
+  "settings_rag_enable": {
+    "message": "Enable smart context retrieval (RAG)"
+  },
+  "settings_rag_hint": {
+    "message": "When enabled, only the most relevant snippets are sent to the AI based on your query. When disabled, all snippets are sent. Useful when sessions contain many snippets to reduce token usage and improve answer quality."
+  },
+  "settings_rag_budget": {
+    "message": "Context Token Budget"
+  },
+  "settings_save": {
+    "message": "Save Settings"
+  },
+  "settings_test": {
+    "message": "Test Connection"
+  },
+  "wb_ask_about_selection": {
+    "message": "Ask a question about the selected passage…"
+  },
+  "settings_lang_title": {
+    "message": "Language"
+  },
+  "settings_lang_label": {
+    "message": "Interface & answer language"
+  },
+  "settings_lang_hint": {
+    "message": "Sets the interface language and asks the AI to answer in the same language, whatever language the source page is in. The interface is currently translated into English and 简体中文; other choices keep the English interface but still change the AI's answers."
+  },
+  "tb_save": {
+    "message": "Save"
+  },
+  "tb_save_hint": {
+    "message": "Save to the current session"
+  },
+  "tb_verify": {
+    "message": "Verify"
+  },
+  "tb_verify_hint": {
+    "message": "Check how well this holds up"
+  },
+  "tb_explain": {
+    "message": "Explain"
+  },
+  "tb_explain_hint": {
+    "message": "Explain in plain language"
+  },
+  "tb_points": {
+    "message": "Points"
+  },
+  "tb_points_hint": {
+    "message": "Extract the key points"
+  },
+  "tb_ask": {
+    "message": "Ask"
+  },
+  "tb_ask_hint": {
+    "message": "Ask your own question about this"
+  },
+  "card_thinking": {
+    "message": "Thinking…"
+  },
+  "card_reasoning": {
+    "message": "Reasoning…"
+  },
+  "card_copy": {
+    "message": "Copy"
+  },
+  "card_copied": {
+    "message": "Copied"
+  },
+  "card_save": {
+    "message": "Save"
+  },
+  "card_saved": {
+    "message": "Saved"
+  },
+  "card_save_hint": {
+    "message": "Save the passage and this result to your session"
+  },
+  "card_failed": {
+    "message": "Failed"
+  },
+  "card_close": {
+    "message": "Close"
+  },
+  "card_disconnected": {
+    "message": "The connection to Weft ended before an answer arrived. Try again."
+  },
+  "card_reload": {
+    "message": "Weft was reloaded — refresh the page and try again."
+  },
+  "toast_saved_to": {
+    "message": "Saved to “%s”"
+  },
+  "toast_save_failed": {
+    "message": "Could not save — try reloading the page."
+  },
+  "modal_cancel": {
+    "message": "Cancel"
+  },
+  "modal_save": {
+    "message": "Save"
+  },
+  "modal_comment_ph": {
+    "message": "Add your comment (optional)…"
+  },
+  "settings_search_test": {
+    "message": "Test search"
+  },
+  "settings_search_testing": {
+    "message": "Searching…"
+  },
+  "settings_search_ok": {
+    "message": "Search works — %s result(s) returned."
+  },
+  "settings_search_fail": {
+    "message": "Search failed:"
+  },
+  "settings_search_note_self": {
+    "message": "Point Weft at a SearXNG instance whose JSON API is open — in practice that means one you run yourself. Public instances almost always disable it."
+  },
+  "settings_search_note_tavily": {
+    "message": "Free tier: about 1,000 searches a month, no credit card. Sign up at tavily.com, then paste the key below."
+  },
+  "settings_search_note_brave": {
+    "message": "Paid: Brave ended its free tier in 2026 and now bills per request."
+  },
+  "settings_search_json_note": {
+    "message": "The instance must have the JSON output format enabled (search.formats in its settings.yml). Most public instances turn it off, so this usually means running your own."
+  }
+}

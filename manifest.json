@@ -1,16 +1,21 @@
 {
     "manifest_version": 3,
-    "name": "Cyber Assistant",
-    "description": "Collect web snippets and generate AI-powered reports, summaries, and insights.",
-    "version": "2.1",
+    "name": "__MSG_extName__",
+    "description": "__MSG_extDescription__",
+    "default_locale": "en",
+    "version": "3.0.1",
     "permissions": [
         "storage",
+        "unlimitedStorage",
         "contextMenus",
         "notifications",
         "tabs",
         "scripting",
-        "alarms"
+        "sidePanel"
     ],
+    "side_panel": {
+        "default_path": "chat.html?mode=panel"
+    },
     "host_permissions": [
         "https://*/*",
         "http://*/*"
@@ -19,16 +24,16 @@
         "service_worker": "background.js"
     },
     "icons": {
-        "16": "assets/icon.png",
-        "48": "assets/icon.png",
-        "128": "assets/icon.png"
+        "16": "assets/icon-16.png",
+        "48": "assets/icon-48.png",
+        "128": "assets/icon-128.png"
     },
     "action": {
         "default_popup": "popup.html",
         "default_icon": {
-            "16": "assets/icon.png",
-            "48": "assets/icon.png",
-            "128": "assets/icon.png"
+            "16": "assets/icon-16.png",
+            "48": "assets/icon-48.png",
+            "128": "assets/icon-128.png"
         }
     },
     "content_scripts": [
@@ -43,6 +48,6 @@
         "pages": ["sandbox-mermaid.html"]
     },
     "content_security_policy": {
-        "sandbox": "sandbox allow-scripts allow-forms allow-popups allow-modals; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net"
+        "sandbox": "sandbox allow-scripts allow-forms allow-popups allow-modals; script-src 'self' 'unsafe-inline' 'unsafe-eval'"
     }
 }

@@ -1,0 +1,30 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Install dev deps
+        run: npm install
+      - name: Validate manifest
+        run: npm run validate
+      - name: Lint
+        run: npm run lint
+      - name: Unit tests
+        run: npm test
+      - name: Pack extension
+        run: npm run pack
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: weft-extension
+          path: weft-*.zip

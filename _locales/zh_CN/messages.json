@@ -1,0 +1,422 @@
+{
+  "extName": {
+    "message": "Weft"
+  },
+  "extDescription": {
+    "message": "把分散在各个标签页里的碎片信息采集起来，一键整合成带引用来源的报告、重写稿、图表与真伪核验。"
+  },
+  "settings_provider_title": {
+    "message": "大模型服务商"
+  },
+  "settings_provider_label": {
+    "message": "服务商"
+  },
+  "settings_provider_hint": {
+    "message": "选择服务商即可自动填入接口地址和默认模型。自带密钥——除了发送到你配置的这个接口，密钥不会离开你的电脑。"
+  },
+  "settings_key_label": {
+    "message": "API 密钥"
+  },
+  "settings_model_label": {
+    "message": "模型名称"
+  },
+  "settings_model_hint": {
+    "message": "模型标识符。可编辑——模型名称经常更新。"
+  },
+  "settings_baseurl_label": {
+    "message": "API 接口地址（高级）"
+  },
+  "settings_baseurl_hint": {
+    "message": "已根据服务商预填。仅在使用自建或代理接口时才需要修改。"
+  },
+  "popup_open_workbench": {
+    "message": "打开工作台"
+  },
+  "popup_show_on_page": {
+    "message": "在页面上标注"
+  },
+  "action_copy": {
+    "message": "复制"
+  },
+  "action_copy_html": {
+    "message": "复制 HTML"
+  },
+  "action_export_html": {
+    "message": "导出 HTML"
+  },
+  "action_save_snippet": {
+    "message": "存为片段"
+  },
+  "settings_search_title": {
+    "message": "联网搜索（可选）"
+  },
+  "settings_search_label": {
+    "message": "搜索服务商"
+  },
+  "settings_search_hint": {
+    "message": "为「深度搜索」和联网交叉核验提供支持。查询只发往你选择的服务商。Weft 不会抓取 Google 或 Bing——那违反其服务条款，且会导致扩展被拒审。"
+  },
+  "settings_search_key": {
+    "message": "搜索 API 密钥"
+  },
+  "settings_search_endpoint": {
+    "message": "SearXNG 地址"
+  },
+  "wb_title": {
+    "message": "Weft 工作台"
+  },
+  "wb_expand": {
+    "message": "全屏"
+  },
+  "wb_export": {
+    "message": "导出"
+  },
+  "wb_clear": {
+    "message": "清空"
+  },
+  "wb_ask_page": {
+    "message": "分析当前页面"
+  },
+  "wb_takeaways": {
+    "message": "关键要点"
+  },
+  "wb_deep_search": {
+    "message": "深度搜索"
+  },
+  "wb_diagram": {
+    "message": "生成图表"
+  },
+  "wb_context_title": {
+    "message": "会话上下文"
+  },
+  "wb_input_placeholder": {
+    "message": "输入消息，或从上方选择一个场景…"
+  },
+  "wb_web_search": {
+    "message": "🌐 联网搜索"
+  },
+  "wb_planning": {
+    "message": "规划中…"
+  },
+  "wb_custom_placeholder": {
+    "message": "输入你的自定义提示词…"
+  },
+  "wb_error_prefix": {
+    "message": "错误"
+  },
+  "wb_page_unavailable": {
+    "message": "浏览器内置页面不支持此功能——请切换到普通网页后再试。"
+  },
+  "cite_no_source": {
+    "message": "该引用没有保存来源页面。"
+  },
+  "cite_passage_changed": {
+    "message": "已打开来源页——原文可能已发生变化。"
+  },
+  "cite_open_failed": {
+    "message": "无法打开来源页面"
+  },
+  "action_cancel": {
+    "message": "取消"
+  },
+  "action_ok": {
+    "message": "确定"
+  },
+  "popup_settings": {
+    "message": "设置"
+  },
+  "popup_active_session": {
+    "message": "当前会话"
+  },
+  "popup_snippet_count": {
+    "message": "已采集 %s 条片段"
+  },
+  "popup_no_session": {
+    "message": "还没有会话——请在工作台中新建。"
+  },
+  "popup_empty": {
+    "message": "还没有采集任何内容。\n在网页上选中文字，点工具条里的「保存」即可。"
+  },
+  "popup_image": {
+    "message": "（图片）"
+  },
+  "popup_hint": {
+    "message": "在任意网页选中文字，会弹出工具条，可直接保存或快速分析。"
+  },
+  "popup_shown": {
+    "message": "已标注 %s 处"
+  },
+  "popup_shown_none": {
+    "message": "本页没有匹配内容"
+  },
+  "time_just_now": {
+    "message": "刚刚"
+  },
+  "time_minutes": {
+    "message": "%s 分钟前"
+  },
+  "time_hours": {
+    "message": "%s 小时前"
+  },
+  "time_days": {
+    "message": "%s 天前"
+  },
+  "wb_settings": {
+    "message": "设置"
+  },
+  "wb_switch_session": {
+    "message": "切换会话"
+  },
+  "wb_new_session": {
+    "message": "新建会话"
+  },
+  "wb_rename_session": {
+    "message": "重命名会话"
+  },
+  "wb_delete_session": {
+    "message": "删除会话"
+  },
+  "wb_show_on_page": {
+    "message": "在当前页面标注本会话的片段"
+  },
+  "wb_search_snippets": {
+    "message": "搜索片段…"
+  },
+  "wb_no_snippets": {
+    "message": "本会话还没有片段。"
+  },
+  "wb_no_matches": {
+    "message": "没有匹配的片段。"
+  },
+  "wb_open_source": {
+    "message": "打开来源页面"
+  },
+  "wb_edit_tags": {
+    "message": "标签（用逗号分隔）"
+  },
+  "wb_edit_comment": {
+    "message": "备注"
+  },
+  "wb_delete_snippet": {
+    "message": "删除片段"
+  },
+  "wb_session_exists": {
+    "message": "已存在同名会话。"
+  },
+  "wb_delete_confirm": {
+    "message": "删除会话「%s」及其全部片段？"
+  },
+  "wb_type_to_confirm": {
+    "message": "请输入 %s 以确认。"
+  },
+  "wb_highlighted": {
+    "message": "已在本页标注 %s 处。"
+  },
+  "wb_highlight_none": {
+    "message": "本页未找到该会话的片段。"
+  },
+  "wb_need_snippets": {
+    "message": "请先采集几条片段，再运行场景。"
+  },
+  "wb_using_snippets": {
+    "message": "%s 条片段"
+  },
+  "wb_reading_page": {
+    "message": "读取页面…"
+  },
+  "wb_analysing": {
+    "message": "分析中…"
+  },
+  "wb_highlighting": {
+    "message": "标注中…"
+  },
+  "wb_analyse_page": {
+    "message": "分析当前页面"
+  },
+  "sc_report": {
+    "message": "报告"
+  },
+  "sc_rewrite": {
+    "message": "重写"
+  },
+  "sc_verify": {
+    "message": "核验"
+  },
+  "sc_summarize": {
+    "message": "摘要"
+  },
+  "sc_more": {
+    "message": "更多…"
+  },
+  "sc_compare": {
+    "message": "对比分析"
+  },
+  "sc_extract": {
+    "message": "提取要点"
+  },
+  "sc_table": {
+    "message": "整理成表格"
+  },
+  "sc_to_zh": {
+    "message": "翻译成中文"
+  },
+  "sc_to_en": {
+    "message": "翻译成英文"
+  },
+  "settings_back_banner": {
+    "message": "点击工具栏上的 Weft 图标可返回扩展弹窗。"
+  },
+  "settings_title": {
+    "message": "Weft 设置"
+  },
+  "settings_subtitle": {
+    "message": "配置你的大模型 API 连接与偏好"
+  },
+  "settings_gen_title": {
+    "message": "生成选项"
+  },
+  "settings_max_tokens": {
+    "message": "最大 Token 数"
+  },
+  "settings_temperature": {
+    "message": "温度"
+  },
+  "settings_temperature_hint": {
+    "message": "0 = 确定性输出，越高越有创造性（0-2）"
+  },
+  "settings_vision": {
+    "message": "视觉（图片理解）"
+  },
+  "settings_rag_title": {
+    "message": "智能上下文检索"
+  },
+  "settings_rag_enable": {
+    "message": "启用智能上下文检索（RAG）"
+  },
+  "settings_rag_hint": {
+    "message": "启用后，只把与你问题最相关的片段发给模型；关闭则发送全部片段。会话片段较多时可减少 token 消耗、提升回答质量。"
+  },
+  "settings_rag_budget": {
+    "message": "上下文 Token 预算"
+  },
+  "settings_save": {
+    "message": "保存设置"
+  },
+  "settings_test": {
+    "message": "测试连接"
+  },
+  "wb_ask_about_selection": {
+    "message": "就选中的内容提问…"
+  },
+  "settings_lang_title": {
+    "message": "语言"
+  },
+  "settings_lang_label": {
+    "message": "界面与回答语言"
+  },
+  "settings_lang_hint": {
+    "message": "设置界面语言，并要求 AI 用同一种语言回答——无论原网页是什么语言。目前界面提供英文和简体中文；选择其他语言时界面保持英文，但 AI 的回答会用该语言。"
+  },
+  "tb_save": {
+    "message": "保存"
+  },
+  "tb_save_hint": {
+    "message": "保存到当前会话"
+  },
+  "tb_verify": {
+    "message": "核验"
+  },
+  "tb_verify_hint": {
+    "message": "检查这段内容是否站得住脚"
+  },
+  "tb_explain": {
+    "message": "解释"
+  },
+  "tb_explain_hint": {
+    "message": "用大白话解释"
+  },
+  "tb_points": {
+    "message": "要点"
+  },
+  "tb_points_hint": {
+    "message": "提取关键要点"
+  },
+  "tb_ask": {
+    "message": "提问"
+  },
+  "tb_ask_hint": {
+    "message": "就这段内容提出你自己的问题"
+  },
+  "card_thinking": {
+    "message": "思考中…"
+  },
+  "card_reasoning": {
+    "message": "推理中…"
+  },
+  "card_copy": {
+    "message": "复制"
+  },
+  "card_copied": {
+    "message": "已复制"
+  },
+  "card_save": {
+    "message": "保存"
+  },
+  "card_saved": {
+    "message": "已保存"
+  },
+  "card_save_hint": {
+    "message": "把原文和这个结果一起存入会话"
+  },
+  "card_failed": {
+    "message": "失败"
+  },
+  "card_close": {
+    "message": "关闭"
+  },
+  "card_disconnected": {
+    "message": "与 Weft 的连接在返回结果前中断了，请重试。"
+  },
+  "card_reload": {
+    "message": "Weft 已重新加载——请刷新页面后重试。"
+  },
+  "toast_saved_to": {
+    "message": "已保存到「%s」"
+  },
+  "toast_save_failed": {
+    "message": "保存失败——请刷新页面后重试。"
+  },
+  "modal_cancel": {
+    "message": "取消"
+  },
+  "modal_save": {
+    "message": "保存"
+  },
+  "modal_comment_ph": {
+    "message": "添加备注（可选）…"
+  },
+  "settings_search_test": {
+    "message": "测试搜索"
+  },
+  "settings_search_testing": {
+    "message": "搜索中…"
+  },
+  "settings_search_ok": {
+    "message": "搜索正常——返回了 %s 条结果。"
+  },
+  "settings_search_fail": {
+    "message": "搜索失败："
+  },
+  "settings_search_note_self": {
+    "message": "填入一个开放了 JSON 接口的 SearXNG 地址——实际上基本意味着你自己搭的实例，公共实例几乎都关闭了该接口。"
+  },
+  "settings_search_note_tavily": {
+    "message": "免费额度约每月 1000 次搜索，无需信用卡。到 tavily.com 注册后把密钥填在下面即可。"
+  },
+  "settings_search_note_brave": {
+    "message": "付费：Brave 已于 2026 年取消免费额度，现按请求量计费。"
+  },
+  "settings_search_json_note": {
+    "message": "该实例必须开启 JSON 输出格式（settings.yml 里的 search.formats）。多数公共实例都关闭了它，所以通常需要自建。"
+  }
+}

@@ -1,612 +1,141 @@
+/* global Store, t, I18N */
+/**
+ * Popup — a lightweight launcher.
+ *
+ * Shows the active session and a peek at the most recent snippets, then hands
+ * off to the Workbench (side panel), which owns session and snippet management.
+ */
 document.addEventListener('DOMContentLoaded', async () => {
+    await I18N.init();
+    I18N.apply();
+
     const sessionSelect = document.getElementById('sessionSelect');
-    const sessionContent = document.getElementById('sessionContent');
     const sessionMeta = document.getElementById('sessionMeta');
-    const snippetCount = document.getElementById('snippetCount');
+    const recentList = document.getElementById('recentList');
 
-    const searchInput = document.getElementById('searchInput');
-
-    // Custom modal elements
-    const modalOverlay = document.getElementById('modalOverlay');
-    const modalTitle = document.getElementById('modalTitle');
-    const modalInput = document.getElementById('modalInput');
-    const modalError = document.getElementById('modalError');
-    const modalCancel = document.getElementById('modalCancel');
-    const modalConfirm = document.getElementById('modalConfirm');
-    const modalBody = document.getElementById('modalBody');
-
-    // Reusable modal: returns Promise<string|null> for prompt, Promise<bool> for confirm
-    function showModal({ title, placeholder = '', defaultValue = '', showInput = true, confirmText = 'OK', confirmClass = 'confirm', validate = null }) {
-        return new Promise((resolve) => {
-            modalTitle.textContent = title;
-            modalError.textContent = '';
-            modalConfirm.textContent = confirmText;
-            modalConfirm.className = `modal-btn ${confirmClass}`;
-            modalInput.style.display = showInput ? '' : 'none';
-
-            if (showInput) {
-                modalInput.value = defaultValue;
-                modalInput.placeholder = placeholder;
-            }
-
-            modalOverlay.classList.remove('hidden');
-            if (showInput) {
-                setTimeout(() => { modalInput.focus(); modalInput.select(); }, 50);
-            }
-
-            function cleanup() {
-                modalOverlay.classList.add('hidden');
-                modalConfirm.removeEventListener('click', onConfirm);
-                modalCancel.removeEventListener('click', onCancel);
-                modalInput.removeEventListener('keydown', onKeydown);
-                modalOverlay.removeEventListener('click', onBackdrop);
-            }
-
-            function onConfirm() {
-                if (showInput) {
-                    const val = modalInput.value.trim();
-                    if (validate) {
-                        const err = validate(val);
-                        if (err) { modalError.textContent = err; return; }
-                    }
-                    cleanup();
-                    resolve(val || null);
-                } else {
-                    cleanup();
-                    resolve(true);
-                }
-            }
-
-            function onCancel() { cleanup(); resolve(showInput ? null : false); }
-
-            function onKeydown(e) {
-                if (e.key === 'Enter') { e.preventDefault(); onConfirm(); }
-                if (e.key === 'Escape') { e.preventDefault(); onCancel(); }
-            }
-
-            function onBackdrop(e) {
-                if (e.target === modalOverlay) onCancel();
-            }
-
-            modalConfirm.addEventListener('click', onConfirm);
-            modalCancel.addEventListener('click', onCancel);
-            if (showInput) modalInput.addEventListener('keydown', onKeydown);
-            modalOverlay.addEventListener('click', onBackdrop);
-        });
-    }
-
+    const RECENT_LIMIT = 4;
     let sessions = {};
-    let searchQuery = '';
+    let currentSession = null;
 
-    async function loadSessions() {
-        const data = await chrome.storage.local.get(['sessions']);
-        sessions = data.sessions || {};
-        if (Object.keys(sessions).length === 0) {
-            sessions['default'] = [];
-            await chrome.storage.local.set({ sessions });
-        }
-        return sessions;
+    function formatTime(ts) {
+        if (!ts) return '';
+        const diff = Date.now() - ts;
+        const min = Math.floor(diff / 60000);
+        if (min < 1) return t('time_just_now');
+        if (min < 60) return t('time_minutes').replace('%s', min);
+        const hrs = Math.floor(min / 60);
+        if (hrs < 24) return t('time_hours').replace('%s', hrs);
+        return t('time_days').replace('%s', Math.floor(hrs / 24));
     }
 
-    function populateSelect(selectedName) {
-        sessionSelect.innerHTML = '';
-        Object.keys(sessions).forEach(name => {
-            const option = document.createElement('option');
-            option.value = name;
-            option.textContent = name;
-            sessionSelect.appendChild(option);
-        });
-        if (selectedName && sessions[selectedName]) {
-            sessionSelect.value = selectedName;
-        }
-    }
-
-    function formatTime(timestamp) {
-        const d = new Date(timestamp);
-        const now = new Date();
-        const diff = now - d;
-        if (diff < 60000) return 'just now';
-        if (diff < 3600000) return `${Math.floor(diff / 60000)}m ago`;
-        if (diff < 86400000) return `${Math.floor(diff / 3600000)}h ago`;
-        return d.toLocaleDateString();
-    }
-
-    function extractDomain(url) {
-        try {
-            return new URL(url).hostname;
-        } catch {
-            return '';
-        }
-    }
-
-    function showTagPicker(container, snippet, sessionName) {
-        // Toggle: remove picker if already open
-        const existing = container.querySelector('.tag-picker');
-        if (existing) { existing.remove(); return; }
-
-        const picker = document.createElement('div');
-        picker.className = 'tag-picker';
-
-        const presetTags = ['quote', 'data', 'opinion', 'reference', 'key-point'];
-        presetTags.forEach(tag => {
-            if (snippet.tags && snippet.tags.includes(tag)) return;
-            const btn = document.createElement('button');
-            btn.className = 'tag-picker-btn';
-            btn.textContent = tag;
-            btn.addEventListener('click', async () => {
-                if (!snippet.tags) snippet.tags = [];
-                snippet.tags.push(tag);
-                await chrome.storage.local.set({ sessions });
-                displaySessionContent(sessionName);
-            });
-            picker.appendChild(btn);
-        });
-
-        // Custom tag input
-        const customInput = document.createElement('input');
-        customInput.className = 'tag-custom-input';
-        customInput.placeholder = 'custom...';
-        customInput.addEventListener('keydown', async (e) => {
-            if (e.key === 'Enter') {
-                const val = customInput.value.trim().toLowerCase();
-                if (val && !(snippet.tags || []).includes(val)) {
-                    if (!snippet.tags) snippet.tags = [];
-                    snippet.tags.push(val);
-                    await chrome.storage.local.set({ sessions });
-                    displaySessionContent(sessionName);
-                }
-            }
-        });
-        picker.appendChild(customInput);
-        container.appendChild(picker);
-    }
-
-    function displaySessionContent(sessionName) {
-        sessionContent.innerHTML = '';
-        const snippets = sessions[sessionName] || [];
-        snippetCount.textContent = `${snippets.length} snippet${snippets.length !== 1 ? 's' : ''}`;
+    function renderRecent() {
+        recentList.innerHTML = '';
+        const snippets = sessions[currentSession] || [];
 
         if (snippets.length === 0) {
-            sessionContent.innerHTML = `
-                <div class="empty-state">
-                    <div class="empty-icon">+</div>
-                    <p>No snippets yet.<br>Right-click to save text, links, or images.</p>
-                </div>`;
+            const empty = document.createElement('div');
+            empty.className = 'recent-empty';
+            empty.textContent = t('popup_empty');
+            recentList.appendChild(empty);
             return;
         }
 
-        // Filter by search query
-        let filtered = snippets.map((s, i) => ({ snippet: s, index: i }));
-        if (searchQuery) {
-            const q = searchQuery.toLowerCase();
-            filtered = filtered.filter(({ snippet }) => {
-                const content = (snippet.content || '').toLowerCase();
-                const tags = (snippet.tags || []).join(' ').toLowerCase();
-                const source = (snippet.sourceTitle || '').toLowerCase();
-                const imageUrl = (snippet.imageUrl || '').toLowerCase();
-                return content.includes(q) || tags.includes(q) || source.includes(q) || imageUrl.includes(q);
-            });
-        }
-
-        // Show newest first
-        filtered.reverse().forEach(({ snippet, index: realIndex }) => {
+        // Most recent first.
+        snippets.slice(-RECENT_LIMIT).reverse().forEach((s) => {
             const item = document.createElement('div');
-            item.className = 'snippet-item';
-            item.draggable = true;
-            item.dataset.index = realIndex;
+            item.className = 'recent-item';
 
-            // Type badge
-            const badge = document.createElement('span');
-            badge.className = `snippet-type-badge ${snippet.type || 'text'}`;
-            badge.textContent = snippet.type || 'text';
-            item.appendChild(badge);
+            const icon = document.createElement('span');
+            icon.className = 'recent-icon';
+            icon.textContent = s.type === 'image' ? '🖼' : (s.type === 'link' ? '🔗' : '✂');
+            item.appendChild(icon);
 
-            // Content: image or text
-            if (snippet.type === 'image') {
-                const imgContainer = document.createElement('div');
-                imgContainer.className = 'snippet-image-container';
+            const body = document.createElement('div');
+            body.className = 'recent-body';
 
-                const img = document.createElement('img');
-                img.className = 'snippet-image';
-                // 优先使用缓存的 base64（防止反盗链），否则用原始 URL
-                img.src = snippet.cachedDataUrl || snippet.imageUrl || '';
-                img.alt = snippet.sourceTitle || 'Saved image';
-                img.loading = 'lazy';
-                // 如果缓存版本加载失败，回退到原始 URL
-                if (snippet.cachedDataUrl) {
-                    img.addEventListener('error', () => {
-                        if (snippet.imageUrl && img.src !== snippet.imageUrl) {
-                            img.src = snippet.imageUrl;
-                        }
-                    }, { once: true });
-                }
-                // 点击图片在新标签页打开原图
-                img.style.cursor = 'pointer';
-                img.addEventListener('click', () => {
-                    chrome.tabs.create({ url: snippet.imageUrl || snippet.cachedDataUrl });
-                });
-                imgContainer.appendChild(img);
+            const text = document.createElement('div');
+            text.className = 'recent-text';
+            text.textContent = s.type === 'image' ? (s.imageUrl || t('popup_image')) : (s.content || '');
+            text.title = text.textContent;
+            body.appendChild(text);
 
-                // 显示原始图片 URL
-                const urlLabel = document.createElement('div');
-                urlLabel.className = 'snippet-image-url';
-                urlLabel.textContent = snippet.imageUrl || '';
-                urlLabel.title = snippet.imageUrl || '';
-                imgContainer.appendChild(urlLabel);
-
-                item.appendChild(imgContainer);
-            } else {
-                const contentDiv = document.createElement('div');
-                contentDiv.className = 'snippet-content';
-                contentDiv.textContent = snippet.content;
-                item.appendChild(contentDiv);
-            }
-
-            // Link URL if applicable
-            if (snippet.linkUrl) {
-                const link = document.createElement('a');
-                link.className = 'snippet-link';
-                link.href = snippet.linkUrl;
-                link.textContent = snippet.linkUrl;
-                link.target = '_blank';
-                link.addEventListener('click', (e) => {
-                    e.preventDefault();
-                    chrome.tabs.create({ url: snippet.linkUrl });
-                });
-                item.appendChild(link);
-            }
-
-            // Comment display
-            if (snippet.comment) {
-                const commentDiv = document.createElement('div');
-                commentDiv.className = 'snippet-comment';
-                commentDiv.innerHTML = `<span class="snippet-comment-label">Comment:</span> `;
-                const commentText = document.createElement('span');
-                commentText.className = 'snippet-comment-text';
-                commentText.textContent = snippet.comment;
-                commentText.title = 'Click to edit comment';
-                commentText.style.cursor = 'pointer';
-                commentText.addEventListener('click', async () => {
-                    const newComment = await showModal({
-                        title: 'Edit Comment',
-                        placeholder: 'Your comment...',
-                        defaultValue: snippet.comment,
-                    });
-                    if (newComment !== null) {
-                        snippet.comment = newComment;
-                        await chrome.storage.local.set({ sessions });
-                        displaySessionContent(sessionName);
-                    }
-                });
-                commentDiv.appendChild(commentText);
-                item.appendChild(commentDiv);
-            }
-
-            // Add comment button (if no comment yet)
-            if (!snippet.comment && snippet.type !== 'image') {
-                const addCommentBtn = document.createElement('button');
-                addCommentBtn.className = 'snippet-add-comment-btn';
-                addCommentBtn.textContent = '+ Comment';
-                addCommentBtn.addEventListener('click', async () => {
-                    const comment = await showModal({
-                        title: 'Add Comment',
-                        placeholder: 'Your comment on this snippet...',
-                    });
-                    if (comment) {
-                        snippet.comment = comment;
-                        await chrome.storage.local.set({ sessions });
-                        displaySessionContent(sessionName);
-                    }
-                });
-                item.appendChild(addCommentBtn);
-            }
-
-            // Meta row
             const meta = document.createElement('div');
-            meta.className = 'snippet-meta';
+            meta.className = 'recent-meta';
+            meta.textContent = [s.sourceTitle || '', formatTime(s.timestamp)].filter(Boolean).join(' · ');
+            body.appendChild(meta);
 
-            if (snippet.timestamp) {
-                const time = document.createElement('span');
-                time.textContent = formatTime(snippet.timestamp);
-                meta.appendChild(time);
-            }
-
-            if (snippet.sourceUrl) {
-                const source = document.createElement('span');
-                source.className = 'snippet-source';
-                source.textContent = extractDomain(snippet.sourceUrl);
-                source.title = snippet.sourceTitle || snippet.sourceUrl;
-                meta.appendChild(source);
-            }
-
-            // Tags (interactive: click to remove, + to add)
-            const tagsContainer = document.createElement('div');
-            tagsContainer.className = 'snippet-tags-container';
-
-            if (snippet.tags && snippet.tags.length > 0) {
-                snippet.tags.forEach((tag, tagIndex) => {
-                    const tagEl = document.createElement('span');
-                    tagEl.className = 'snippet-tag';
-                    tagEl.textContent = tag;
-                    tagEl.title = 'Click to remove';
-                    tagEl.addEventListener('click', async () => {
-                        snippet.tags.splice(tagIndex, 1);
-                        await chrome.storage.local.set({ sessions });
-                        displaySessionContent(sessionName);
-                    });
-                    tagsContainer.appendChild(tagEl);
-                });
-            }
-
-            const addTagBtn = document.createElement('span');
-            addTagBtn.className = 'snippet-tag add-tag-btn';
-            addTagBtn.textContent = '+';
-            addTagBtn.title = 'Add tag';
-            addTagBtn.addEventListener('click', () => {
-                showTagPicker(tagsContainer, snippet, sessionName);
-            });
-            tagsContainer.appendChild(addTagBtn);
-            meta.appendChild(tagsContainer);
-
-            item.appendChild(meta);
-
-            // Action buttons
-            const actions = document.createElement('div');
-            actions.className = 'snippet-actions';
-
-            const deleteBtn = document.createElement('button');
-            deleteBtn.className = 'snippet-action-btn';
-            deleteBtn.textContent = 'Del';
-            deleteBtn.title = 'Delete snippet';
-            deleteBtn.addEventListener('click', async () => {
-                snippets.splice(realIndex, 1);
-                await chrome.storage.local.set({ sessions });
-                displaySessionContent(sessionName);
-            });
-            actions.appendChild(deleteBtn);
-
-            item.appendChild(actions);
-            sessionContent.appendChild(item);
-        });
-
-        // Drag and drop handlers
-        setupDragAndDrop(sessionName, snippets);
-    }
-
-    function setupDragAndDrop(sessionName, snippets) {
-        let dragSrcIndex = null;
-
-        sessionContent.querySelectorAll('.snippet-item').forEach(item => {
-            item.addEventListener('dragstart', (e) => {
-                dragSrcIndex = parseInt(item.dataset.index);
-                item.classList.add('dragging');
-                e.dataTransfer.effectAllowed = 'move';
-            });
-
-            item.addEventListener('dragend', () => {
-                item.classList.remove('dragging');
-                sessionContent.querySelectorAll('.snippet-item').forEach(el => {
-                    el.classList.remove('drag-over');
-                });
-            });
-
-            item.addEventListener('dragover', (e) => {
-                e.preventDefault();
-                e.dataTransfer.dropEffect = 'move';
-                item.classList.add('drag-over');
-            });
-
-            item.addEventListener('dragleave', () => {
-                item.classList.remove('drag-over');
-            });
-
-            item.addEventListener('drop', async (e) => {
-                e.preventDefault();
-                const targetIndex = parseInt(item.dataset.index);
-                if (dragSrcIndex === null || dragSrcIndex === targetIndex) return;
-
-                // Move snippet
-                const [moved] = snippets.splice(dragSrcIndex, 1);
-                snippets.splice(targetIndex, 0, moved);
-                await chrome.storage.local.set({ sessions });
-                displaySessionContent(sessionName);
-            });
+            item.appendChild(body);
+            recentList.appendChild(item);
         });
     }
 
-    // Search
-    searchInput.addEventListener('input', (e) => {
-        searchQuery = e.target.value.trim();
-        const current = sessionSelect.value;
-        if (sessions[current]) displaySessionContent(current);
-    });
+    async function load() {
+        sessions = await Store.getSessions();
+        const names = Object.keys(sessions);
+        const saved = await Store.getCurrentSession();
+        currentSession = names.includes(saved) ? saved : names[0] || null;
 
-    // Init
-    await loadSessions();
-    populateSelect();
-
-    const names = Object.keys(sessions);
-    if (names.length > 0) {
-        displaySessionContent(names[0]);
-    }
-
-    // Session change
-    sessionSelect.addEventListener('change', () => {
-        displaySessionContent(sessionSelect.value);
-    });
-
-    // New session
-    document.getElementById('newSession').addEventListener('click', async () => {
-        const name = await showModal({
-            title: 'New Session',
-            placeholder: 'Enter session name...',
-            validate: (val) => {
-                if (!val) return 'Session name cannot be empty.';
-                if (sessions[val]) return 'Session name already exists.';
-                return null;
-            }
-        });
-        if (!name) return;
-        sessions[name] = [];
-        await chrome.storage.local.set({ sessions });
-        populateSelect(name);
-        displaySessionContent(name);
-    });
-
-    // Delete session
-    document.getElementById('deleteSession').addEventListener('click', async () => {
-        const selected = sessionSelect.value;
-        if (selected === 'default') {
-            await showModal({
-                title: 'Cannot delete the default session.',
-                showInput: false,
-                confirmText: 'OK'
-            });
-            return;
+        sessionSelect.innerHTML = '';
+        for (const name of names) {
+            const opt = document.createElement('option');
+            opt.value = name;
+            opt.textContent = name;
+            sessionSelect.appendChild(opt);
         }
-        const confirmed = await showModal({
-            title: `Delete session "${selected}"?`,
-            showInput: false,
-            confirmText: 'Delete',
-            confirmClass: 'danger'
-        });
-        if (!confirmed) return;
 
-        delete sessions[selected];
-        await chrome.storage.local.set({ sessions });
-        populateSelect();
-        const first = Object.keys(sessions)[0];
-        if (first) displaySessionContent(first);
-        else sessionContent.innerHTML = '';
-    });
-
-    // Rename session
-    document.getElementById('renameSession').addEventListener('click', async () => {
-        const selected = sessionSelect.value;
-        if (selected === 'default') {
-            await showModal({
-                title: 'Cannot rename the default session.',
-                showInput: false,
-                confirmText: 'OK'
-            });
-            return;
+        if (currentSession) {
+            sessionSelect.value = currentSession;
+            const count = (sessions[currentSession] || []).length;
+            sessionMeta.textContent = t('popup_snippet_count').replace('%s', count);
+        } else {
+            sessionMeta.textContent = t('popup_no_session');
         }
-        const newName = await showModal({
-            title: 'Rename Session',
-            placeholder: 'Enter new name...',
-            defaultValue: selected,
-            validate: (val) => {
-                if (!val) return 'Name cannot be empty.';
-                if (val === selected) return null; // allow same name = cancel
-                if (sessions[val]) return 'Session name already exists.';
-                return null;
-            }
-        });
-        if (!newName || newName === selected) return;
-        sessions[newName] = sessions[selected];
-        delete sessions[selected];
-        await chrome.storage.local.set({ sessions });
-        populateSelect(newName);
-        displaySessionContent(newName);
+        renderRecent();
+    }
+
+    sessionSelect.addEventListener('change', async () => {
+        currentSession = sessionSelect.value;
+        await Store.setCurrentSession(currentSession);
+        const count = (sessions[currentSession] || []).length;
+        sessionMeta.textContent = t('popup_snippet_count').replace('%s', count);
+        renderRecent();
     });
 
-    // Open chat
-    document.getElementById('openChat').addEventListener('click', () => {
-        chrome.storage.local.set({ currentSession: sessionSelect.value }, () => {
+    // Open the Workbench in the side panel. Must happen inside the click
+    // gesture; fall back to a window if the side panel isn't available.
+    document.getElementById('openChat').addEventListener('click', async () => {
+        if (currentSession) await Store.setCurrentSession(currentSession);
+        try {
+            const win = await chrome.windows.getCurrent();
+            await chrome.sidePanel.open({ windowId: win.id });
+            window.close();
+        } catch {
             chrome.windows.create({
                 url: chrome.runtime.getURL('chat.html'),
                 type: 'popup',
                 width: 900,
                 height: 700,
-                left: Math.round((screen.width - 900) / 2),
-                top: Math.round((screen.height - 700) / 2)
             });
-        });
+        }
     });
 
-    // Open smart organize
-    document.getElementById('openOrganize').addEventListener('click', () => {
-        chrome.storage.local.set({ currentSession: sessionSelect.value }, () => {
-            chrome.windows.create({
-                url: chrome.runtime.getURL('organizer.html'),
-                type: 'popup',
-                width: 960,
-                height: 750,
-                left: Math.round((screen.width - 960) / 2),
-                top: Math.round((screen.height - 750) / 2)
-            });
-        });
-    });
-
-    // Open Knowledge Graph viewer
-    document.getElementById('openGraph').addEventListener('click', () => {
-        chrome.storage.local.set({ currentSession: sessionSelect.value }, () => {
-            chrome.windows.create({
-                url: chrome.runtime.getURL('graph.html'),
-                type: 'popup',
-                width: 1100,
-                height: 750,
-                left: Math.round((screen.width - 1100) / 2),
-                top: Math.round((screen.height - 750) / 2)
-            });
-        });
-    });
-
-    // Show saved snippets as highlights on the current page
     document.getElementById('showOnPage').addEventListener('click', () => {
-        const sessionName = sessionSelect.value;
-        if (!sessionName) return;
+        if (!currentSession) return;
+        const btn = document.getElementById('showOnPage');
         chrome.runtime.sendMessage(
-            { type: 'highlightSessionOnPage', sessionName },
+            { type: 'highlightSessionOnPage', sessionName: currentSession },
             (result) => {
-                if (result && result.highlighted > 0) {
-                    // Brief visual feedback on the button
-                    const btn = document.getElementById('showOnPage');
-                    btn.textContent = `${result.highlighted} shown`;
-                    btn.style.color = '#2e7d32';
-                    setTimeout(() => { btn.textContent = 'Show on Page'; btn.style.color = ''; }, 2000);
-                }
+                if (chrome.runtime.lastError) return;
+                const n = result && result.highlighted ? result.highlighted : 0;
+                btn.textContent = n > 0 ? t('popup_shown').replace('%s', n) : t('popup_shown_none');
+                setTimeout(() => { btn.textContent = t('popup_show_on_page'); }, 2000);
             }
         );
     });
 
-    // Open Knowledge Replay
-    document.getElementById('openReplay').addEventListener('click', () => {
-        chrome.storage.local.set({ currentSession: sessionSelect.value }, () => {
-            chrome.windows.create({
-                url: chrome.runtime.getURL('replay.html'),
-                type: 'popup',
-                width: 700,
-                height: 600,
-                left: Math.round((screen.width - 700) / 2),
-                top: Math.round((screen.height - 600) / 2)
-            });
-        });
-    });
-
-    // Show replay due badge
-    chrome.runtime.sendMessage({ type: 'getReplayDueCount' }, (response) => {
-        if (response && response.dueCount > 0) {
-            const badge = document.getElementById('replayBadge');
-            badge.textContent = response.dueCount;
-            badge.style.display = '';
-        }
-    });
-
-    // Open settings in a new tab
     document.getElementById('openSettings').addEventListener('click', () => {
         chrome.tabs.create({ url: chrome.runtime.getURL('settings.html') });
     });
 
-    // Listen for storage changes to refresh
-    chrome.storage.onChanged.addListener((changes) => {
-        if (changes.sessions) {
-            sessions = changes.sessions.newValue || {};
-            const current = sessionSelect.value;
-            populateSelect(current);
-            if (sessions[current]) {
-                displaySessionContent(current);
-            }
-        }
-    });
+    await load();
 });

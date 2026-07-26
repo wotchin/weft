@@ -1,5 +1,5 @@
 /**
- * Cyber Assistant — Block-based Markdown to HTML renderer
+ * Weft — Block-based Markdown to HTML renderer
  * Supports: GFM tables, blockquotes, fenced code blocks, lists (nested),
  *           headers, horizontal rules, bold, italic, inline code, links, images.
  *

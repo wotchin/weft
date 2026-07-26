@@ -1,3 +1,12 @@
+// Load shared modules into the service worker.
+importScripts(
+    'lib/idb.js',
+    'lib/store.js',
+    'lib/tokenizer.js',
+    'lib/providers.js',
+    'lib/llm-client.js',
+    'lib/i18n.js'
+);
 
 // 保存子菜单的 ID 数组，用于更新右键菜单
 let sessionMenuIds = [];
@@ -49,25 +58,30 @@ function createStaticMenus() {
         contexts: ["page"]
     });
 
-    // ---- Ask AI about selection ----
+    // ---- Analyse selection ----
+    // The context menu is the complete surface; the floating toolbar exposes a
+    // frequently-used subset of these same actions. Everything reachable from
+    // the toolbar must also be reachable here.
     chrome.contextMenus.create({
         id: "askAI",
-        title: "Ask AI",
+        title: "Analyse selection",
         contexts: ["selection"]
     });
 
     const askQuestions = [
-        { id: "askAI-freeform",    title: "Ask about this..." },
-        { id: "askAI-reliability", title: "Check reliability & sources" },
-        { id: "askAI-similar",     title: "Find similar viewpoints" },
-        { id: "askAI-opposing",    title: "Find opposing viewpoints" },
-        { id: "askAI-explain",     title: "Explain in simple terms" },
-        { id: "askAI-factcheck",   title: "Fact-check this claim" },
+        { id: "askAI-verify",     title: "Verify this" },
+        { id: "askAI-explain",    title: "Explain in simple terms" },
+        { id: "askAI-key_points", title: "Extract key points" },
+        { id: "askAI-opposing",   title: "Counterarguments" },
+        { id: "askAI-separator",  title: "──────────", enabled: false },
+        { id: "askAI-diagram",    title: "Make a diagram…" },
+        { id: "askAI-freeform",   title: "Ask a question…" },
     ];
     askQuestions.forEach(q => {
         chrome.contextMenus.create({
             id: q.id,
             title: q.title,
+            enabled: q.enabled !== false,
             contexts: ["selection"],
             parentId: "askAI"
         });
@@ -88,7 +102,15 @@ function createStaticMenus() {
     });
 }
 
-chrome.runtime.onInstalled.addListener(() => {
+chrome.runtime.onInstalled.addListener((details) => {
+    // Bring persisted data up to the current schema (idempotent).
+    Store.migrate().catch((e) => console.warn('[Weft] migrate failed', e));
+
+    // First-run onboarding (also seeds a demo session).
+    if (details && details.reason === 'install') {
+        chrome.tabs.create({ url: chrome.runtime.getURL('onboarding.html') }).catch(() => {});
+    }
+
     createStaticMenus();
 
     // 初始化右键菜单
@@ -96,50 +118,11 @@ chrome.runtime.onInstalled.addListener(() => {
 
     // Enable side panel if the API is available (Chrome 114+)
     if (chrome.sidePanel) {
-        chrome.sidePanel.setOptions({ path: 'sidepanel.html', enabled: true }).catch(() => {});
+        // chat.html is the single workbench, shown here as the side panel.
+        chrome.sidePanel.setOptions({ path: 'chat.html?mode=panel', enabled: true }).catch(() => {});
         chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: false }).catch(() => {});
     }
-
-    // Set up Knowledge Replay alarm (check every 6 hours)
-    chrome.alarms.create('knowledgeReplay', { periodInMinutes: 360 });
 });
-
-// Knowledge Replay alarm handler
-chrome.alarms.onAlarm.addListener(async (alarm) => {
-    if (alarm.name === 'knowledgeReplay') {
-        await checkAndNotifyReplay();
-    }
-});
-
-async function checkAndNotifyReplay() {
-    const { replayData = {} } = await chrome.storage.local.get(['replayData']);
-    const now = Date.now();
-    let dueCount = 0;
-
-    for (const items of Object.values(replayData)) {
-        for (const item of items) {
-            if (item.nextReview && item.nextReview <= now) dueCount++;
-        }
-    }
-
-    if (dueCount > 0) {
-        // Update badge
-        chrome.action.setBadgeText({ text: String(dueCount) });
-        chrome.action.setBadgeBackgroundColor({ color: '#7b1fa2' });
-
-        // Notification
-        if (chrome.notifications) {
-            chrome.notifications.create(`replay-${now}`, {
-                type: 'basic',
-                iconUrl: chrome.runtime.getURL('assets/icon.png'),
-                title: 'Knowledge Replay',
-                message: `You have ${dueCount} item${dueCount > 1 ? 's' : ''} due for review!`,
-            });
-        }
-    } else {
-        chrome.action.setBadgeText({ text: '' });
-    }
-}
 
 // 最近一次保存的 snippet（用于给最近保存的内容打标签）
 let lastSavedSnippetInfo = null;
@@ -175,8 +158,8 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
             snippet.linkUrl = info.linkUrl;
         }
 
-        sessions[sessionName].push(snippet);
-        await chrome.storage.local.set({ "sessions": sessions });
+        // Store.addSnippet offloads large base64 images into IndexedDB.
+        await Store.addSnippet(sessionName, snippet);
 
         lastSavedSnippetInfo = { sessionName, snippetId: snippet.id };
         sendNotification(`${sessionName} +1`, snippet.content.substring(0, 50));
@@ -200,8 +183,7 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
             tags: ['reference']
         };
 
-        sessions[targetSession].push(snippet);
-        await chrome.storage.local.set({ "sessions": sessions });
+        await Store.addSnippet(targetSession, snippet);
         sendNotification(`${targetSession} +1`, 'Page link saved');
 
     } else if (info.menuItemId.startsWith("saveTag-")) {
@@ -220,8 +202,7 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
             tags: [tag]
         };
 
-        sessions[targetSession].push(snippet);
-        await chrome.storage.local.set({ "sessions": sessions });
+        await Store.addSnippet(targetSession, snippet);
         lastSavedSnippetInfo = { sessionName: targetSession, snippetId: snippet.id };
         sendNotification(`${targetSession} +1`, `Saved as "${tag}"`);
 
@@ -229,35 +210,36 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
         autoHighlightSnippet(tab, snippet);
 
     } else if (info.menuItemId.startsWith("askAI-")) {
-        // Ask AI about selected text
         const questionType = info.menuItemId.replace("askAI-", "");
         const selectedText = info.selectionText || '';
         if (!selectedText) return;
 
-        const questionMap = {
-            'freeform':    '', // user types their own question in chat
-            'reliability': 'Please evaluate the reliability and credibility of this information. Identify the likely source, check for potential biases, assess factual accuracy, and rate the trustworthiness. Search the web if needed to verify claims.',
-            'similar':     'What are similar viewpoints, arguments, or perspectives to the one expressed in this text? Search for related opinions and supporting evidence from other sources.',
-            'opposing':    'What are the main counterarguments or opposing viewpoints to this claim? Search for credible sources that disagree with or challenge this perspective.',
-            'explain':     'Please explain this content in simple, easy-to-understand terms. Break down any jargon or complex concepts.',
-            'factcheck':   'Please fact-check this claim. Verify the key assertions by searching for reliable sources. Provide a verdict (True/Mostly True/Misleading/False/Unverifiable) with evidence.',
-        };
+        // Quick analyses answer inline on the page; the prompts stay in
+        // QUICK_ACTIONS here and are never sent to the tab.
+        if (QUICK_ACTIONS[questionType]) {
+            try {
+                await chrome.tabs.sendMessage(tab.id, {
+                    type: 'runQuickAction',
+                    action: questionType,
+                });
+            } catch {
+                // No content script (e.g. a restricted page) — nothing to show.
+            }
+            return;
+        }
 
-        const question = questionMap[questionType] || '';
-
-        // Store context for chat page to pick up
+        // Diagrams and free-form questions need the workbench.
         await chrome.storage.local.set({
             askAIContext: {
                 selectedText,
-                question,
-                questionType,
+                question: '',
+                questionType: questionType === 'diagram' ? 'diagram' : 'freeform',
                 sourceUrl: tab?.url || '',
                 sourceTitle: tab?.title || '',
                 timestamp: Date.now(),
             }
         });
 
-        // Open chat window
         chrome.windows.create({
             url: chrome.runtime.getURL('chat.html?mode=askAI'),
             type: 'popup',
@@ -295,8 +277,7 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
                     tags: [],
                 };
 
-                sessions[sessionName].push(snippet);
-                await chrome.storage.local.set({ sessions });
+                await Store.addSnippet(sessionName, snippet);
                 lastSavedSnippetInfo = { sessionName, snippetId: snippet.id };
                 sendNotification(`${sessionName} +1`, result.comment ? `With comment: ${result.comment.substring(0, 40)}` : 'Saved');
 
@@ -318,8 +299,7 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
                 timestamp: Date.now(),
                 tags: [],
             };
-            sessions[sessionName].push(snippet);
-            await chrome.storage.local.set({ sessions });
+            await Store.addSnippet(sessionName, snippet);
             sendNotification(`${sessionName} +1`, 'Saved (comment skipped)');
         }
 
@@ -617,33 +597,106 @@ function assert(condition, message) {
     }
 }
 
-async function fetchOpenAIResponse(text, apiKey) {
-    const { apiBaseUrl = 'https://api.openai.com', modelName = 'gpt-4o-mini' } =
-        await chrome.storage.local.get(['apiBaseUrl', 'modelName']);
+// ---- Quick actions (selection toolbar) --------------------------------------
+// Run small, self-contained analyses and stream the result straight back into
+// the page. Prompts are defined and used here, in the service worker, so they
+// are never exposed to the page or shown to the user.
 
-    const baseUrl = apiBaseUrl.replace(/\/+$/, '').replace(/\/v1$/, '');
-    const response = await fetch(`${baseUrl}/v1/chat/completions`, {
-        method: "POST",
-        headers: {
-            "Content-Type": "application/json",
-            "Authorization": `Bearer ${apiKey}`
-        },
-        body: JSON.stringify({
-            model: modelName,
-            messages: [
-                { role: "system", content: "You are a helpful assistant. Generate insights based on the user's content." },
-                { role: "user", content: text }
-            ],
-            max_tokens: 500
-        })
+const QUICK_ACTIONS = {
+    verify: {
+        system: 'You assess the reliability of a short passage. Be brief and concrete. Answer in at most 5 short lines:\n' +
+            'Verdict: one of Well-supported / Plausible / Unclear / Questionable / Misleading.\n' +
+            'Why: one or two sentences citing what in the text drives that verdict.\n' +
+            'Check: one concrete thing the reader should verify independently.\n' +
+            'Never invent sources or claim you searched the web. If the passage cannot be judged from its own content, say so plainly.',
+        user: (text) => `Assess this passage:\n\n"""${text}"""`,
+    },
+    explain: {
+        system: 'Explain the passage in plain language for a smart non-expert. 3-4 short sentences. Define any jargon inline. No preamble, no bullet lists.',
+        user: (text) => `Explain this:\n\n"""${text}"""`,
+    },
+    similar: {
+        system: 'Summarise, in at most 4 short lines, what viewpoints or arguments align with this passage and what kind of evidence typically supports them. Do not fabricate specific sources, studies, or quotes.',
+        user: (text) => `Passage:\n\n"""${text}"""`,
+    },
+    opposing: {
+        system: 'Give the strongest good-faith counterarguments to this passage, in at most 4 short lines. Focus on reasoning and what evidence would challenge it. Do not fabricate specific sources or quotes.',
+        user: (text) => `Passage:\n\n"""${text}"""`,
+    },
+    key_points: {
+        system: 'Extract the key points as 3-5 terse bullet lines beginning with "- ". No introduction, no conclusion.',
+        user: (text) => `Passage:\n\n"""${text}"""`,
+    },
+};
+
+chrome.runtime.onConnect.addListener((port) => {
+    if (port.name !== 'weft-quick') return;
+
+    port.onMessage.addListener(async (msg) => {
+        if (!msg || msg.type !== 'run') return;
+        const spec = QUICK_ACTIONS[msg.action];
+        if (!spec) {
+            port.postMessage({ type: 'error', message: 'Unknown action.' });
+            return;
+        }
+
+        const text = (msg.text || '').slice(0, 8000);
+        if (!text) {
+            port.postMessage({ type: 'error', message: 'No text selected.' });
+            return;
+        }
+
+        const started = Date.now();
+        let out = '';
+        try {
+            // Answer in the user's chosen language, not the page's.
+            await I18N.init();
+            const messages = [
+                { role: 'system', content: spec.system + '\n' + I18N.promptLanguageInstruction() },
+                { role: 'user', content: spec.user(text) },
+            ];
+            const { usage } = await LLMClient.chat(messages, {
+                stream: true,
+                // Generous enough that a reasoning model still has room to answer
+                // after its thinking pass.
+                maxTokens: 1500,
+                temperature: 0.2,
+                onDelta: (delta) => {
+                    out += delta;
+                    try {
+                        port.postMessage({ type: 'delta', delta, elapsed: Date.now() - started });
+                    } catch { /* port closed by the page */ }
+                },
+                onReasoning: () => {
+                    // Tell the card the model is thinking, without showing the
+                    // chain-of-thought itself.
+                    try { port.postMessage({ type: 'reasoning' }); } catch { /* closed */ }
+                },
+            });
+
+            // Streaming responses rarely carry usage, so fall back to an estimate.
+            const promptTokens = usage?.promptTokens
+                ?? WeftTokenizer.estimateTokens(spec.system + spec.user(text));
+            const completionTokens = usage?.completionTokens
+                ?? WeftTokenizer.estimateTokens(out);
+
+            port.postMessage({
+                type: 'done',
+                text: out,
+                elapsed: Date.now() - started,
+                promptTokens,
+                completionTokens,
+                estimated: !usage,
+            });
+        } catch (e) {
+            port.postMessage({
+                type: 'error',
+                message: e.message || String(e),
+                hint: e.hint || '',
+            });
+        }
     });
-    const data = await response.json();
-    if (data.choices && data.choices[0]?.message?.content) {
-        const generatedText = data.choices[0].message.content;
-        await chrome.storage.local.set({ generatedText });
-        sendNotification("Success", "Insight Generated! Check the popup.");
-    }
-}
+});
 
 // Sync context menus when sessions change (e.g. from popup)
 chrome.storage.onChanged.addListener((changes, areaName) => {
@@ -737,17 +790,69 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         return false;
     }
 
-    if (message.type === 'getReplayDueCount') {
+    if (message.type === 'getUiStrings') {
+        // Content scripts can't read _locales directly, so the worker resolves
+        // the user's chosen language and hands over just the strings they need.
         (async () => {
-            const { replayData = {} } = await chrome.storage.local.get(['replayData']);
-            const now = Date.now();
-            let dueCount = 0;
-            for (const items of Object.values(replayData)) {
-                for (const item of items) {
-                    if (item.nextReview && item.nextReview <= now) dueCount++;
-                }
-            }
-            sendResponse({ dueCount });
+            await I18N.init();
+            const keys = [
+                'tb_save', 'tb_save_hint', 'tb_verify', 'tb_verify_hint',
+                'tb_explain', 'tb_explain_hint', 'tb_points', 'tb_points_hint',
+                'tb_ask', 'tb_ask_hint',
+                'card_thinking', 'card_reasoning', 'card_copy', 'card_copied',
+                'card_save', 'card_saved', 'card_save_hint', 'card_failed',
+                'card_close', 'card_disconnected', 'card_reload',
+                'toast_saved_to', 'toast_save_failed',
+                'modal_cancel', 'modal_save', 'modal_comment_ph',
+            ];
+            const out = {};
+            for (const k of keys) out[k] = I18N.get(k) || k;
+            sendResponse(out);
+        })();
+        return true;
+    }
+
+    if (message.type === 'saveSelection') {
+        // One-click save from the selection toolbar — always the active session.
+        // Choosing a different session is the context menu's job.
+        (async () => {
+            const sessions = await Store.getSessions();
+            const target = (await Store.getCurrentSession()) || Object.keys(sessions)[0] || 'default';
+            if (!sessions[target]) { sessions[target] = []; await Store.setSessions(sessions); }
+
+            const snippet = {
+                id: generateId(),
+                type: 'text',
+                content: message.text || '',
+                sourceUrl: message.sourceUrl || '',
+                sourceTitle: message.sourceTitle || '',
+                timestamp: Date.now(),
+                tags: [],
+            };
+            await Store.addSnippet(target, snippet);
+            lastSavedSnippetInfo = { sessionName: target, snippetId: snippet.id };
+            if (sender.tab) autoHighlightSnippet(sender.tab, snippet);
+            sendResponse({ ok: true, session: target });
+        })();
+        return true;
+    }
+
+    if (message.type === 'saveQuickResult') {
+        (async () => {
+            const sessions = await Store.getSessions();
+            const target = (await Store.getCurrentSession()) || Object.keys(sessions)[0] || 'default';
+            if (!sessions[target]) { sessions[target] = []; await Store.setSessions(sessions); }
+            await Store.addSnippet(target, {
+                id: generateId(),
+                type: 'text',
+                content: message.selectedText || '',
+                comment: message.result || '',
+                sourceUrl: message.sourceUrl || '',
+                sourceTitle: message.sourceTitle || '',
+                timestamp: Date.now(),
+                tags: ['analysed'],
+            });
+            sendResponse({ ok: true, session: target });
         })();
         return true;
     }
@@ -771,12 +876,17 @@ async function handleReCacheImages(sessionName) {
     let updated = 0;
 
     for (const snippet of snippets) {
-        if (snippet.type !== 'image' || snippet.cachedDataUrl) continue;
+        if (snippet.type !== 'image') continue;
+        // Already cached (inline legacy or in IDB)?
+        if (snippet.cachedDataUrl || snippet.hasCachedImage) continue;
         if (!snippet.imageUrl) continue;
 
         const dataUrl = await fetchImageAsDataUrl(snippet.imageUrl, snippet.sourceUrl);
         if (dataUrl) {
-            snippet.cachedDataUrl = dataUrl;
+            // Offload to IndexedDB; keep only a flag on the snippet.
+            await Store.putImage(snippet.id, dataUrl);
+            snippet.hasCachedImage = true;
+            delete snippet.cachedDataUrl;
             updated++;
         }
     }

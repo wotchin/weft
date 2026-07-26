@@ -1,0 +1,72 @@
+// Weft — ESLint flat config (v9+).
+// Vanilla JS extension, no bundler. Globals are provided by <script> load order
+// and the WebExtensions runtime, so we declare them as readonly.
+
+export default [
+    {
+        ignores: ['_archive/**', 'node_modules/**', 'lib/vendor/**'],
+    },
+    {
+        files: ['**/*.js', '**/*.mjs'],
+        languageOptions: {
+            ecmaVersion: 2022,
+            sourceType: 'script',
+            globals: {
+                // WebExtensions / browser
+                chrome: 'readonly',
+                window: 'readonly',
+                document: 'readonly',
+                console: 'readonly',
+                fetch: 'readonly',
+                setTimeout: 'readonly',
+                clearTimeout: 'readonly',
+                setInterval: 'readonly',
+                clearInterval: 'readonly',
+                TextDecoder: 'readonly',
+                TextEncoder: 'readonly',
+                indexedDB: 'readonly',
+                IDBKeyRange: 'readonly',
+                DOMParser: 'readonly',
+                Node: 'readonly',
+                URL: 'readonly',
+                Blob: 'readonly',
+                FileReader: 'readonly',
+                navigator: 'readonly',
+                screen: 'readonly',
+                self: 'readonly',
+                importScripts: 'readonly',
+                LanguageModel: 'readonly',
+                // Weft internal globals (IIFE modules)
+                Store: 'readonly',
+                WeftIDB: 'readonly',
+                WeftTokenizer: 'readonly',
+                PROVIDERS: 'readonly',
+                getProvider: 'readonly',
+                LLMClient: 'readonly',
+                LLMError: 'readonly',
+                RAGEngine: 'readonly',
+                RAGIndexer: 'readonly',
+                BM25Index: 'readonly',
+                VectorIndex: 'readonly',
+                DiagramGenerator: 'readonly',
+                Highlighter: 'readonly',
+                PageExtractor: 'readonly',
+                Citations: 'readonly',
+                Render: 'readonly',
+                WeftSanitize: 'readonly',
+                SearchProvider: 'readonly',
+                I18N: 'readonly',
+                t: 'readonly',
+                renderMarkdown: 'readonly',
+            },
+        },
+        rules: {
+            'no-unused-vars': ['warn', { args: 'none', varsIgnorePattern: '^_' }],
+            'no-undef': 'error',
+            eqeqeq: ['warn', 'smart'],
+            'no-var': 'warn',
+            'prefer-const': 'warn',
+            'no-empty': ['warn', { allowEmptyCatch: true }],
+        },
+    },
+];

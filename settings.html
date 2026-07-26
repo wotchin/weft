@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Settings - Cyber Assistant</title>
+    <title>Settings - Weft</title>
     <style>
         * {
             box-sizing: border-box;
@@ -189,61 +189,71 @@
     <div class="settings-container">
         <div class="back-banner">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-            Click the Cyber Assistant icon in your toolbar to return to the extension popup.
+            <span data-i18n="settings_back_banner">Click the Weft icon in your toolbar to return to the extension popup.</span>
         </div>
         <div class="settings-header">
-            <h1>Cyber Assistant Settings</h1>
-            <p>Configure your LLM API connection and preferences</p>
+            <h1 data-i18n="settings_title">Weft Settings</h1>
+            <p data-i18n="settings_subtitle">Configure your LLM API connection and preferences</p>
+        </div>
+
+        <div class="settings-card">
+            <div class="card-title">
+                <span class="icon">🌐</span>
+                <span data-i18n="settings_lang_title">Language</span>
+            </div>
+            <div class="form-group">
+                <label for="uiLanguage" data-i18n="settings_lang_label">Interface &amp; answer language</label>
+                <select id="uiLanguage"></select>
+                <div class="hint" data-i18n="settings_lang_hint">Sets the interface language and asks the AI to answer in the same language, whatever language the source page is in. The interface is currently translated into English and 简体中文; other choices keep the English interface but still change the AI's answers.</div>
+            </div>
         </div>
 
         <div class="settings-card">
             <div class="card-title">
                 <span class="icon">API</span>
-                LLM Provider
-            </div>
-            <div class="preset-buttons">
-                <button class="preset-btn" data-provider="openai" data-url="https://api.openai.com" data-model="gpt-4o-mini">OpenAI</button>
-                <button class="preset-btn" data-provider="anthropic" data-url="https://api.anthropic.com" data-model="claude-sonnet-4-6">Anthropic</button>
-                <button class="preset-btn" data-provider="deepseek" data-url="https://api.deepseek.com" data-model="deepseek-chat">DeepSeek</button>
-                <button class="preset-btn" data-provider="groq" data-url="https://api.groq.com/openai" data-model="llama-3.3-70b-versatile">Groq</button>
-                <button class="preset-btn" data-provider="custom" data-url="" data-model="">Custom</button>
+                <span data-i18n="settings_provider_title">LLM Provider</span>
             </div>
             <div class="form-group">
-                <label for="apiBaseUrl">API Base URL</label>
-                <input type="text" id="apiBaseUrl" placeholder="https://api.openai.com">
-                <div class="hint">The base URL of the API endpoint, e.g. https://api.openai.com or https://api.groq.com/openai/v1 (trailing /v1 is handled automatically)</div>
+                <label for="provider" data-i18n="settings_provider_label">Provider</label>
+                <select id="provider"></select>
+                <div class="hint" data-i18n="settings_provider_hint">Pick a provider to prefill its endpoint and a default model. Bring your own key — it never leaves your machine except to this endpoint.</div>
             </div>
-            <div class="form-group">
-                <label for="apiKey">API Key</label>
+            <div class="form-group" id="apiKeyGroup">
+                <label for="apiKey" data-i18n="settings_key_label">API Key</label>
                 <input type="password" id="apiKey" placeholder="sk-...">
             </div>
             <div class="form-group">
-                <label for="modelName">Model Name</label>
+                <label for="modelName" data-i18n="settings_model_label">Model Name</label>
                 <input type="text" id="modelName" placeholder="gpt-4o-mini">
-                <div class="hint">Model identifier, e.g. gpt-4o-mini, claude-sonnet-4-6, deepseek-chat</div>
+                <div class="hint" data-i18n="settings_model_hint">Model identifier. Editable — model names change often.</div>
+            </div>
+            <div class="form-group">
+                <label for="apiBaseUrl" data-i18n="settings_baseurl_label">API Base URL <span style="font-weight:400;color:#999;">(advanced)</span></label>
+                <input type="text" id="apiBaseUrl" placeholder="https://api.openai.com/v1">
+                <div class="hint" data-i18n="settings_baseurl_hint">Prefilled from the provider. Only change for self-hosted or proxy endpoints.</div>
             </div>
         </div>
 
         <div class="settings-card">
             <div class="card-title">
                 <span class="icon">Opt</span>
-                Generation Options
+                <span data-i18n="settings_gen_title">Generation Options</span>
             </div>
             <div class="form-group">
-                <label for="maxTokens">Max Tokens</label>
+                <label for="maxTokens" data-i18n="settings_max_tokens">Max Tokens</label>
                 <input type="number" id="maxTokens" placeholder="2000" min="100" max="32000">
             </div>
             <div class="form-group">
-                <label for="temperature">Temperature</label>
+                <label for="temperature" data-i18n="settings_temperature">Temperature</label>
                 <input type="number" id="temperature" placeholder="0.7" min="0" max="2" step="0.1">
-                <div class="hint">0 = deterministic, higher = more creative (0-2)</div>
+                <div class="hint" data-i18n="settings_temperature_hint">0 = deterministic, higher = more creative (0-2)</div>
             </div>
             <div class="form-group">
-                <label for="visionMode">Vision (Image Understanding)</label>
+                <label for="visionMode" data-i18n="settings_vision">Vision (Image Understanding)</label>
                 <select id="visionMode">
                     <option value="auto">Auto-detect (based on model name)</option>
-                    <option value="enabled">Always enabled</option>
-                    <option value="disabled">Always disabled</option>
+                    <option value="on">Always enabled</option>
+                    <option value="off">Always disabled</option>
                 </select>
                 <div class="hint">Auto-detect works for known models (GPT-4o, Claude, Gemini, Qwen-VL, etc). Use "Always enabled" if your model supports vision but isn't recognized. Models like DeepSeek-chat that don't support vision will receive image URLs as text instead.</div>
             </div>
@@ -252,28 +262,63 @@
         <div class="settings-card">
             <div class="card-title">
                 <span class="icon">RAG</span>
-                Smart Context Retrieval
+                <span data-i18n="settings_rag_title">Smart Context Retrieval</span>
             </div>
             <div class="form-group">
                 <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
                     <input type="checkbox" id="ragEnabled" style="width:auto;">
-                    Enable smart context retrieval (RAG)
+                    <span data-i18n="settings_rag_enable">Enable smart context retrieval (RAG)</span>
                 </label>
-                <div class="hint">When enabled, only the most relevant snippets are sent to the AI based on your query. When disabled, all snippets are sent (current behavior). Useful when sessions contain many snippets to reduce token usage and improve answer quality.</div>
+                <div class="hint" data-i18n="settings_rag_hint">When enabled, only the most relevant snippets are sent to the AI based on your query. When disabled, all snippets are sent. Useful when sessions contain many snippets to reduce token usage and improve answer quality.</div>
             </div>
             <div class="form-group">
-                <label for="ragTokenBudget">Context Token Budget</label>
+                <label for="ragTokenBudget" data-i18n="settings_rag_budget">Context Token Budget</label>
                 <input type="number" id="ragTokenBudget" placeholder="12000" min="1000" max="100000" step="1000">
                 <div class="hint">Maximum estimated tokens to include from snippets when RAG is active. Sessions smaller than 15K tokens will always send everything regardless of this setting.</div>
             </div>
         </div>
 
+        <div class="settings-card">
+            <div class="card-title">
+                <span class="icon">Web</span>
+                <span data-i18n="settings_search_title">Web Search (optional)</span>
+            </div>
+            <div class="form-group">
+                <label for="searchProvider" data-i18n="settings_search_label">Search provider</label>
+                <select id="searchProvider">
+                    <option value="none">Off</option>
+                    <option value="tavily">Tavily — free tier, no card (recommended)</option>
+                    <option value="searxng">SearXNG — your own instance</option>
+                    <option value="brave">Brave Search — paid</option>
+                </select>
+                <div class="hint" data-i18n="settings_search_hint">Powers Deep Search and online cross-checking. Queries go only to the provider you pick. Weft never scrapes Google or Bing — that breaks their terms and gets extensions rejected.</div>
+            </div>
+            <div class="hint" id="searchProviderNote" style="margin:-6px 0 12px;"></div>
+            <div class="form-group" id="searchKeyGroup" style="display:none;">
+                <label for="searchApiKey" data-i18n="settings_search_key">Search API Key</label>
+                <input type="password" id="searchApiKey" placeholder="key">
+            </div>
+            <div class="form-group" id="searchEndpointGroup" style="display:none;">
+                <label for="searchEndpoint" data-i18n="settings_search_endpoint">SearXNG address</label>
+                <input type="text" id="searchEndpoint" placeholder="https://searx.example.com">
+                <div class="hint" data-i18n="settings_search_json_note">The instance must have the JSON output format enabled (<code>search.formats</code> in its settings.yml). Most public instances turn it off, so this usually means running your own.</div>
+            </div>
+            <button id="testSearch" class="test-btn" type="button" data-i18n="settings_search_test">Test search</button>
+            <div id="searchStatus" class="status-message" style="margin-top:12px;"></div>
+        </div>
+
         <div class="btn-row">
-            <button id="saveSettings" class="save-btn">Save Settings</button>
-            <button id="testConnection" class="test-btn">Test Connection</button>
+            <button id="saveSettings" class="save-btn" data-i18n="settings_save">Save Settings</button>
+            <button id="testConnection" class="test-btn" data-i18n="settings_test">Test Connection</button>
         </div>
         <div id="statusMessage" class="status-message"></div>
     </div>
+    <script src="lib/idb.js"></script>
+    <script src="lib/store.js"></script>
+    <script src="lib/providers.js"></script>
+    <script src="lib/llm-client.js"></script>
+    <script src="lib/search-provider.js"></script>
+    <script src="lib/i18n.js"></script>
     <script src="settings.js"></script>
 </body>
 </html>

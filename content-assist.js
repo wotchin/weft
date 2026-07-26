@@ -19,111 +19,218 @@
     }
 
     // ---- Configuration ----
-    const QUICK_QUESTIONS = [
-        { id: 'reliability', icon: '\u2714', label: 'Verify', question: 'Please evaluate the reliability and credibility of this information. Identify the likely source, check for potential biases, assess factual accuracy, and rate the trustworthiness. Search the web if needed to verify claims.' },
-        { id: 'similar',     icon: '\u2261', label: 'Similar', question: 'What are similar viewpoints, arguments, or perspectives to the one expressed in this text? Search for related opinions and supporting evidence from other sources.' },
-        { id: 'opposing',    icon: '\u2194', label: 'Opposing', question: 'What are the main counterarguments or opposing viewpoints to this claim? Search for credible sources that disagree with or challenge this perspective.' },
-        { id: 'explain',     icon: '?',      label: 'Explain', question: 'Please explain this content in simple, easy-to-understand terms. Break down any jargon or complex concepts.' },
-        { id: 'diagram',     icon: '\u25A6', label: 'Diagram', question: '__DIAGRAM__' },
+    // The toolbar is a deliberate SUBSET of the context menu: the actions that
+    // are frequent and cheap enough to want one click. Anything rarer (choosing
+    // a session, tagging, diagrams, custom questions) lives in the right-click
+    // menu, which remains the complete surface.
+    //
+    // Prompts live in the service worker (QUICK_ACTIONS in background.js) and
+    // are never exposed to the page.
+    const QUICK_ACTIONS = [
+        { id: 'verify',     icon: '\u2713', key: 'verify' },
+        { id: 'explain',    icon: '?', key: 'explain' },
+        { id: 'key_points', icon: '\u2261', key: 'points' },
     ];
 
-    let toolbar = null;
-    let commentModal = null;
-    let customQuestions = [];
-    let cachedSelection = ''; // captured when toolbar shows, before click clears it
+    // Strings resolved by the service worker in the user's chosen language.
+    // English defaults keep the toolbar usable if the lookup ever fails.
+    let S = {
+        tb_save: 'Save', tb_save_hint: 'Save to the current session',
+        tb_verify: 'Verify', tb_verify_hint: 'Check how well this holds up',
+        tb_explain: 'Explain', tb_explain_hint: 'Explain in plain language',
+        tb_points: 'Points', tb_points_hint: 'Extract the key points',
+        tb_ask: 'Ask', tb_ask_hint: 'Ask your own question about this',
+        card_thinking: 'Thinking\u2026', card_reasoning: 'Reasoning\u2026',
+        card_copy: 'Copy', card_copied: 'Copied', card_save: 'Save', card_saved: 'Saved',
+        card_save_hint: 'Save the passage and this result to your session',
+        card_failed: 'Failed', card_close: 'Close',
+        modal_cancel: 'Cancel', modal_save: 'Save', modal_comment_ph: 'Add your comment (optional)…',
+        card_disconnected: 'The connection to Weft ended before an answer arrived. Try again.',
+        card_reload: 'Weft was reloaded \u2014 refresh the page and try again.',
+        toast_saved_to: 'Saved to \u201c%s\u201d', toast_save_failed: 'Could not save \u2014 try reloading the page.',
+    };
 
-    // Load custom questions from storage
     try {
-        chrome.storage.local.get(['customAskQuestions'], (data) => {
-            customQuestions = (data && data.customAskQuestions) || [];
-        });
-
-        // Listen for storage changes to update custom questions
-        chrome.storage.onChanged.addListener((changes) => {
-            if (changes.customAskQuestions) {
-                customQuestions = changes.customAskQuestions.newValue || [];
-            }
+        chrome.runtime.sendMessage({ type: 'getUiStrings' }, (res) => {
+            if (chrome.runtime.lastError || !res) return;
+            S = { ...S, ...res };
+            // Rebuild the toolbar so it picks up the new language.
+            if (toolbar) { toolbar.remove(); toolbar = null; }
         });
     } catch { /* extension context invalidated */ }
 
-    // ---- Floating Ask AI Toolbar ----
+    let toolbar = null;
+    let commentModal = null;
+    let cachedSelection = ''; // captured when toolbar shows, before click clears it
+
+    // ---- Floating selection toolbar ----
+    // Styles are injected once into a <style> tag so hover/active states are
+    // real CSS rather than JS listeners, and page styles can't bleed in.
+    const TOOLBAR_STYLE_ID = 'weft-toolbar-style';
+    const WEFT_CSS = `
+    #weft-toolbar, #weft-card {
+        --weft-fg:#1f2328; --weft-muted:#6b7280; --weft-line:#e5e7eb;
+        --weft-accent:#2563eb; --weft-bg:#fff;
+        font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;
+        box-sizing:border-box;
+    }
+    #weft-toolbar *, #weft-card * { box-sizing:border-box; }
+    #weft-toolbar {
+        position:fixed; z-index:2147483647; display:none;
+        background:var(--weft-bg);
+        border:1px solid var(--weft-line); border-radius:12px;
+        box-shadow:0 6px 24px rgba(15,23,42,.14), 0 1px 2px rgba(15,23,42,.06);
+        padding:4px; white-space:nowrap; line-height:1;
+        animation:weft-pop .12s ease-out;
+    }
+    @keyframes weft-pop { from { opacity:0; transform:translateY(3px) scale(.98); } to { opacity:1; transform:none; } }
+    #weft-toolbar .weft-brand {
+        display:inline-flex; align-items:center; justify-content:center;
+        width:24px; height:24px; margin:0 3px 0 2px; border-radius:7px;
+        background:linear-gradient(135deg,#3b82f6,#1d4ed8); color:#fff;
+        font-size:11px; font-weight:700; vertical-align:middle; letter-spacing:-.3px;
+    }
+    #weft-toolbar .weft-sep {
+        display:inline-block; width:1px; height:18px; margin:0 4px;
+        background:var(--weft-line); vertical-align:middle;
+    }
+    #weft-toolbar button {
+        display:inline-flex; align-items:center; gap:5px; vertical-align:middle;
+        margin:0 1px; padding:6px 9px;
+        border:0; border-radius:8px; background:transparent;
+        font-family:inherit; font-size:12px; font-weight:500; color:var(--weft-fg);
+        cursor:pointer; line-height:1; transition:background .12s, color .12s;
+    }
+    #weft-toolbar button:hover { background:#eff4ff; color:var(--weft-accent); }
+    #weft-toolbar button:active { background:#dbe6ff; }
+    #weft-toolbar button .weft-ico { font-size:12px; opacity:.75; }
+    #weft-toolbar button:hover .weft-ico { opacity:1; }
+    /* Primary action (Save) — the one people reach for most. */
+    #weft-toolbar button.weft-primary { color:var(--weft-accent); font-weight:600; }
+    #weft-toolbar button.weft-primary .weft-ico { opacity:1; font-weight:700; }
+    #weft-toolbar button.weft-primary:hover { background:#dbe6ff; }
+
+    /* Result card */
+    #weft-card {
+        position:fixed; z-index:2147483647; width:380px; max-width:calc(100vw - 24px);
+        background:var(--weft-bg); color:var(--weft-fg);
+        border:1px solid var(--weft-line); border-radius:14px;
+        box-shadow:0 12px 40px rgba(15,23,42,.18), 0 1px 3px rgba(15,23,42,.08);
+        animation:weft-pop .14s ease-out; overflow:hidden;
+    }
+    #weft-card .weft-card-head {
+        display:flex; align-items:center; gap:8px;
+        padding:11px 13px; border-bottom:1px solid var(--weft-line); background:#fbfcfe;
+    }
+    #weft-card .weft-card-title { font-size:13px; font-weight:600; flex:1; }
+    #weft-card .weft-card-x {
+        border:0; background:transparent; cursor:pointer; color:var(--weft-muted);
+        font-size:16px; line-height:1; padding:2px 4px; border-radius:5px;
+    }
+    #weft-card .weft-card-x:hover { background:#eee; color:var(--weft-fg); }
+    #weft-card .weft-progress { height:2px; background:#eef2f7; overflow:hidden; }
+    #weft-card .weft-progress i {
+        display:block; height:100%; width:35%; border-radius:2px;
+        background:linear-gradient(90deg,#3b82f6,#60a5fa);
+        animation:weft-slide 1.1s ease-in-out infinite;
+    }
+    @keyframes weft-slide { 0%{transform:translateX(-100%)} 100%{transform:translateX(320%)} }
+    #weft-card .weft-card-body {
+        padding:12px 13px; font-size:13px; line-height:1.62; color:#25303f;
+        max-height:320px; overflow-y:auto; white-space:pre-wrap; word-break:break-word;
+    }
+    #weft-card .weft-status { color:var(--weft-muted); font-style:italic; }
+    #weft-card .weft-card-foot {
+        display:flex; align-items:center; gap:8px;
+        padding:8px 13px; border-top:1px solid var(--weft-line);
+        font-size:11px; color:var(--weft-muted); background:#fbfcfe;
+    }
+    #weft-card .weft-stats { flex:1; font-variant-numeric:tabular-nums; }
+    #weft-card .weft-act {
+        border:1px solid var(--weft-line); background:#fff; color:#374151;
+        border-radius:7px; padding:4px 9px; font-size:11px; font-family:inherit;
+        cursor:pointer; transition:border-color .12s,color .12s;
+    }
+    #weft-card .weft-act:hover { border-color:var(--weft-accent); color:var(--weft-accent); }
+    #weft-card .weft-err { color:#b42318; }
+    `;
+
+    function injectStyles() {
+        if (document.getElementById(TOOLBAR_STYLE_ID)) return;
+        const st = document.createElement('style');
+        st.id = TOOLBAR_STYLE_ID;
+        st.textContent = WEFT_CSS;
+        (document.head || document.documentElement).appendChild(st);
+    }
+
     function createToolbar() {
         if (toolbar) return toolbar;
+        injectStyles();
 
         toolbar = document.createElement('div');
-        toolbar.id = 'cyber-ask-toolbar';
-        toolbar.style.cssText = `
-            position:fixed; z-index:2147483647; display:none;
-            background:#fff; border:1px solid #e0e0e0; border-radius:10px;
-            box-shadow:0 4px 20px rgba(0,0,0,0.12); padding:5px 6px;
-            font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
-            font-size:12px; line-height:1; white-space:nowrap;
-            transition:opacity 0.15s;
-        `;
+        toolbar.id = 'weft-toolbar';
 
-        // Logo/brand
-        const brand = document.createElement('span');
-        brand.textContent = 'AI';
-        brand.style.cssText = `
-            display:inline-flex; align-items:center; justify-content:center;
-            width:22px; height:22px; border-radius:5px;
-            background:linear-gradient(135deg,#2196f3,#1565c0); color:#fff;
-            font-size:10px; font-weight:700; margin-right:4px; vertical-align:middle;
-        `;
-        toolbar.appendChild(brand);
+        // Save is the most frequent action, so it leads and is visually primary.
+        const saveBtn = createToolbarBtn('\uFF0B', S.tb_save, 'save', saveSelection, S.tb_save_hint);
+        saveBtn.classList.add('weft-primary');
+        toolbar.appendChild(saveBtn);
 
-        // Quick question buttons
-        QUICK_QUESTIONS.forEach(q => {
-            toolbar.appendChild(createToolbarBtn(q.icon, q.label, q.id, () => {
-                askAI(q.question, q.id);
-            }));
+        const sep = document.createElement('span');
+        sep.className = 'weft-sep';
+        toolbar.appendChild(sep);
+
+        // Quick analyses run inline and render into a compact result card.
+        QUICK_ACTIONS.forEach((q) => {
+            const label = S[`tb_${q.key}`];
+            toolbar.appendChild(createToolbarBtn(q.icon, label, q.id, () => {
+                runQuickAction(q.id, label);
+            }, S[`tb_${q.key}_hint`]));
         });
 
-        // "Ask..." button for free-form
-        const askBtn = createToolbarBtn('\u270E', 'Ask...', 'freeform', () => {
+        // Free-form questions need the full workbench.
+        toolbar.appendChild(createToolbarBtn('\u270E', S.tb_ask, 'freeform', () => {
             askAI('', 'freeform');
-        });
-        toolbar.appendChild(askBtn);
-
-        // Separator + custom questions
-        if (customQuestions.length > 0) {
-            const sep = document.createElement('span');
-            sep.style.cssText = 'display:inline-block;width:1px;height:16px;background:#e0e0e0;margin:0 3px;vertical-align:middle;';
-            toolbar.appendChild(sep);
-
-            customQuestions.forEach((cq, i) => {
-                toolbar.appendChild(createToolbarBtn('\u2605', cq.label || `Q${i+1}`, `custom-${i}`, () => {
-                    askAI(cq.question, `custom-${i}`);
-                }));
-            });
-        }
+        }, S.tb_ask_hint));
 
         document.body.appendChild(toolbar);
         return toolbar;
     }
 
-    function createToolbarBtn(icon, label, id, onClick) {
+    /** One-click save of the selection into the active session. */
+    function saveSelection() {
+        if (!contextValid()) return;
+        const sel = window.getSelection();
+        const text = cachedSelection || (sel ? sel.toString().trim() : '');
+        cachedSelection = '';
+        if (!text) return;
+
+        chrome.runtime.sendMessage({
+            type: 'saveSelection',
+            text,
+            sourceUrl: location.href,
+            sourceTitle: document.title,
+        }, (res) => {
+            if (chrome.runtime.lastError || !res || !res.ok) {
+                showToast('Weft', S.toast_save_failed);
+                return;
+            }
+            showToast(S.toast_saved_to.replace('%s', res.session), text.slice(0, 60));
+        });
+    }
+
+    function createToolbarBtn(icon, label, id, onClick, hint) {
         const btn = document.createElement('button');
-        btn.dataset.cyberAction = id;
-        btn.title = label;
-        btn.style.cssText = `
-            display:inline-flex; align-items:center; gap:3px;
-            padding:4px 8px; border:1px solid #eee; border-radius:6px;
-            background:#fafafa; cursor:pointer; font-size:11px; color:#555;
-            margin:0 2px; vertical-align:middle;
-            transition:all 0.12s; font-family:inherit; line-height:1;
-        `;
-        btn.innerHTML = `<span style="font-size:12px;">${icon}</span> ${label}`;
-        btn.addEventListener('mouseenter', () => {
-            btn.style.background = '#e3f2fd';
-            btn.style.borderColor = '#2196f3';
-            btn.style.color = '#1565c0';
-        });
-        btn.addEventListener('mouseleave', () => {
-            btn.style.background = '#fafafa';
-            btn.style.borderColor = '#eee';
-            btn.style.color = '#555';
-        });
+        btn.dataset.weftAction = id;
+        // Short label on screen, fuller description on hover.
+        btn.title = hint || label;
+
+        const ico = document.createElement('span');
+        ico.className = 'weft-ico';
+        ico.textContent = icon;
+        btn.appendChild(ico);
+        btn.appendChild(document.createTextNode(label));
+
+        btn.addEventListener('mousedown', (e) => e.preventDefault()); // keep selection
         btn.addEventListener('click', (e) => {
             e.stopPropagation();
             e.preventDefault();
@@ -159,10 +266,226 @@
         if (toolbar) toolbar.style.display = 'none';
     }
 
+    // ---- Inline result card ----------------------------------------------
+    // Quick actions render here instead of opening the workbench: a small card
+    // anchored to the selection, showing progress, elapsed time and token cost,
+    // then the answer itself. Text is inserted with textContent, never HTML.
+
+    let card = null;
+    let cardPort = null;
+
+    function closeCard() {
+        if (cardPort) { try { cardPort.disconnect(); } catch { /* already gone */ } cardPort = null; }
+        if (card) { card.remove(); card = null; }
+    }
+
+    function createCard(title, anchorRect) {
+        closeCard();
+        injectStyles();
+
+        card = document.createElement('div');
+        card.id = 'weft-card';
+
+        const head = document.createElement('div');
+        head.className = 'weft-card-head';
+        const brand = document.createElement('span');
+        brand.className = 'weft-brand';
+        brand.textContent = 'W';
+        const titleEl = document.createElement('span');
+        titleEl.className = 'weft-card-title';
+        titleEl.textContent = title;
+        const close = document.createElement('button');
+        close.className = 'weft-card-x';
+        close.textContent = '×';
+        close.title = S.card_close;
+        close.addEventListener('click', closeCard);
+        head.append(brand, titleEl, close);
+
+        const progress = document.createElement('div');
+        progress.className = 'weft-progress';
+        progress.appendChild(document.createElement('i'));
+
+        const body = document.createElement('div');
+        body.className = 'weft-card-body';
+        // Explicit status line — replaced by the answer, an error, or a clear
+        // "empty response" notice. It is never left dangling.
+        const status = document.createElement('div');
+        status.className = 'weft-status';
+        status.textContent = S.card_thinking;
+        body.appendChild(status);
+
+        const foot = document.createElement('div');
+        foot.className = 'weft-card-foot';
+        const stats = document.createElement('span');
+        stats.className = 'weft-stats';
+        stats.textContent = '0.0s';
+        foot.appendChild(stats);
+
+        card._status = status;
+        card.append(head, progress, body, foot);
+        document.body.appendChild(card);
+
+        // Position near the selection, clamped to the viewport.
+        const r = card.getBoundingClientRect();
+        let left = (anchorRect ? anchorRect.left : 20);
+        let top = (anchorRect ? anchorRect.bottom + 10 : 20);
+        if (left + r.width > window.innerWidth - 12) left = window.innerWidth - r.width - 12;
+        if (left < 12) left = 12;
+        if (top + r.height > window.innerHeight - 12) {
+            const above = (anchorRect ? anchorRect.top : 0) - r.height - 10;
+            top = above > 12 ? above : Math.max(12, window.innerHeight - r.height - 12);
+        }
+        card.style.left = Math.round(left) + 'px';
+        card.style.top = Math.round(top) + 'px';
+
+        return { body, stats, progress, foot };
+    }
+
+    function runQuickAction(actionId, label) {
+        if (!contextValid()) return;
+
+        const sel = window.getSelection();
+        const selectedText = cachedSelection || (sel ? sel.toString().trim() : '');
+        cachedSelection = '';
+        if (!selectedText) return;
+
+        // Anchor the card to the selection before it gets cleared.
+        let anchorRect = null;
+        try {
+            if (sel && sel.rangeCount) anchorRect = sel.getRangeAt(0).getBoundingClientRect();
+        } catch { /* detached range */ }
+
+        const { body, stats, progress, foot } = createCard(label, anchorRect);
+
+        const started = Date.now();
+        const ticker = setInterval(() => {
+            stats.textContent = ((Date.now() - started) / 1000).toFixed(1) + 's';
+        }, 100);
+
+        function finish() {
+            clearInterval(ticker);
+            progress.remove();
+        }
+
+        let port;
+        try {
+            port = chrome.runtime.connect({ name: 'weft-quick' });
+        } catch {
+            finish();
+            body.textContent = S.card_reload;
+            return;
+        }
+        cardPort = port;
+
+        // If the worker goes away mid-flight, don't leave the card spinning.
+        port.onDisconnect.addListener(() => {
+            finish();
+            cardPort = null;
+            const s = statusEl();
+            if (s && !answer) {
+                s.textContent = S.card_disconnected;
+                s.classList.add('weft-err');
+            }
+        });
+
+        let answer = '';
+        const statusEl = () => card && card._status;
+
+        port.onMessage.addListener((msg) => {
+            if (!msg) return;
+
+            if (msg.type === 'reasoning') {
+                const s = statusEl();
+                if (s && !answer) s.textContent = S.card_reasoning;
+                return;
+            }
+
+            if (msg.type === 'delta') {
+                // First token replaces the status line with the answer itself.
+                if (!answer) {
+                    const s = statusEl();
+                    if (s) s.remove();
+                }
+                answer += msg.delta;
+                body.textContent = answer;
+                body.scrollTop = body.scrollHeight;
+                return;
+            }
+
+            if (msg.type === 'done') {
+                finish();
+                const secs = (msg.elapsed / 1000).toFixed(1);
+                const tok = (msg.promptTokens || 0) + (msg.completionTokens || 0);
+                stats.textContent = `${secs}s · ${msg.estimated ? '~' : ''}${tok} tokens`;
+                if (answer.trim()) addCardActions(foot, msg.text || answer, selectedText);
+                try { port.disconnect(); } catch { /* noop */ }
+                cardPort = null;
+                return;
+            }
+
+            if (msg.type === 'error') {
+                finish();
+                stats.textContent = '';
+                body.textContent = msg.message + (msg.hint ? '\n\n' + msg.hint : '');
+                body.classList.add('weft-err');
+                try { port.disconnect(); } catch { /* noop */ }
+                cardPort = null;
+            }
+        });
+
+        port.postMessage({
+            type: 'run',
+            action: actionId,
+            text: selectedText,
+            url: location.href,
+            title: document.title,
+        });
+    }
+
+    function addCardActions(foot, resultText, selectedText) {
+        const copy = document.createElement('button');
+        copy.className = 'weft-act';
+        copy.textContent = S.card_copy;
+        copy.addEventListener('click', () => {
+            navigator.clipboard.writeText(resultText).then(() => {
+                copy.textContent = S.card_copied;
+                setTimeout(() => { copy.textContent = S.card_copy; }, 1400);
+            }).catch(() => { copy.textContent = S.card_failed; });
+        });
+
+        const save = document.createElement('button');
+        save.className = 'weft-act';
+        save.textContent = S.card_save;
+        save.title = S.card_save_hint;
+        save.addEventListener('click', () => {
+            chrome.runtime.sendMessage({
+                type: 'saveQuickResult',
+                selectedText,
+                result: resultText,
+                sourceUrl: location.href,
+                sourceTitle: document.title,
+            }, () => {
+                if (chrome.runtime.lastError) { save.textContent = S.card_failed; return; }
+                save.textContent = S.card_saved;
+                setTimeout(() => { save.textContent = S.card_save; }, 1400);
+            });
+        });
+
+        foot.append(copy, save);
+    }
+
+    // Dismiss the card on outside click or Escape.
+    document.addEventListener('mousedown', (e) => {
+        if (card && !card.contains(e.target)) closeCard();
+    }, true);
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && card) closeCard();
+    }, true);
+
     /**
      * Send selected text + question to the chat window via background.
      */
-    function askAI(question, questionType) {
+    function askAI(question, questionType, label) {
         if (!contextValid()) return;
         // Use cached selection (captured when toolbar appeared) as primary,
         // fall back to current selection
@@ -175,6 +498,7 @@
             selectedText,
             question: question === '__DIAGRAM__' ? '' : question,
             questionType: question === '__DIAGRAM__' ? 'diagram' : questionType,
+            label: label || '',
             sourceUrl: location.href,
             sourceTitle: document.title,
             timestamp: Date.now(),
@@ -247,7 +571,7 @@
                 font-family:inherit; font-size:13px; resize:vertical; outline:none;
                 transition:border-color 0.15s;
             `;
-            textarea.placeholder = 'Add your comment (optional)...';
+            textarea.placeholder = S.modal_comment_ph;
             textarea.addEventListener('focus', () => textarea.style.borderColor = '#2196f3');
             textarea.addEventListener('blur', () => textarea.style.borderColor = '#ddd');
 
@@ -255,7 +579,7 @@
             btnRow.style.cssText = 'display:flex;justify-content:flex-end;gap:8px;margin-top:12px;';
 
             const cancelBtn = document.createElement('button');
-            cancelBtn.textContent = 'Cancel';
+            cancelBtn.textContent = S.modal_cancel;
             cancelBtn.style.cssText = 'padding:6px 16px;border:1px solid #ddd;border-radius:6px;background:#fff;font-size:13px;cursor:pointer;color:#666;';
             cancelBtn.addEventListener('click', () => {
                 commentModal.remove();
@@ -264,7 +588,7 @@
             });
 
             const saveBtn = document.createElement('button');
-            saveBtn.textContent = 'Save';
+            saveBtn.textContent = S.modal_save;
             saveBtn.style.cssText = 'padding:6px 16px;border:none;border-radius:6px;background:#2196f3;font-size:13px;cursor:pointer;color:#fff;font-weight:500;';
             saveBtn.addEventListener('click', () => {
                 const comment = textarea.value.trim();
@@ -508,6 +832,28 @@
         if (message.type === 'highlightSnippets') {
             const result = highlightSnippetsOnPage(message.snippets || []);
             sendResponse(result);
+            return false;
+        }
+
+        if (message.type === 'runQuickAction') {
+            // Triggered from the context menu — use the live selection.
+            const sel = window.getSelection();
+            cachedSelection = sel ? sel.toString().trim() : '';
+            const spec = QUICK_ACTIONS.find((a) => a.id === message.action);
+            runQuickAction(message.action, spec ? spec.label : 'Weft');
+            sendResponse({ ok: true });
+            return false;
+        }
+
+        if (message.type === 'highlightSnippet') {
+            // Single-snippet highlight used by citation jump-to-source.
+            const result = highlightSnippetsOnPage([message.snippet]);
+            // Scroll the first match into view if we highlighted anything.
+            if (result.highlighted > 0) {
+                const el = document.querySelector('[data-cyber-snippet-hl], [data-cyber-highlight]');
+                if (el && el.scrollIntoView) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }
+            sendResponse({ found: result.highlighted > 0 });
             return false;
         }
     });

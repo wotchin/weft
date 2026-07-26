@@ -1,18 +1,50 @@
 document.addEventListener('DOMContentLoaded', async function() {
+    // Resolve the interface language before any string is read or rendered.
+    await I18N.init();
+    I18N.apply();
+
+    // Entry mode: 'panel' (side panel), 'askAI' (popup window), or full page.
+    const chatMode = new URLSearchParams(location.search).get('mode') || 'full';
+    if (chatMode === 'panel') {
+        document.body.classList.add('mode-panel');
+        // Offer an "expand to full window" affordance from the narrow panel.
+        const expandBtn = document.getElementById('expandBtn');
+        if (expandBtn) {
+            expandBtn.style.display = '';
+            expandBtn.addEventListener('click', () => {
+                chrome.windows.create({
+                    url: chrome.runtime.getURL('chat.html'),
+                    type: 'popup', width: 960, height: 760,
+                });
+            });
+        }
+    }
+
     const chatMessages = document.getElementById('chatMessages');
+    // Citation chips ([S1] → clickable) jump back to the source page.
+    if (typeof Citations !== 'undefined') Citations.bindClicks(chatMessages);
     const userInput = document.getElementById('userInput');
     const sendButton = document.getElementById('sendMessage');
     const clearButton = document.getElementById('clearChat');
     const exportBtn = document.getElementById('exportBtn');
-    const sessionBadge = document.getElementById('sessionBadge');
     const contextPanel = document.getElementById('contextPanel');
     const contextBody = document.getElementById('contextBody');
     const toggleContext = document.getElementById('toggleContext');
-    const templateSelect = document.getElementById('templateSelect');
+    const sessionSelect = document.getElementById('sessionSelect');
+    const snippetSearch = document.getElementById('snippetSearch');
+    const snippetCount = document.getElementById('snippetCount');
 
     const askPageBtn = document.getElementById('askPageBtn');
     const takeawaysBtn = document.getElementById('takeawaysBtn');
     const deepSearchBtn = document.getElementById('deepSearchBtn');
+    // Deep Search uses a pluggable, BYOK search provider (Tavily/Brave/SearXNG).
+    // Only show it once the user has configured one in Settings.
+    if (deepSearchBtn) {
+        deepSearchBtn.style.display = 'none';
+        SearchProvider.isEnabled().then((on) => {
+            if (on) deepSearchBtn.style.display = '';
+        }).catch(() => {});
+    }
     const drawDiagramBtn = document.getElementById('drawDiagramBtn');
     const diagramSelector = document.getElementById('diagramSelector');
     const diagramTypeGrid = document.getElementById('diagramTypeGrid');
@@ -32,38 +64,179 @@ document.addEventListener('DOMContentLoaded', async function() {
     let sessionSnippets = [];
     let conversationHistory = [];
     let isStreaming = false;
+    // Citation index map for the current turn (S1→snippet). Null when RAG filters
+    // the context (marker numbering would not align with the full snippet list).
+    let activeIndexMap = null;
     let pageContent = null; // cached page extraction result
     let pendingSearchPlan = null; // LLM-generated search plan awaiting confirmation
 
     // Prompt templates
     const promptTemplates = {
-        summarize: "Please summarize the following collected information into a concise, well-structured overview. Highlight the key themes and main takeaways.",
-        report: "Based on the following collected information, generate a detailed analysis report in HTML format. Include: an executive summary, key findings with supporting data, analysis of trends or patterns, and conclusions with recommendations. Use tables and lists where appropriate. Wrap the entire report in styled HTML.",
-        compare: "Compare and contrast the different perspectives, data points, or viewpoints found in the following collected information. Present the comparison in a clear, structured format with a table if applicable.",
-        extract: "Extract and list the key points, important facts, and critical data from the following collected information. Organize them by topic or category.",
-        table: "Organize the following collected information into a well-structured table (HTML format). Identify appropriate column headers based on the data patterns.",
-        translate_zh: "Please translate the following collected information into Chinese. Maintain the original structure and meaning.",
-        translate_en: "Please translate the following collected information into English. Maintain the original structure and meaning.",
+        // Core scenario: Report
+        report: "Based on the collected snippets, write an integrated analysis report in markdown. Structure it as: Summary, Key Findings, Points of Disagreement (if any), and Conclusion. Cite every factual claim with its source marker, e.g. [S1].",
+        // Core scenario: Verify (cross-check across sources)
+        verify: "Cross-check the claims in the collected snippets against each other. Produce: (1) a consistency assessment noting where sources agree or conflict, (2) a confidence rating for each key claim, and (3) an explicit list of claims that cannot be verified from the provided sources. Cite sources with markers like [S1]. Do not fabricate agreement.",
+        // Core scenario: Rewrite (style is prepended by the Rewrite control)
+        rewrite: "Rewrite and integrate the collected snippets into a single coherent piece. Preserve the key facts and keep source markers like [S1] where a claim comes from a specific snippet.",
+        summarize: "Please summarize the collected snippets into a concise, well-structured overview. Highlight the key themes and main takeaways. Cite sources with markers like [S1].",
+        compare: "Compare and contrast the different perspectives, data points, or viewpoints found in the collected snippets. Present the comparison as a markdown table where applicable, citing sources with markers like [S1].",
+        extract: "Extract and list the key points, important facts, and critical data from the collected snippets. Organize them by topic or category, citing sources with markers like [S1].",
+        table: "Organize the collected snippets into a well-structured markdown table. Identify appropriate column headers based on the data patterns. Cite sources with markers like [S1].",
+        translate_zh: "Please translate the collected snippets into Chinese. Maintain the original structure and meaning.",
+        translate_en: "Please translate the collected snippets into English. Maintain the original structure and meaning.",
     };
 
-    // Load session context
-    const { currentSession: savedSession } = await chrome.storage.local.get(['currentSession']);
-    currentSession = savedSession;
+    // Rewrite style presets, prepended to the rewrite template when chosen.
+    const rewriteStyles = {
+        formal: "Use a formal, professional tone. ",
+        casual: "Use a casual, conversational tone. ",
+        news: "Write in a neutral news-report style with an inverted-pyramid structure. ",
+        academic: "Write in an academic tone with precise, measured language. ",
+        thread: "Format as a concise social-media thread of short numbered posts. ",
+    };
+    void rewriteStyles;
 
-    if (currentSession) {
-        sessionBadge.textContent = currentSession;
-        const { sessions } = await chrome.storage.local.get(['sessions']);
-        if (sessions && sessions[currentSession]) {
-            sessionSnippets = sessions[currentSession];
-            renderContextPanel();
-            // Try to re-cache any images that are missing base64 data
-            reCacheMissingImages();
+    // ---- Session management (the workbench owns this; the popup is just a launcher) ----
+
+    /** Populate the session dropdown and load the active session's snippets. */
+    async function loadSessions(preferred) {
+        const sessions = await Store.getSessions();
+        const names = Object.keys(sessions);
+        const saved = preferred || (await Store.getCurrentSession());
+
+        currentSession = names.includes(saved) ? saved : names[0] || null;
+
+        sessionSelect.innerHTML = '';
+        for (const name of names) {
+            const opt = document.createElement('option');
+            opt.value = name;
+            opt.textContent = `${name} (${sessions[name].length})`;
+            sessionSelect.appendChild(opt);
         }
+        if (currentSession) {
+            sessionSelect.value = currentSession;
+            await Store.setCurrentSession(currentSession);
+            sessionSnippets = sessions[currentSession] || [];
+        } else {
+            sessionSnippets = [];
+        }
+        renderContextPanel();
+        reCacheMissingImages();
+    }
+
+    await loadSessions();
+
+    sessionSelect.addEventListener('change', async () => {
+        // Switching sessions invalidates the current conversation context.
+        conversationHistory = [];
+        activeIndexMap = null;
+        await loadSessions(sessionSelect.value);
+    });
+
+    if (snippetSearch) snippetSearch.addEventListener('input', renderContextPanel);
+
+    document.getElementById('newSessionBtn').addEventListener('click', async () => {
+        const name = await promptText(t('wb_new_session'), '');
+        if (!name) return;
+        const sessions = await Store.getSessions();
+        if (sessions[name]) { Citations.notify(t('wb_session_exists')); return; }
+        sessions[name] = [];
+        await Store.setSessions(sessions);
+        await loadSessions(name);
+    });
+
+    document.getElementById('renameSessionBtn').addEventListener('click', async () => {
+        if (!currentSession) return;
+        const name = await promptText(t('wb_rename_session'), currentSession);
+        if (!name || name === currentSession) return;
+        const sessions = await Store.getSessions();
+        if (sessions[name]) { Citations.notify(t('wb_session_exists')); return; }
+        sessions[name] = sessions[currentSession];
+        delete sessions[currentSession];
+        await Store.setSessions(sessions);
+        await loadSessions(name);
+    });
+
+    document.getElementById('deleteSessionBtn').addEventListener('click', async () => {
+        if (!currentSession) return;
+        const confirmed = await promptText(
+            t('wb_delete_confirm').replace('%s', currentSession), '', { confirmWord: 'DELETE' }
+        );
+        if (confirmed === null) return;
+        const sessions = await Store.getSessions();
+        delete sessions[currentSession];
+        await Store.setSessions(sessions);
+        conversationHistory = [];
+        await loadSessions();
+    });
+
+    document.getElementById('showOnPageBtn').addEventListener('click', () => {
+        if (!currentSession) return;
+        chrome.runtime.sendMessage({ type: 'highlightSessionOnPage', sessionName: currentSession }, (res) => {
+            if (chrome.runtime.lastError) return;
+            Citations.notify(
+                res && res.highlighted > 0
+                    ? t('wb_highlighted').replace('%s', res.highlighted)
+                    : t('wb_highlight_none')
+            );
+        });
+    });
+
+    document.getElementById('openSettingsBtn').addEventListener('click', () => {
+        chrome.tabs.create({ url: chrome.runtime.getURL('settings.html') });
+    });
+
+    /**
+     * Inline prompt. Extension pages can't use window.prompt(), and the side
+     * panel is too narrow for a full dialog, so this is a minimal replacement.
+     * Resolves to the entered string, or null when cancelled.
+     */
+    function promptText(title, defaultValue = '', opts = {}) {
+        const modal = document.getElementById('wbModal');
+        const titleEl = document.getElementById('wbModalTitle');
+        const input = document.getElementById('wbModalInput');
+        const errEl = document.getElementById('wbModalError');
+        const okBtn = document.getElementById('wbModalOk');
+        const cancelBtn = document.getElementById('wbModalCancel');
+
+        titleEl.textContent = title;
+        errEl.textContent = '';
+        input.value = defaultValue;
+        input.placeholder = opts.confirmWord ? opts.confirmWord : '';
+        modal.classList.remove('hidden');
+        input.focus();
+        input.select();
+
+        return new Promise((resolve) => {
+            function cleanup(result) {
+                modal.classList.add('hidden');
+                okBtn.removeEventListener('click', onOk);
+                cancelBtn.removeEventListener('click', onCancel);
+                input.removeEventListener('keydown', onKey);
+                resolve(result);
+            }
+            function onOk() {
+                const val = input.value.trim();
+                if (opts.confirmWord && val !== opts.confirmWord) {
+                    errEl.textContent = t('wb_type_to_confirm').replace('%s', opts.confirmWord);
+                    return;
+                }
+                cleanup(val);
+            }
+            function onCancel() { cleanup(null); }
+            function onKey(e) {
+                if (e.key === 'Enter') { e.preventDefault(); onOk(); }
+                if (e.key === 'Escape') { e.preventDefault(); onCancel(); }
+            }
+            okBtn.addEventListener('click', onOk);
+            cancelBtn.addEventListener('click', onCancel);
+            input.addEventListener('keydown', onKey);
+        });
     }
 
     // Ask background script to re-fetch images without cached base64 data
     async function reCacheMissingImages() {
-        const hasMissing = sessionSnippets.some(s => s.type === 'image' && !s.cachedDataUrl);
+        const hasMissing = sessionSnippets.some(s => s.type === 'image' && !s.cachedDataUrl && !s.hasCachedImage);
         if (!hasMissing) return;
 
         try {
@@ -86,13 +259,35 @@ document.addEventListener('DOMContentLoaded', async function() {
 
     function renderContextPanel() {
         contextBody.innerHTML = '';
-        if (sessionSnippets.length === 0) {
-            contextBody.innerHTML = '<div class="context-empty">No snippets in this session</div>';
+
+        const q = (snippetSearch && snippetSearch.value.trim().toLowerCase()) || '';
+        const visible = sessionSnippets
+            .map((s, i) => ({ s, i }))
+            .filter(({ s }) => {
+                if (!q) return true;
+                return [s.content, s.sourceTitle, s.sourceUrl, s.comment, (s.tags || []).join(' ')]
+                    .some((v) => (v || '').toLowerCase().includes(q));
+            });
+
+        if (snippetCount) {
+            snippetCount.textContent = q
+                ? `${visible.length}/${sessionSnippets.length}`
+                : `${sessionSnippets.length}`;
+        }
+
+        if (visible.length === 0) {
+            const empty = document.createElement('div');
+            empty.className = 'context-empty';
+            empty.textContent = sessionSnippets.length === 0
+                ? t('wb_no_snippets') : t('wb_no_matches');
+            contextBody.appendChild(empty);
             return;
         }
-        sessionSnippets.forEach((snippet, index) => {
+
+        visible.forEach(({ s: snippet, i: index }) => {
             const item = document.createElement('div');
             item.className = 'context-item';
+            item.style.flexWrap = 'wrap';
 
             const num = document.createElement('span');
             num.className = 'context-num';
@@ -103,7 +298,7 @@ document.addEventListener('DOMContentLoaded', async function() {
             if (snippet.type === 'image') {
                 const img = document.createElement('img');
                 img.className = 'context-image';
-                img.src = snippet.cachedDataUrl || snippet.imageUrl || '';
+                img.src = snippet.imageUrl || '';
                 img.alt = 'image snippet';
                 img.style.maxWidth = '80px';
                 img.style.maxHeight = '60px';
@@ -114,16 +309,22 @@ document.addEventListener('DOMContentLoaded', async function() {
                 // Cache status indicator
                 const status = document.createElement('span');
                 status.style.cssText = 'font-size:10px; margin-left:4px; vertical-align:middle;';
-                if (snippet.cachedDataUrl) {
+                const cached = !!(snippet.cachedDataUrl || snippet.hasCachedImage);
+                if (cached) {
                     status.textContent = '[cached]';
                     status.style.color = '#4caf50';
-                    status.title = 'Image cached as base64 — will be sent to AI';
+                    status.title = 'Image cached — will be sent to AI';
                 } else {
                     status.textContent = '[not cached]';
                     status.style.color = '#f44336';
                     status.title = 'Image not cached — AI will not be able to see this image';
                 }
                 item.appendChild(status);
+
+                // Resolve the cached data URL (inline legacy or IDB) for the thumbnail.
+                Store.resolveImage(snippet).then((dataUrl) => {
+                    if (dataUrl) img.src = dataUrl;
+                }).catch(() => {});
 
                 const urlText = document.createElement('span');
                 urlText.className = 'context-text';
@@ -139,16 +340,81 @@ document.addEventListener('DOMContentLoaded', async function() {
             }
 
             if (snippet.tags && snippet.tags.length > 0) {
-                snippet.tags.forEach(t => {
+                snippet.tags.forEach((tg) => {
                     const tag = document.createElement('span');
                     tag.className = 'context-tag';
-                    tag.textContent = t;
+                    tag.textContent = tg;
                     item.appendChild(tag);
                 });
             }
 
+            // Per-snippet actions: open source, tag, comment, delete.
+            const actions = document.createElement('div');
+            actions.className = 'context-actions';
+
+            if (snippet.sourceUrl) {
+                const open = document.createElement('button');
+                open.className = 'context-act';
+                open.textContent = '↗';
+                open.title = t('wb_open_source');
+                open.addEventListener('click', () => chrome.tabs.create({ url: snippet.sourceUrl }));
+                actions.appendChild(open);
+            }
+
+            const tagBtn = document.createElement('button');
+            tagBtn.className = 'context-act';
+            tagBtn.textContent = '#';
+            tagBtn.title = t('wb_edit_tags');
+            tagBtn.addEventListener('click', async () => {
+                const val = await promptText(t('wb_edit_tags'), (snippet.tags || []).join(', '));
+                if (val === null) return;
+                snippet.tags = val.split(',').map((x) => x.trim()).filter(Boolean);
+                await persistSnippets();
+            });
+            actions.appendChild(tagBtn);
+
+            const noteBtn = document.createElement('button');
+            noteBtn.className = 'context-act';
+            noteBtn.textContent = '✎';
+            noteBtn.title = t('wb_edit_comment');
+            noteBtn.addEventListener('click', async () => {
+                const val = await promptText(t('wb_edit_comment'), snippet.comment || '');
+                if (val === null) return;
+                snippet.comment = val;
+                await persistSnippets();
+            });
+            actions.appendChild(noteBtn);
+
+            const delBtn = document.createElement('button');
+            delBtn.className = 'context-act danger';
+            delBtn.textContent = '×';
+            delBtn.title = t('wb_delete_snippet');
+            delBtn.addEventListener('click', async () => {
+                await Store.removeSnippet(currentSession, snippet.id);
+                sessionSnippets = await Store.getSession(currentSession);
+                renderContextPanel();
+            });
+            actions.appendChild(delBtn);
+
+            item.appendChild(actions);
+
+            if (snippet.comment) {
+                const c = document.createElement('div');
+                c.className = 'context-comment';
+                c.textContent = '💬 ' + snippet.comment;
+                item.appendChild(c);
+            }
+
             contextBody.appendChild(item);
         });
+    }
+
+    // Write the in-memory snippet list back to storage, then re-render.
+    async function persistSnippets() {
+        const sessions = await Store.getSessions();
+        sessions[currentSession] = sessionSnippets;
+        await Store.setSessions(sessions);
+        renderContextPanel();
     }
 
     // 已知支持 Vision（多模态图片）的模型前缀/关键词
@@ -175,11 +441,12 @@ document.addEventListener('DOMContentLoaded', async function() {
 
     // 判断当前模型是否支持 vision
     async function isVisionSupported() {
-        const { visionMode = 'auto', modelName = '' } = await chrome.storage.local.get(['visionMode', 'modelName']);
-        if (visionMode === 'enabled') return true;
-        if (visionMode === 'disabled') return false;
-        // auto: 根据模型名匹配
-        return VISION_CAPABLE_PATTERNS.some(pattern => pattern.test(modelName));
+        const cfg = await Store.getLlmConfig();
+        const visionMode = cfg.visionMode || 'auto';
+        if (visionMode === 'on' || visionMode === 'enabled') return true;
+        if (visionMode === 'off' || visionMode === 'disabled') return false;
+        // auto: match by model name
+        return VISION_CAPABLE_PATTERNS.some(pattern => pattern.test(cfg.model || ''));
     }
 
     // 检查 session 中是否有图片 snippet
@@ -199,12 +466,12 @@ document.addEventListener('DOMContentLoaded', async function() {
                 const comment = snippet.comment || '';
                 if (snippet.type === 'image') {
                     if (visionEnabled) {
-                        text += `\n[Snippet ${i + 1}] (image — embedded in the conversation)${tags ? ` (${tags})` : ''}${source ? ` from: ${source}` : ''}\n`;
+                        text += `\n[S${i + 1}] (image — embedded in the conversation)${tags ? ` (${tags})` : ''}${source ? ` from: ${source}` : ''}\n`;
                     } else {
-                        text += `\n[Snippet ${i + 1}] (image, not displayed - model does not support vision)${tags ? ` (${tags})` : ''}${source ? ` from: ${source}` : ''}\nImage URL: ${snippet.imageUrl || '(no url)'}\nNote: This is an image snippet. The image cannot be displayed to you because the current model does not support vision/multimodal input. The user saved this image from the webpage above.\n`;
+                        text += `\n[S${i + 1}] (image, not displayed - model does not support vision)${tags ? ` (${tags})` : ''}${source ? ` from: ${source}` : ''}\nImage URL: ${snippet.imageUrl || '(no url)'}\nNote: This is an image snippet. The image cannot be displayed to you because the current model does not support vision/multimodal input. The user saved this image from the webpage above.\n`;
                     }
                 } else {
-                    text += `\n[Snippet ${i + 1}]${tags ? ` (${tags})` : ''}${source ? ` from: ${source}` : ''}\n${content}\n`;
+                    text += `\n[S${i + 1}]${tags ? ` (${tags})` : ''}${source ? ` from: ${source}` : ''}\n${content}\n`;
                 }
                 if (comment) {
                     text += `[User's comment]: ${comment}\n`;
@@ -220,15 +487,19 @@ document.addEventListener('DOMContentLoaded', async function() {
     async function buildSystemMessage(ragResult) {
         const visionEnabled = await isVisionSupported();
 
-        let intro = "You are a helpful AI assistant for Cyber Assistant, a browser extension that collects information snippets from web pages. ";
+        let intro = "You are a helpful AI assistant for Weft, a browser extension that collects information snippets from web pages. ";
         intro += "The user has collected the following information snippets in their current session. Use them as context when responding.\n\n";
-        intro += "When generating reports or structured content, you may use HTML formatting including tables, lists, headings, and SVG charts.\n\n";
+        intro += "When generating reports or structured content, you may use markdown including tables, lists and headings.\n";
+        intro += Citations.CONTRACT + "\n\n";
 
         const snippetsText = ragResult
             ? RAGEngine.buildFilteredSnippetsText(ragResult, visionEnabled)
             : buildSnippetsText(visionEnabled);
 
-        return { role: "system", content: intro + snippetsText };
+        // Citation markers only align with the full snippet list; disable when RAG filters.
+        activeIndexMap = ragResult ? null : Citations.buildContext(sessionSnippets).indexMap;
+
+        return { role: "system", content: intro + snippetsText + "\n" + I18N.promptLanguageInstruction() };
     }
 
     // Build image content parts for vision-capable models.
@@ -242,28 +513,30 @@ document.addEventListener('DOMContentLoaded', async function() {
         const contentParts = [];
         let imageCount = 0;
 
-        sessionSnippets.forEach((snippet, i) => {
-            if (snippet.type === 'image') {
-                if (snippet.cachedDataUrl) {
-                    const source = snippet.sourceTitle || snippet.sourceUrl || 'unknown source';
-                    const tags = (snippet.tags || []).join(', ');
-                    contentParts.push({
-                        type: "text",
-                        text: `[Image ${i + 1}]${tags ? ` (${tags})` : ''} from: ${source}`
-                    });
-                    contentParts.push({
-                        type: "image_url",
-                        image_url: { url: snippet.cachedDataUrl, detail: "auto" }
-                    });
-                    imageCount++;
-                } else {
-                    contentParts.push({
-                        type: "text",
-                        text: `[Image ${i + 1}] (could not load — original URL: ${snippet.imageUrl || 'unknown'})`
-                    });
-                }
+        for (let i = 0; i < sessionSnippets.length; i++) {
+            const snippet = sessionSnippets[i];
+            if (snippet.type !== 'image') continue;
+            // Resolve from inline (legacy) or IndexedDB.
+            const dataUrl = await Store.resolveImage(snippet);
+            if (dataUrl) {
+                const source = snippet.sourceTitle || snippet.sourceUrl || 'unknown source';
+                const tags = (snippet.tags || []).join(', ');
+                contentParts.push({
+                    type: "text",
+                    text: `[Image ${i + 1}]${tags ? ` (${tags})` : ''} from: ${source}`
+                });
+                contentParts.push({
+                    type: "image_url",
+                    image_url: { url: dataUrl, detail: "auto" }
+                });
+                imageCount++;
+            } else {
+                contentParts.push({
+                    type: "text",
+                    text: `[Image ${i + 1}] (could not load — original URL: ${snippet.imageUrl || 'unknown'})`
+                });
             }
-        });
+        }
 
         if (imageCount === 0) return null;
 
@@ -273,17 +546,69 @@ document.addEventListener('DOMContentLoaded', async function() {
     }
 
     // Template selection
-    templateSelect.addEventListener('change', () => {
-        const value = templateSelect.value;
-        if (value === 'custom') {
-            userInput.value = '';
-            userInput.placeholder = 'Enter your custom prompt...';
-            userInput.focus();
-        } else if (value && promptTemplates[value]) {
-            userInput.value = promptTemplates[value];
-            userInput.style.height = 'auto';
-            userInput.style.height = userInput.scrollHeight + 'px';
+    // Scenario chips run immediately. The prompt itself is never shown to the
+    // user — the transcript records the intent ("Report"), not the instruction.
+    const SCENARIO_LABELS = {
+        report: '📄 ' + t('sc_report'),
+        rewrite: '✍️ ' + t('sc_rewrite'),
+        verify: '🔍 ' + t('sc_verify'),
+        summarize: '📝 ' + t('sc_summarize'),
+        compare: t('sc_compare'),
+        extract: t('sc_extract'),
+        table: t('sc_table'),
+        translate_zh: t('sc_to_zh'),
+        translate_en: t('sc_to_en'),
+    };
+
+    async function runScenario(id) {
+        if (isStreaming) return;
+        const prompt = promptTemplates[id];
+        if (!prompt) return;
+
+        if (sessionSnippets.length === 0) {
+            Citations.notify(t('wb_need_snippets'));
+            return;
         }
+
+        isStreaming = true;
+        sendButton.disabled = true;
+        setQuickActionsEnabled(false);
+
+        // Friendly, intent-level transcript entry.
+        appendMessage(
+            `${SCENARIO_LABELS[id] || id} · ${t('wb_using_snippets').replace('%s', sessionSnippets.length)}`,
+            'user'
+        );
+        showTypingIndicator();
+
+        try {
+            conversationHistory = [];
+            conversationHistory.push(await buildSystemMessage());
+            conversationHistory.push({ role: 'user', content: prompt });
+
+            removeTypingIndicator();
+            const contentDiv = appendMessage('', 'assistant', true);
+            await processStream(conversationHistory, contentDiv);
+        } catch (error) {
+            removeTypingIndicator();
+            appendError(error);
+        } finally {
+            isStreaming = false;
+            sendButton.disabled = false;
+            setQuickActionsEnabled(true);
+        }
+    }
+
+    document.getElementById('scenarioChips').addEventListener('click', (e) => {
+        const chip = e.target.closest('[data-scenario]');
+        if (chip) runScenario(chip.dataset.scenario);
+    });
+
+    const moreScenarios = document.getElementById('moreScenarios');
+    moreScenarios.addEventListener('change', () => {
+        const v = moreScenarios.value;
+        moreScenarios.value = '';
+        if (v) runScenario(v);
     });
 
     // Toggle context panel
@@ -303,19 +628,11 @@ document.addEventListener('DOMContentLoaded', async function() {
     // Markdown rendering is provided by markdown.js (loaded before chat.js)
     // renderMarkdown(text) is available as a global function
 
-    // Send message with streaming
+    // Assemble the conversation turn (system context + user message).
+    // Returns the message list; streaming is driven by processStream().
     async function sendMessageToAPI(userMessage) {
-        const {
-            apiKey,
-            apiBaseUrl = 'https://api.openai.com',
-            modelName = 'gpt-4o-mini',
-            maxTokens = 2000,
-            temperature = 0.7
-        } = await chrome.storage.local.get([
-            'apiKey', 'apiBaseUrl', 'modelName', 'maxTokens', 'temperature'
-        ]);
-
-        if (!apiKey) {
+        const cfg = await Store.getLlmConfig();
+        if (getProvider(cfg.provider).needsKey && !cfg.apiKey) {
             throw new Error('API key not found. Please configure it in Settings.');
         }
 
@@ -337,60 +654,26 @@ document.addEventListener('DOMContentLoaded', async function() {
         }
 
         // For the first user message, merge image content parts into the same message
-        // so the LLM sees images + query together (standard OpenAI multimodal format).
+        // so the LLM sees images + query together (standard multimodal format).
         // For follow-up messages, images are already in conversation history.
         const isFirstUserMessage = conversationHistory.length === 1; // only system msg
         const imageParts = isFirstUserMessage ? await buildImageContentParts() : null;
 
         if (imageParts) {
-            // Multimodal message: images + user text in ONE content array
             conversationHistory.push({
                 role: "user",
-                content: [
-                    ...imageParts,
-                    { type: "text", text: userMessage }
-                ]
+                content: [...imageParts, { type: "text", text: userMessage }]
             });
         } else {
-            // Plain text message (no images, or follow-up turn)
             conversationHistory.push({ role: "user", content: userMessage });
         }
 
-        const baseUrl = apiBaseUrl.replace(/\/+$/, '').replace(/\/v1$/, '');
-        const response = await fetch(`${baseUrl}/v1/chat/completions`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${apiKey}`
-            },
-            body: JSON.stringify({
-                model: modelName,
-                messages: conversationHistory,
-                temperature: parseFloat(temperature),
-                max_tokens: parseInt(maxTokens),
-                stream: true
-            })
-        });
-
-        if (!response.ok) {
-            const errorData = await response.json().catch(() => ({}));
-            const errMsg = errorData.error?.message || 'Unknown error';
-            let hint = '';
-            if (response.status === 401 || response.status === 403) {
-                hint = '\nPlease check: 1) API key is valid; 2) API Base URL matches your provider; 3) The model name is accessible with your key.';
-            }
-            throw new Error(`API Error: ${response.status} - ${errMsg}${hint}`);
-        }
-
-        return response;
+        return conversationHistory;
     }
 
-    // Process streaming response
-    async function processStream(response, messageContentEl) {
-        const reader = response.body.getReader();
-        const decoder = new TextDecoder();
+    // Process streaming response via the unified LLMClient.
+    async function processStream(messages, messageContentEl) {
         let fullContent = '';
-        let buffer = '';
         let dirty = false;            // new content since last render
         let renderTimer = null;
         const RENDER_INTERVAL = 80;   // ms — throttle markdown re-renders
@@ -401,47 +684,39 @@ document.addEventListener('DOMContentLoaded', async function() {
                 renderTimer = null;
                 if (dirty) {
                     dirty = false;
-                    messageContentEl.innerHTML = renderMarkdown(fullContent);
+                    messageContentEl.innerHTML = Render.markdown(fullContent, { indexMap: activeIndexMap });
                     chatMessages.scrollTop = chatMessages.scrollHeight;
                 }
             }, RENDER_INTERVAL);
         }
 
         try {
-            while (true) {
-                const { done, value } = await reader.read();
-                if (done) break;
-
-                buffer += decoder.decode(value, { stream: true });
-                const lines = buffer.split('\n');
-                buffer = lines.pop() || '';
-
-                for (const line of lines) {
-                    const trimmed = line.trim();
-                    if (!trimmed || !trimmed.startsWith('data: ')) continue;
-                    const data = trimmed.slice(6);
-                    if (data === '[DONE]') break;
-
-                    try {
-                        const json = JSON.parse(data);
-                        const delta = json.choices?.[0]?.delta?.content;
-                        if (delta) {
-                            fullContent += delta;
-                            dirty = true;
-                            scheduleRender();
-                        }
-                    } catch (e) {
-                        // Skip malformed chunks
+            await LLMClient.chat(messages, {
+                stream: true,
+                onDelta: (delta) => {
+                    if (delta) {
+                        fullContent += delta;
+                        dirty = true;
+                        scheduleRender();
                     }
-                }
-            }
+                },
+            });
         } catch (error) {
-            if (error.name !== 'AbortError') throw error;
+            if (error.name !== 'AbortError' && error.kind !== 'abort') {
+                if (renderTimer) { clearTimeout(renderTimer); renderTimer = null; }
+                // Nothing was streamed: drop the placeholder bubble so the caller's
+                // error message stands alone instead of trailing an empty reply.
+                if (!fullContent) {
+                    const bubble = messageContentEl.closest('.message');
+                    if (bubble) bubble.remove();
+                }
+                throw error;
+            }
         }
 
         // Cancel pending timer and do final render
         if (renderTimer) { clearTimeout(renderTimer); renderTimer = null; }
-        messageContentEl.innerHTML = renderMarkdown(fullContent);
+        messageContentEl.innerHTML = Render.markdown(fullContent, { indexMap: activeIndexMap });
         chatMessages.scrollTop = chatMessages.scrollHeight;
 
         // Add to conversation history
@@ -489,16 +764,72 @@ document.addEventListener('DOMContentLoaded', async function() {
                 });
             });
 
+            const exportHtmlBtn = document.createElement('button');
+            exportHtmlBtn.className = 'copy-btn';
+            exportHtmlBtn.textContent = 'Export HTML';
+            exportHtmlBtn.addEventListener('click', () => {
+                const doc = `<!DOCTYPE html><meta charset="utf-8"><title>Weft export</title>` +
+                    `<body style="font-family:-apple-system,Segoe UI,Roboto,sans-serif;max-width:760px;margin:40px auto;padding:0 16px;line-height:1.6;">` +
+                    contentDiv.innerHTML + `</body>`;
+                const blob = new Blob([doc], { type: 'text/html' });
+                const a = document.createElement('a');
+                a.href = URL.createObjectURL(blob);
+                a.download = 'weft-export.html';
+                a.click();
+                setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+            });
+
+            const saveSnippetBtn = document.createElement('button');
+            saveSnippetBtn.className = 'copy-btn';
+            saveSnippetBtn.textContent = 'Save as snippet';
+            saveSnippetBtn.addEventListener('click', async () => {
+                if (!currentSession) { saveSnippetBtn.textContent = 'No session'; return; }
+                try {
+                    await Store.addSnippet(currentSession, {
+                        id: 'gen-' + Date.now().toString(36),
+                        type: 'text',
+                        content: contentDiv.innerText,
+                        sourceUrl: '', sourceTitle: 'Weft output',
+                        timestamp: Date.now(), tags: ['generated'],
+                    });
+                    saveSnippetBtn.textContent = 'Saved!';
+                    setTimeout(() => { saveSnippetBtn.textContent = 'Save as snippet'; }, 1500);
+                } catch (e) {
+                    saveSnippetBtn.textContent = 'Failed';
+                }
+            });
+
             const btnRow = document.createElement('div');
             btnRow.className = 'message-actions';
             btnRow.appendChild(copyBtn);
             btnRow.appendChild(copyHtmlBtn);
+            btnRow.appendChild(exportHtmlBtn);
+            btnRow.appendChild(saveSnippetBtn);
             messageDiv.appendChild(btnRow);
         }
 
         chatMessages.appendChild(messageDiv);
         chatMessages.scrollTop = chatMessages.scrollHeight;
         return contentDiv;
+    }
+
+    /**
+     * Update a quick-action button's label without destroying its icon.
+     * These buttons are `<svg> + <span>`, so assigning textContent would wipe
+     * the icon. Pass null to restore the original label.
+     */
+    function setBtnLabel(btn, text) {
+        const span = btn.querySelector('span');
+        if (!span) { btn.textContent = text; return; }
+        if (!span.dataset.original) span.dataset.original = span.textContent;
+        span.textContent = text == null ? span.dataset.original : text;
+    }
+
+    // Render an error as a chat message, appending the actionable hint that
+    // LLMError carries (bad key, rate limit, context too long, …).
+    function appendError(err) {
+        const hint = err && err.hint ? ` ${err.hint}` : '';
+        appendMessage(`${t('wb_error_prefix')}: ${err.message}${hint}`, 'assistant');
     }
 
     // Show typing indicator
@@ -521,9 +852,40 @@ document.addEventListener('DOMContentLoaded', async function() {
     }
 
     // Handle send
+    // Web-search toggle: visible only when a search provider is configured.
+    const webSearchToggle = document.getElementById('webSearchToggle');
+    const webSearchToggleLabel = document.getElementById('webSearchToggleLabel');
+    if (webSearchToggleLabel) {
+        SearchProvider.isEnabled().then((on) => {
+            if (on) webSearchToggleLabel.style.display = '';
+        }).catch(() => {});
+    }
+
     async function handleSend() {
         const message = userInput.value.trim();
         if (!message || isStreaming) return;
+
+        // Web-augmented path: plan → search → answer with the evidence folded in.
+        // Works for any scenario (report/verify/etc.) — this is the online
+        // cross-check mode. Delegates lifecycle to sendWithSearchResults.
+        if (webSearchToggle && webSearchToggle.checked && await SearchProvider.isEnabled()) {
+            userInput.value = '';
+            userInput.style.height = 'auto';
+            sendButton.disabled = true;
+            showTypingIndicator();
+            let plan = [];
+            try { plan = await generateSearchPlan(message, null); } catch (e) { /* fall through */ }
+            const results = [];
+            for (const item of (plan || [])) {
+                try { results.push({ query: item.query, results: await SearchProvider.search(item.query, 6) }); }
+                catch (err) { results.push({ query: item.query, results: [], error: err.message }); }
+            }
+            removeTypingIndicator();
+            sendButton.disabled = false;
+            // sendWithSearchResults appends the user bubble + manages streaming.
+            await sendWithSearchResults(message, null, results);
+            return;
+        }
 
         isStreaming = true;
         sendButton.disabled = true;
@@ -532,7 +894,6 @@ document.addEventListener('DOMContentLoaded', async function() {
         appendMessage(message, 'user');
         userInput.value = '';
         userInput.style.height = 'auto';
-        templateSelect.value = '';
 
         // Show typing indicator
         showTypingIndicator();
@@ -547,7 +908,7 @@ document.addEventListener('DOMContentLoaded', async function() {
         } catch (error) {
             console.error('Error:', error);
             removeTypingIndicator();
-            appendMessage(`Error: ${error.message}`, 'assistant');
+            appendError(error);
         } finally {
             isStreaming = false;
             sendButton.disabled = false;
@@ -571,8 +932,11 @@ document.addEventListener('DOMContentLoaded', async function() {
     // Build system message with page content included
     async function buildSystemMessageWithPage(page, ragResult) {
         const visionEnabled = await isVisionSupported();
+        // Page-context mode mixes live page text with snippets, so [S] markers
+        // wouldn't map cleanly — disable citation decoration for this turn.
+        activeIndexMap = null;
 
-        let intro = "You are a helpful AI assistant for Cyber Assistant, a browser extension that collects information snippets from web pages. ";
+        let intro = "You are a helpful AI assistant for Weft, a browser extension that collects information snippets from web pages. ";
         intro += "The user has collected the following information snippets in their current session. Use them as context when responding.\n\n";
         intro += "When generating reports or structured content, you may use HTML formatting including tables, lists, headings, and SVG charts.\n\n";
 
@@ -591,17 +955,22 @@ document.addEventListener('DOMContentLoaded', async function() {
             pageText += "=== END PAGE CONTENT ===\n";
         }
 
-        return { role: "system", content: intro + snippetsText + pageText };
+        return { role: "system", content: intro + snippetsText + pageText + "\n" + I18N.promptLanguageInstruction() };
     }
 
-    // Send a message with page context (used by quick action buttons)
-    async function sendWithPageContext(userMessage, page) {
+    const DEFAULT_PAGE_QUESTION =
+        'Analyze this webpage: what is the main topic, the key arguments, and the details that matter? Be concise and well structured.';
+
+    // Send a message with page context (used by quick action buttons).
+    // `displayLabel` lets callers show the user's intent instead of the raw
+    // instruction sent to the model.
+    async function sendWithPageContext(userMessage, page, displayLabel) {
         if (isStreaming) return;
         isStreaming = true;
         sendButton.disabled = true;
         setQuickActionsEnabled(false);
 
-        appendMessage(userMessage, 'user');
+        appendMessage(displayLabel || userMessage, 'user');
         showTypingIndicator();
 
         try {
@@ -619,46 +988,13 @@ document.addEventListener('DOMContentLoaded', async function() {
                 conversationHistory.push({ role: "user", content: userMessage });
             }
 
-            const {
-                apiKey,
-                apiBaseUrl = 'https://api.openai.com',
-                modelName = 'gpt-4o-mini',
-                maxTokens = 2000,
-                temperature = 0.7
-            } = await chrome.storage.local.get([
-                'apiKey', 'apiBaseUrl', 'modelName', 'maxTokens', 'temperature'
-            ]);
-
-            if (!apiKey) throw new Error('API key not found. Please configure it in Settings.');
-
-            const baseUrl = apiBaseUrl.replace(/\/+$/, '').replace(/\/v1$/, '');
-            const response = await fetch(`${baseUrl}/v1/chat/completions`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${apiKey}`
-                },
-                body: JSON.stringify({
-                    model: modelName,
-                    messages: conversationHistory,
-                    temperature: parseFloat(temperature),
-                    max_tokens: parseInt(maxTokens),
-                    stream: true
-                })
-            });
-
-            if (!response.ok) {
-                const errorData = await response.json().catch(() => ({}));
-                throw new Error(`API Error: ${response.status} - ${errorData.error?.message || 'Unknown'}`);
-            }
-
             removeTypingIndicator();
             const contentDiv = appendMessage('', 'assistant', true);
-            await processStream(response, contentDiv);
+            await processStream(conversationHistory, contentDiv);
         } catch (error) {
             console.error('Error:', error);
             removeTypingIndicator();
-            appendMessage(`Error: ${error.message}`, 'assistant');
+            appendError(error);
         } finally {
             isStreaming = false;
             sendButton.disabled = false;
@@ -671,26 +1007,60 @@ document.addEventListener('DOMContentLoaded', async function() {
         takeawaysBtn.disabled = !enabled;
         deepSearchBtn.disabled = !enabled;
         drawDiagramBtn.disabled = !enabled;
+        if (enabled) refreshPageActionAvailability();
     }
+
+    // Page-based actions only work on normal web pages. Disable them (with a
+    // reason in the tooltip) when the active tab is a browser-internal page,
+    // rather than letting the click fail.
+    async function refreshPageActionAvailability() {
+        if (isStreaming) return;
+        let ok = true;
+        try {
+            ok = (await PageExtractor.canExtractActiveTab()).ok;
+        } catch { ok = true; } // if we can't tell, leave the buttons usable
+        const reason = ok ? '' : t('wb_page_unavailable');
+        for (const btn of [askPageBtn, takeawaysBtn]) {
+            btn.disabled = !ok;
+            btn.title = reason || btn.dataset.titleOriginal || btn.title;
+            if (ok && btn.dataset.titleOriginal) btn.title = btn.dataset.titleOriginal;
+        }
+        // Page context is optional for these two, so keep them enabled.
+        pageContent = ok ? pageContent : null;
+    }
+
+    // Remember original tooltips so they can be restored.
+    for (const btn of [askPageBtn, takeawaysBtn]) {
+        if (btn && btn.title) btn.dataset.titleOriginal = btn.title;
+    }
+    refreshPageActionAvailability();
+    // Re-check when the user switches tabs or navigates.
+    chrome.tabs.onActivated.addListener(() => { pageContent = null; refreshPageActionAvailability(); });
+    chrome.tabs.onUpdated.addListener((_id, info) => {
+        if (info.status === 'complete') { pageContent = null; refreshPageActionAvailability(); }
+    });
 
     // "Ask about this page" handler
     askPageBtn.addEventListener('click', async () => {
         try {
             askPageBtn.disabled = true;
-            askPageBtn.textContent = 'Extracting...';
+            setBtnLabel(askPageBtn, t('wb_reading_page'));
             const page = await extractCurrentPage();
-            askPageBtn.textContent = 'Ask about this page';
+            setBtnLabel(askPageBtn, null);
 
             // Show page info in context panel
             showPageIndicator(page);
 
-            const question = userInput.value.trim() || 'Please analyze this webpage content and provide a comprehensive summary. What is the main topic, key arguments, and important details?';
+            // If the user typed a question, use it verbatim; otherwise run the
+            // default analysis but show the intent, not the instruction.
+            const typed = userInput.value.trim();
+            const question = typed || DEFAULT_PAGE_QUESTION;
             userInput.value = '';
-            await sendWithPageContext(question, page);
+            await sendWithPageContext(question, page, typed || `📄 ${t('wb_analyse_page')}`);
         } catch (e) {
-            askPageBtn.textContent = 'Ask about this page';
+            setBtnLabel(askPageBtn, null);
             askPageBtn.disabled = false;
-            appendMessage(`Error extracting page: ${e.message}`, 'assistant');
+            appendError(e);
         }
     });
 
@@ -699,11 +1069,11 @@ document.addEventListener('DOMContentLoaded', async function() {
         if (isStreaming) return;
         try {
             takeawaysBtn.disabled = true;
-            takeawaysBtn.textContent = 'Extracting...';
+            setBtnLabel(takeawaysBtn, t('wb_reading_page'));
             const page = await extractCurrentPage();
 
             showPageIndicator(page);
-            takeawaysBtn.textContent = 'Analyzing...';
+            setBtnLabel(takeawaysBtn, t('wb_analysing'));
 
             // Clear previous highlights
             try { await Highlighter.clearAll(); } catch (e) { /* ok */ }
@@ -713,14 +1083,14 @@ document.addEventListener('DOMContentLoaded', async function() {
 
             if (!takeawaysData || !takeawaysData.takeaways || takeawaysData.takeaways.length === 0) {
                 // Fallback: do a normal text-based takeaway
-                takeawaysBtn.textContent = 'Key Takeaways';
+                setBtnLabel(takeawaysBtn, null);
                 const fallbackPrompt = `Based on the current webpage content, extract the key takeaways and main insights. Please organize them as:\n\n1. **Main Topic/Theme**: What is this page about?\n2. **Key Points**: List the most important points (5-10 bullet points)\n3. **Key Data/Facts**: Any specific numbers, statistics, or factual claims\n4. **Author's Perspective**: What viewpoint or argument is being made?\n5. **Actionable Insights**: What can the reader do with this information?\n\nBe concise but thorough.`;
                 await sendWithPageContext(fallbackPrompt, page);
                 return;
             }
 
             // Phase 2: Inject highlights into the webpage
-            takeawaysBtn.textContent = 'Highlighting...';
+            setBtnLabel(takeawaysBtn, t('wb_highlighting'));
             const hlGroups = takeawaysData.takeaways.map((t, i) => ({
                 groupIndex: i,
                 quotes: t.quotes || [],
@@ -747,9 +1117,9 @@ document.addEventListener('DOMContentLoaded', async function() {
 
         } catch (e) {
             console.error('Key takeaways error:', e);
-            appendMessage(`Error: ${e.message}`, 'assistant');
+            appendError(e);
         } finally {
-            takeawaysBtn.textContent = 'Key Takeaways';
+            setBtnLabel(takeawaysBtn, null);
             takeawaysBtn.disabled = false;
         }
     });
@@ -759,15 +1129,6 @@ document.addEventListener('DOMContentLoaded', async function() {
      * Non-streaming call that returns parsed JSON.
      */
     async function requestStructuredTakeaways(page) {
-        const {
-            apiKey,
-            apiBaseUrl = 'https://api.openai.com',
-            modelName = 'gpt-4o-mini',
-            temperature = 0.3,
-        } = await chrome.storage.local.get(['apiKey', 'apiBaseUrl', 'modelName', 'temperature']);
-
-        if (!apiKey) throw new Error('API key not configured');
-
         const systemPrompt = `You are an expert analyst. Given a webpage's content, extract the key takeaways. For EACH takeaway, provide exact quotes from the original text that support it.
 
 IMPORTANT: The "quotes" field must contain EXACT substrings copied from the provided page content. These will be used to locate and highlight the text in the original webpage. Each quote should be 15-100 characters long — long enough to be unique but not entire paragraphs. Extract 2-5 quotes per takeaway.
@@ -786,43 +1147,16 @@ Output ONLY valid JSON in this exact format:
 
 Generate 3-7 takeaways. Each must have at least 1 quote.`;
 
-        const baseUrl = apiBaseUrl.replace(/\/+$/, '').replace(/\/v1$/, '');
-        const response = await fetch(`${baseUrl}/v1/chat/completions`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${apiKey}`
-            },
-            body: JSON.stringify({
-                model: modelName,
-                messages: [
-                    { role: 'system', content: systemPrompt },
-                    { role: 'user', content: `Analyze the following webpage content and extract structured key takeaways with exact source quotes.\n\nTitle: ${page.title}\nURL: ${page.url}\n\n${page.content.substring(0, 40000)}` }
-                ],
-                temperature: parseFloat(temperature),
-                max_tokens: 3000,
-            })
-        });
-
-        if (!response.ok) {
-            const err = await response.json().catch(() => ({}));
-            throw new Error(err.error?.message || `HTTP ${response.status}`);
-        }
-
-        const data = await response.json();
-        const content = data.choices?.[0]?.message?.content || '';
-
-        // Parse JSON (handle markdown code fences)
-        const jsonMatch = content.match(/\{[\s\S]*\}/);
-        if (!jsonMatch) {
-            console.warn('No JSON found in LLM response:', content);
-            return null;
-        }
-
         try {
-            return JSON.parse(jsonMatch[0]);
+            return await LLMClient.completeJSON([
+                { role: 'system', content: systemPrompt },
+                { role: 'user', content: `Analyze the following webpage content and extract structured key takeaways with exact source quotes.\n\nTitle: ${page.title}\nURL: ${page.url}\n\n${page.content.substring(0, 40000)}` }
+            ], { temperature: 0.3, maxTokens: 3000 });
         } catch (e) {
-            console.warn('Failed to parse takeaways JSON:', e, content);
+            // Configuration / transport problems must surface to the user — only a
+            // malformed JSON reply is worth silently falling back from.
+            if (e instanceof LLMError) throw e;
+            console.warn('Takeaways: model did not return valid JSON, falling back.', e);
             return null;
         }
     }
@@ -1010,15 +1344,6 @@ Generate 3-7 takeaways. Each must have at least 1 quote.`;
      * should organize them into coherent takeaways.
      */
     async function requestRegeneratedTakeaways(page, currentGroups) {
-        const {
-            apiKey,
-            apiBaseUrl = 'https://api.openai.com',
-            modelName = 'gpt-4o-mini',
-            temperature = 0.3,
-        } = await chrome.storage.local.get(['apiKey', 'apiBaseUrl', 'modelName', 'temperature']);
-
-        if (!apiKey) throw new Error('API key not configured');
-
         // Build a description of what's currently highlighted
         let highlightDesc = 'The user has reviewed and adjusted the highlighted passages on the webpage. Here are the current highlights organized by color group:\n\n';
         if (currentGroups.length === 0) {
@@ -1052,35 +1377,16 @@ Output ONLY valid JSON:
 
 Generate 3-7 takeaways.`;
 
-        const baseUrl = apiBaseUrl.replace(/\/+$/, '').replace(/\/v1$/, '');
-        const response = await fetch(`${baseUrl}/v1/chat/completions`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${apiKey}`
-            },
-            body: JSON.stringify({
-                model: modelName,
-                messages: [
-                    { role: 'system', content: systemPrompt },
-                    { role: 'user', content: `${highlightDesc}\n\n=== FULL PAGE CONTENT ===\nTitle: ${page.title}\nURL: ${page.url}\n\n${page.content.substring(0, 35000)}` }
-                ],
-                temperature: parseFloat(temperature),
-                max_tokens: 3000,
-            })
-        });
-
-        if (!response.ok) {
-            const err = await response.json().catch(() => ({}));
-            throw new Error(err.error?.message || `HTTP ${response.status}`);
+        try {
+            return await LLMClient.completeJSON([
+                { role: 'system', content: systemPrompt },
+                { role: 'user', content: `${highlightDesc}\n\n=== FULL PAGE CONTENT ===\nTitle: ${page.title}\nURL: ${page.url}\n\n${page.content.substring(0, 35000)}` }
+            ], { temperature: 0.3, maxTokens: 3000 });
+        } catch (e) {
+            if (e instanceof LLMError) throw e;
+            console.warn('Regenerate: model did not return valid JSON.', e);
+            return null;
         }
-
-        const data = await response.json();
-        const content = data.choices?.[0]?.message?.content || '';
-        const jsonMatch = content.match(/\{[\s\S]*\}/);
-        if (!jsonMatch) return null;
-        try { return JSON.parse(jsonMatch[0]); }
-        catch (e) { console.warn('Regen parse failed:', e); return null; }
     }
 
     function escapeHtml(text) {
@@ -1126,7 +1432,7 @@ Generate 3-7 takeaways.`;
 
         try {
             deepSearchBtn.disabled = true;
-            deepSearchBtn.textContent = 'Planning...';
+            setBtnLabel(deepSearchBtn, t('wb_planning'));
             userInput.placeholder = 'Type your message or select a template above...';
 
             // Optionally extract page for context
@@ -1145,22 +1451,13 @@ Generate 3-7 takeaways.`;
             console.error('Search plan error:', e);
             appendMessage(`Error generating search plan: ${e.message}`, 'assistant');
         } finally {
-            deepSearchBtn.textContent = 'Deep Search';
+            setBtnLabel(deepSearchBtn, null);
             deepSearchBtn.disabled = false;
         }
     });
 
     // Ask LLM to generate search queries
     async function generateSearchPlan(userQuery, page) {
-        const {
-            apiKey,
-            apiBaseUrl = 'https://api.openai.com',
-            modelName = 'gpt-4o-mini',
-            temperature = 0.7,
-        } = await chrome.storage.local.get(['apiKey', 'apiBaseUrl', 'modelName', 'temperature']);
-
-        if (!apiKey) throw new Error('API key not configured');
-
         let contextHint = '';
         if (page && page.content) {
             contextHint = `\n\nThe user is currently on a webpage titled "${page.title}" (${page.url}).`;
@@ -1171,54 +1468,25 @@ Generate 3-7 takeaways.`;
             contextHint += `\n\nThe user has ${sessionSnippets.length} collected snippets in their session.`;
         }
 
-        const baseUrl = apiBaseUrl.replace(/\/+$/, '').replace(/\/v1$/, '');
-        const response = await fetch(`${baseUrl}/v1/chat/completions`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${apiKey}`
-            },
-            body: JSON.stringify({
-                model: modelName,
-                messages: [
-                    {
-                        role: "system",
-                        content: `You are a search planning assistant. Given a user's question and context, generate a list of web search queries that would help find the missing information needed to answer the question comprehensively.
+        const { text: content } = await LLMClient.chat([
+            {
+                role: "system",
+                content: `You are a search planning assistant. Given a user's question and context, generate a list of web search queries that would help find the missing information needed to answer the question comprehensively.
 
 Output ONLY a JSON array of objects, each with "query" (the search query string) and "reason" (brief explanation of why this search is needed). Generate 2-5 search queries. Be specific and targeted.
 
 Example output:
 [{"query": "React server components vs client components performance comparison 2024", "reason": "Compare performance characteristics"}, {"query": "Next.js app router migration guide best practices", "reason": "Find migration best practices"}]`
-                    },
-                    {
-                        role: "user",
-                        content: `Question: ${userQuery}${contextHint}\n\nGenerate search queries to find information needed to answer this question comprehensively.`
-                    }
-                ],
-                temperature: Math.min(parseFloat(temperature) || 0.7, 0.3),
-                max_tokens: 500
-            })
-        });
-
-        if (!response.ok) {
-            const errBody = await response.text().catch(() => '');
-            let errMsg = `HTTP ${response.status}`;
-            try {
-                const errObj = JSON.parse(errBody);
-                errMsg = errObj.error?.message || errObj.message || errMsg;
-            } catch {
-                if (errBody) errMsg += `: ${errBody.substring(0, 200)}`;
+            },
+            {
+                role: "user",
+                content: `Question: ${userQuery}${contextHint}\n\nGenerate search queries to find information needed to answer this question comprehensively.`
             }
-            throw new Error(errMsg);
-        }
+        ], { stream: false, temperature: 0.3, maxTokens: 500 });
 
-        const data = await response.json();
-        const content = data.choices?.[0]?.message?.content || '';
-
-        // Parse JSON from response (handle markdown code blocks)
+        // Parse JSON array from response (handle markdown code blocks)
         const jsonMatch = content.match(/\[[\s\S]*\]/);
         if (!jsonMatch) return [];
-
         try {
             return JSON.parse(jsonMatch[0]);
         } catch (e) {
@@ -1233,13 +1501,18 @@ Example output:
         plan.forEach((item, i) => {
             const div = document.createElement('div');
             div.className = 'plan-item';
-            div.innerHTML = `
-                <span class="plan-item-num">${i + 1}.</span>
-                <div>
-                    <div class="plan-item-query">${item.query}</div>
-                    <div class="plan-item-reason">${item.reason}</div>
-                </div>
-            `;
+            const num = document.createElement('span');
+            num.className = 'plan-item-num';
+            num.textContent = `${i + 1}.`;
+            const body = document.createElement('div');
+            const q = document.createElement('div');
+            q.className = 'plan-item-query';
+            q.textContent = item.query || '';
+            const r = document.createElement('div');
+            r.className = 'plan-item-reason';
+            r.textContent = item.reason || '';
+            body.appendChild(q); body.appendChild(r);
+            div.appendChild(num); div.appendChild(body);
             searchPlanBody.appendChild(div);
         });
         searchProgress.style.display = 'none';
@@ -1257,12 +1530,21 @@ Example output:
         searchProgress.style.display = 'block';
 
         try {
-            // Execute search plan
-            const searchResults = await WebSearcher.executePlan(plan, (step, total, msg) => {
-                const pct = Math.round((step / total) * 100);
+            // Execute the plan through the user's configured search provider.
+            const total = plan.length;
+            const searchResults = [];
+            for (let i = 0; i < total; i++) {
+                const item = plan[i];
+                const pct = Math.round((i / total) * 100);
                 progressFill.style.width = pct + '%';
-                progressText.textContent = `(${step}/${total}) ${msg}`;
-            });
+                progressText.textContent = `(${i + 1}/${total}) ${item.query}`;
+                try {
+                    const results = await SearchProvider.search(item.query, 6);
+                    searchResults.push({ query: item.query, results });
+                } catch (err) {
+                    searchResults.push({ query: item.query, results: [], error: err.message });
+                }
+            }
 
             progressFill.style.width = '100%';
             progressText.textContent = 'Searches complete. Generating answer...';
@@ -1316,11 +1598,14 @@ Example output:
 
             // Build system message with page + search results
             const visionEnabled = await isVisionSupported();
-            let intro = "You are a helpful AI assistant for Cyber Assistant. ";
+            let intro = "You are a helpful AI assistant for Weft. ";
             intro += "The user has asked a question. Below is context from their session snippets, the current webpage, and web search results gathered to help answer the question.\n";
             intro += "Synthesize all available information to provide a comprehensive, well-structured answer. Cite sources when possible.\n\n";
 
             const snippetsText = buildSnippetsText(visionEnabled);
+            // Snippet [S] markers decorate as citations; web results are cited by URL inline.
+            activeIndexMap = page ? null : Citations.buildContext(sessionSnippets).indexMap;
+            intro += Citations.CONTRACT + '\n' + I18N.promptLanguageInstruction() + '\n\n';
             let pageText = '';
             if (page && page.content) {
                 pageText += "\n=== CURRENT PAGE CONTENT ===\n";
@@ -1345,46 +1630,13 @@ Example output:
                 conversationHistory.push({ role: "user", content: userQuery });
             }
 
-            const {
-                apiKey,
-                apiBaseUrl = 'https://api.openai.com',
-                modelName = 'gpt-4o-mini',
-                maxTokens = 2000,
-                temperature = 0.7
-            } = await chrome.storage.local.get([
-                'apiKey', 'apiBaseUrl', 'modelName', 'maxTokens', 'temperature'
-            ]);
-
-            if (!apiKey) throw new Error('API key not configured');
-
-            const baseUrl = apiBaseUrl.replace(/\/+$/, '').replace(/\/v1$/, '');
-            const response = await fetch(`${baseUrl}/v1/chat/completions`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${apiKey}`
-                },
-                body: JSON.stringify({
-                    model: modelName,
-                    messages: conversationHistory,
-                    temperature: parseFloat(temperature),
-                    max_tokens: parseInt(maxTokens),
-                    stream: true
-                })
-            });
-
-            if (!response.ok) {
-                const errorData = await response.json().catch(() => ({}));
-                throw new Error(`API Error: ${response.status} - ${errorData.error?.message || 'Unknown'}`);
-            }
-
             removeTypingIndicator();
             const contentDiv = appendMessage('', 'assistant', true);
-            await processStream(response, contentDiv);
+            await processStream(conversationHistory, contentDiv);
         } catch (error) {
             console.error('Error:', error);
             removeTypingIndicator();
-            appendMessage(`Error: ${error.message}`, 'assistant');
+            appendError(error);
         } finally {
             isStreaming = false;
             sendButton.disabled = false;
@@ -1429,7 +1681,7 @@ Example output:
         }
         const lastContent = messages[messages.length - 1].innerHTML;
         const htmlDoc = `<!DOCTYPE html>
-<html><head><meta charset="UTF-8"><title>Cyber Assistant Export</title>
+<html><head><meta charset="UTF-8"><title>Weft Export</title>
 <style>body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;max-width:800px;margin:40px auto;padding:20px;color:#333;line-height:1.6}
 table{border-collapse:collapse;width:100%}th,td{border:1px solid #ddd;padding:8px 12px;text-align:left}th{background:#f5f5f5}
 pre{background:#f5f5f5;padding:12px;border-radius:6px;overflow-x:auto}code{font-size:13px}
@@ -1445,10 +1697,12 @@ h1,h2,h3,h4{margin-top:1.2em;margin-bottom:0.6em}
         URL.revokeObjectURL(url);
     });
 
-    // Listen for snippet changes from background.js to invalidate RAG cache
+    // Snippets can be added from the page (context menu / selection toolbar)
+    // while the workbench is open — refresh the list and drop the stale index.
     chrome.runtime.onMessage.addListener((msg) => {
         if (msg.type === 'snippetsChanged') {
             RAGEngine.invalidateCache(msg.sessionName || currentSession);
+            loadSessions(currentSession).catch(() => {});
         }
     });
 
@@ -1465,7 +1719,7 @@ h1,h2,h3,h4{margin-top:1.2em;margin-bottom:0.6em}
 
         const svgDiv = document.createElement('div');
         svgDiv.className = 'diagram-svg';
-        svgDiv.innerHTML = result.svg;
+        svgDiv.innerHTML = Render.svg(result.svg);
         container.appendChild(svgDiv);
 
         const codeBlock = document.createElement('div');
@@ -1509,7 +1763,7 @@ h1,h2,h3,h4{margin-top:1.2em;margin-bottom:0.6em}
             expBtn.textContent = 'Export HTML';
             expBtn.addEventListener('click', () => {
                 const html = DiagramGenerator.exportAsHtml(
-                    'Diagram — Cyber Assistant',
+                    'Diagram — Weft',
                     result.svg,
                     result.type !== 'svg' ? result.code : '',
                     sourceContent?.substring(0, 500) || ''
@@ -1544,7 +1798,7 @@ h1,h2,h3,h4{margin-top:1.2em;margin-bottom:0.6em}
             // Clear the context so it's not re-used on next open
             await chrome.storage.local.remove('askAIContext');
 
-            const { selectedText, question, questionType, sourceUrl, sourceTitle } = askAIContext;
+            const { selectedText, questionType, sourceUrl, sourceTitle } = askAIContext;
 
             // ---- Page Insight mode: full-page AI analysis with RAG + graph ----
             if (questionType === 'page-insight') {
@@ -1559,7 +1813,7 @@ h1,h2,h3,h4{margin-top:1.2em;margin-bottom:0.6em}
                     conversationHistory = [];
 
                     // Construct enhanced system prompt with all available intelligence
-                    let sysContent = "You are a powerful AI research assistant integrated into the Cyber Assistant browser extension. ";
+                    let sysContent = "You are a powerful AI research assistant integrated into the Weft browser extension. ";
                     sysContent += "You have access to the user's knowledge base (saved snippets from their research sessions) and the full content of the webpage they are currently viewing.\n\n";
                     sysContent += "Your task: provide a comprehensive, insightful analysis of this webpage. Combine the page content with the user's existing knowledge base to deliver maximum value.\n\n";
 
@@ -1575,22 +1829,6 @@ h1,h2,h3,h4{margin-top:1.2em;margin-bottom:0.6em}
                                 sysContent += "=== USER'S RELATED KNOWLEDGE BASE ===\n" + ragInfo + "\n=== END KNOWLEDGE BASE ===\n\n";
                             }
                         } catch (e) { console.warn('RAG for page insight:', e); }
-                    }
-
-                    // Include knowledge graph connections if available
-                    if (typeof GraphBuilder !== 'undefined' && sessionSnippets.length >= 3) {
-                        try {
-                            const graph = new GraphBuilder();
-                            graph.buildGraph(sessionSnippets);
-                            const shared = graph.findSharedKeywords();
-                            if (shared.length > 0) {
-                                sysContent += "=== CROSS-PAGE CONNECTIONS (from knowledge graph) ===\n";
-                                shared.slice(0, 10).forEach(s => {
-                                    sysContent += `• Keyword "${s.keyword}" connects: ${s.pages.join(' ↔ ')}\n`;
-                                });
-                                sysContent += "=== END CONNECTIONS ===\n\n";
-                            }
-                        } catch (e) { console.warn('Graph for page insight:', e); }
                     }
 
                     // Include page content (capped to avoid token limit / timeout)
@@ -1627,40 +1865,12 @@ h1,h2,h3,h4{margin-top:1.2em;margin-bottom:0.6em}
 
                     conversationHistory.push({ role: "user", content: userPrompt });
 
-                    const {
-                        apiKey,
-                        apiBaseUrl = 'https://api.openai.com',
-                        modelName = 'gpt-4o-mini',
-                        maxTokens = 4000,
-                        temperature = 0.7
-                    } = await chrome.storage.local.get([
-                        'apiKey', 'apiBaseUrl', 'modelName', 'maxTokens', 'temperature'
-                    ]);
-
-                    if (!apiKey) throw new Error('API key not configured. Go to Settings.');
-
-                    const baseUrl = apiBaseUrl.replace(/\/+$/, '').replace(/\/v1$/, '');
-                    const response = await fetch(`${baseUrl}/v1/chat/completions`, {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                            'Authorization': `Bearer ${apiKey}`
-                        },
-                        body: JSON.stringify({
-                            model: modelName,
-                            messages: conversationHistory,
-                            max_tokens: parseInt(maxTokens) || 4000,
-                            temperature: parseFloat(temperature) || 0.7,
-                            stream: true,
-                        }),
-                    });
-
                     removeTypingIndicator();
                     const contentDiv = appendMessage('', 'assistant', true);
-                    await processStream(response, contentDiv);
+                    await processStream(conversationHistory, contentDiv);
                 } catch (e) {
                     removeTypingIndicator();
-                    appendMessage(`Error: ${e.message}`, 'assistant');
+                    appendError(e);
                 }
                 return;
             }
@@ -1673,12 +1883,9 @@ h1,h2,h3,h4{margin-top:1.2em;margin-bottom:0.6em}
                 showTypingIndicator();
 
                 try {
-                    const cjk = (selectedText.match(/[\u4e00-\u9fff]/g) || []).length;
-                    const lang = cjk / selectedText.length > 0.15 ? 'zh' : 'en';
-
                     const result = await DiagramGenerator.generateAndRender(selectedText, {
                         diagramType: 'auto',
-                        language: lang,
+                        language: I18N.outputLanguageName(),
                     });
 
                     removeTypingIndicator();
@@ -1690,85 +1897,16 @@ h1,h2,h3,h4{margin-top:1.2em;margin-bottom:0.6em}
                 return;
             }
 
-            // If freeform, pre-fill the input and let user type
-            if (questionType === 'freeform' || !question) {
-                // Show the selected text as context
-                appendMessage(`[Selected text from ${sourceTitle || sourceUrl || 'page'}]:\n"${selectedText}"`, 'user');
-                userInput.placeholder = 'Type your question about this text...';
-                userInput.focus();
+            // Free-form: show the passage as context and let the user type.
+            // (Quick analyses never reach here — they answer inline on the page.)
+            appendMessage(`“${selectedText}”`, 'user');
+            userInput.placeholder = t('wb_ask_about_selection');
+            userInput.focus();
 
-                // Store context so when user sends, we include it
-                window._askAISelectedText = selectedText;
-                window._askAISource = { url: sourceUrl, title: sourceTitle };
-                return;
-            }
-
-            // Auto-send with the pre-defined question
-            const fullMessage = `Regarding this text from "${sourceTitle || sourceUrl || 'a webpage'}":\n\n"${selectedText}"\n\n${question}`;
-
-            // Build system message with session context
-            conversationHistory = [];
-            conversationHistory.push(await buildSystemMessage());
-
-            conversationHistory.push({ role: "user", content: fullMessage });
-
-            appendMessage(`"${selectedText.substring(0, 200)}${selectedText.length > 200 ? '...' : ''}"`, 'user');
-            appendMessage(getQuestionLabel(questionType), 'user');
-            showTypingIndicator();
-
-            try {
-                const {
-                    apiKey,
-                    apiBaseUrl = 'https://api.openai.com',
-                    modelName = 'gpt-4o-mini',
-                    maxTokens = 2000,
-                    temperature = 0.7
-                } = await chrome.storage.local.get([
-                    'apiKey', 'apiBaseUrl', 'modelName', 'maxTokens', 'temperature'
-                ]);
-
-                if (!apiKey) throw new Error('API key not configured');
-
-                const baseUrl = apiBaseUrl.replace(/\/+$/, '').replace(/\/v1$/, '');
-                const response = await fetch(`${baseUrl}/v1/chat/completions`, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Authorization': `Bearer ${apiKey}`
-                    },
-                    body: JSON.stringify({
-                        model: modelName,
-                        messages: conversationHistory,
-                        temperature: parseFloat(temperature),
-                        max_tokens: parseInt(maxTokens),
-                        stream: true
-                    })
-                });
-
-                if (!response.ok) {
-                    const err = await response.json().catch(() => ({}));
-                    throw new Error(`API Error: ${response.status} - ${err.error?.message || 'Unknown'}`);
-                }
-
-                removeTypingIndicator();
-                const contentDiv = appendMessage('', 'assistant', true);
-                await processStream(response, contentDiv);
-            } catch (error) {
-                removeTypingIndicator();
-                appendMessage(`Error: ${error.message}`, 'assistant');
-            }
+            // Kept so the next send can include the passage.
+            window._askAISelectedText = selectedText;
+            window._askAISource = { url: sourceUrl, title: sourceTitle };
         })();
-    }
-
-    function getQuestionLabel(type) {
-        const labels = {
-            'reliability': 'Check reliability & sources',
-            'similar': 'Find similar viewpoints',
-            'opposing': 'Find opposing viewpoints',
-            'explain': 'Explain in simple terms',
-            'factcheck': 'Fact-check this claim',
-        };
-        return labels[type] || 'Ask AI';
     }
 
     // Override handleSend to include askAI context if present
@@ -1888,15 +2026,11 @@ h1,h2,h3,h4{margin-top:1.2em;margin-bottom:0.6em}
                     return;
                 }
 
-                // Detect language
-                const cjk = (content.match(/[\u4e00-\u9fff]/g) || []).length;
-                const language = cjk / content.length > 0.15 ? 'zh' : 'en';
-
-                // Generate diagram via LLM
+                // Generate diagram via LLM, labelled in the user's language.
                 const result = await DiagramGenerator.generateAndRender(content, {
                     diagramType,
                     userQuery,
-                    language,
+                    language: I18N.outputLanguageName(),
                 });
 
                 removeTypingIndicator();

@@ -1,0 +1,19 @@
+{
+  "name": "weft",
+  "version": "3.0.1",
+  "description": "Collect fragments from across your tabs and weave them into cited reports, rewrites, diagrams and fact-checks.",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "lint": "eslint .",
+    "format": "prettier --write \"**/*.{js,json,css,html,md}\"",
+    "validate": "node scripts/validate-manifest.mjs",
+    "test": "node test/unit.mjs",
+    "pack": "bash scripts/pack.sh",
+    "check": "npm run validate && npm run lint && npm test"
+  },
+  "devDependencies": {
+    "eslint": "^9.0.0",
+    "prettier": "^3.0.0"
+  }
+}

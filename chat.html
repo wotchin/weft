@@ -2,48 +2,72 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>AI Chat - Cyber Assistant</title>
+    <title>Weft — Workbench</title>
     <link rel="stylesheet" href="chat.css">
 </head>
 <body>
     <div class="chat-container">
         <div class="chat-header">
             <div class="header-left">
-                <h2>Chat with AI</h2>
-                <span class="session-badge" id="sessionBadge"></span>
+                <h2 data-i18n="wb_title">Weft Workbench</h2>
             </div>
             <div class="header-right">
-                <button id="exportBtn" class="header-btn" title="Export result">Export</button>
-                <button id="clearChat" class="header-btn" title="Clear chat">Clear</button>
+                <button id="expandBtn" class="header-btn" title="Open in a full window" data-i18n="wb_expand" style="display:none;">Expand</button>
+                <button id="exportBtn" class="header-btn" title="Export result" data-i18n="wb_export">Export</button>
+                <button id="clearChat" class="header-btn" title="Clear chat" data-i18n="wb_clear">Clear</button>
+                <button id="openSettingsBtn" class="header-btn" title="Settings" data-i18n-title="wb_settings">⚙</button>
             </div>
         </div>
 
-        <!-- Context panel showing session snippets -->
+        <!-- Session panel: switch sessions and manage collected snippets -->
         <div class="context-panel" id="contextPanel">
             <div class="context-header">
-                <span>Session Context</span>
-                <button id="toggleContext" class="toggle-btn">Hide</button>
+                <select id="sessionSelect" class="session-select-sm" title="Switch session" data-i18n-title="wb_switch_session"></select>
+                <div class="session-tools">
+                    <button id="newSessionBtn" class="toggle-btn" title="New session" data-i18n-title="wb_new_session">+</button>
+                    <button id="renameSessionBtn" class="toggle-btn" title="Rename session" data-i18n-title="wb_rename_session">✎</button>
+                    <button id="deleteSessionBtn" class="toggle-btn danger" title="Delete session" data-i18n-title="wb_delete_session">🗑</button>
+                    <button id="showOnPageBtn" class="toggle-btn" title="Highlight this session's snippets on the current page" data-i18n-title="wb_show_on_page">◉</button>
+                    <button id="toggleContext" class="toggle-btn">Hide</button>
+                </div>
+            </div>
+            <div class="context-search">
+                <input type="text" id="snippetSearch" class="context-search-input" placeholder="Search snippets…" data-i18n-placeholder="wb_search_snippets">
+                <span class="context-count" id="snippetCount"></span>
             </div>
             <div class="context-body" id="contextBody"></div>
+        </div>
+
+        <!-- Lightweight inline prompt (replaces window.prompt, which is unavailable here) -->
+        <div id="wbModal" class="wb-modal hidden">
+            <div class="wb-modal-card">
+                <div class="wb-modal-title" id="wbModalTitle"></div>
+                <input type="text" id="wbModalInput" class="wb-modal-input" autocomplete="off">
+                <div class="wb-modal-error" id="wbModalError"></div>
+                <div class="wb-modal-actions">
+                    <button id="wbModalCancel" class="plan-btn plan-cancel" data-i18n="action_cancel">Cancel</button>
+                    <button id="wbModalOk" class="plan-btn plan-confirm" data-i18n="action_ok">OK</button>
+                </div>
+            </div>
         </div>
 
         <!-- Quick action buttons -->
         <div class="quick-actions" id="quickActions">
             <button class="quick-action-btn" id="askPageBtn" title="Extract current page content and ask AI about it">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>
-                Ask about this page
+                <span data-i18n="wb_ask_page">Ask about this page</span>
             </button>
             <button class="quick-action-btn" id="takeawaysBtn" title="Extract key takeaways from current page">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3L22 4"></path><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path></svg>
-                Key Takeaways
+                <span data-i18n="wb_takeaways">Key Takeaways</span>
             </button>
             <button class="quick-action-btn" id="deepSearchBtn" title="Search the web to supplement information">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
-                Deep Search
+                <span data-i18n="wb_deep_search">Deep Search</span>
             </button>
             <button class="quick-action-btn diagram-btn" id="drawDiagramBtn" title="Generate a diagram from page or session content">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect><line x1="10" y1="6.5" x2="14" y2="6.5"></line><line x1="17.5" y1="10" x2="17.5" y2="14"></line></svg>
-                Draw Diagram
+                <span data-i18n="wb_diagram">Draw Diagram</span>
             </button>
         </div>
 
@@ -87,17 +111,23 @@
 
         <!-- Prompt template selector -->
         <div class="template-bar" id="templateBar">
-            <select id="templateSelect" class="template-select">
-                <option value="">Select a prompt template...</option>
-                <option value="summarize">Summarize collected info</option>
-                <option value="report">Generate analysis report</option>
-                <option value="compare">Compare and contrast</option>
-                <option value="extract">Extract key points</option>
-                <option value="table">Organize into table</option>
-                <option value="translate_zh">Translate to Chinese</option>
-                <option value="translate_en">Translate to English</option>
-                <option value="custom">Custom prompt...</option>
-            </select>
+            <div class="scenario-chips" id="scenarioChips">
+                <button class="chip chip-primary" data-scenario="report" title="Synthesize your snippets into a cited report">📄 <span data-i18n="sc_report">Report</span></button>
+                <button class="chip" data-scenario="rewrite" title="Merge the snippets into one coherent piece">✍️ <span data-i18n="sc_rewrite">Rewrite</span></button>
+                <button class="chip" data-scenario="verify" title="Cross-check the snippets against each other">🔍 <span data-i18n="sc_verify">Verify</span></button>
+                <button class="chip" data-scenario="summarize" title="Short overview of everything collected">📝 <span data-i18n="sc_summarize">Summary</span></button>
+                <select id="moreScenarios" class="chip chip-select" title="More actions">
+                    <option value="" data-i18n="sc_more">More…</option>
+                    <option value="compare" data-i18n="sc_compare">Compare &amp; contrast</option>
+                    <option value="extract" data-i18n="sc_extract">Extract key points</option>
+                    <option value="table" data-i18n="sc_table">Organize into a table</option>
+                    <option value="translate_zh" data-i18n="sc_to_zh">Translate to Chinese</option>
+                    <option value="translate_en" data-i18n="sc_to_en">Translate to English</option>
+                </select>
+            </div>
+            <label id="webSearchToggleLabel" class="web-search-toggle" style="display:none;" title="Gather web evidence before answering (uses your configured search provider)">
+                <input type="checkbox" id="webSearchToggle"> <span data-i18n="wb_web_search">🌐 Search web</span>
+            </label>
         </div>
 
         <div class="chat-messages" id="chatMessages">
@@ -107,7 +137,8 @@
         <div class="chat-input-container">
             <textarea
                 id="userInput"
-                placeholder="Type your message or select a template above..."
+                placeholder="Type your message or select a scenario above…"
+                data-i18n-placeholder="wb_input_placeholder"
                 rows="1"
                 class="chat-input"
             ></textarea>
@@ -122,17 +153,24 @@
     <!-- Mermaid rendering sandbox (invisible) -->
     <iframe id="mermaidSandbox" src="sandbox-mermaid.html" style="display:none;" sandbox="allow-scripts"></iframe>
 
+    <script src="lib/i18n.js"></script>
     <script src="lib/idb.js"></script>
+    <script src="lib/store.js"></script>
+    <script src="lib/providers.js"></script>
+    <script src="lib/llm-client.js"></script>
+    <script src="lib/search-provider.js"></script>
+    <script src="lib/sanitize.js"></script>
+    <script src="markdown.js"></script>
+    <script src="lib/citations.js"></script>
+    <script src="lib/render.js"></script>
     <script src="lib/tokenizer.js"></script>
     <script src="lib/bm25.js"></script>
     <script src="lib/vector-index.js"></script>
     <script src="lib/rag-indexer.js"></script>
     <script src="lib/rag-engine.js"></script>
     <script src="lib/page-extractor.js"></script>
-    <script src="lib/web-searcher.js"></script>
     <script src="lib/highlighter.js"></script>
     <script src="lib/diagram-generator.js"></script>
-    <script src="markdown.js"></script>
     <script src="chat.js"></script>
 </body>
 </html>
