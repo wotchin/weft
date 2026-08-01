@@ -1,6 +1,28 @@
 /* Weft popup — a compact launcher. Session and snippet management live in the
    Workbench (side panel), so this stylesheet stays deliberately small. */
 
+/* Weft design tokens — from the "Weft Icon & UI Kit" design-system project.
+   Accent values are the kit's --color-accent-500/600/700 steps, chosen for
+   readable contrast on this popup's white ground rather than the kit's own
+   dark-surface pairing. Radius/weight are declared for future adoption; existing
+   component sizing below is left as-is so this pass doesn't reflow the popup. */
+:root {
+    --weft-accent: #796cbf;
+    --weft-accent-hover: #5d5294;
+    --weft-accent-tint: #e7e5fe;
+    --weft-accent-tint-strong: #d2cefd;
+    --weft-accent-soft: #f5f4ff;
+    --weft-ink: #292a3d;
+    --weft-muted: #858ba5;
+    --weft-line: #e3e4ec;
+    --weft-surface-soft: #f7f7fb;
+    --weft-surface-dark: #292a3d;
+    --weft-radius-sm: 4px;
+    --weft-radius-md: 8px;
+    --weft-radius-lg: 14px;
+    --weft-font-heading-weight: 500;
+}
+
 * {
     box-sizing: border-box;
     margin: 0;
@@ -10,8 +32,8 @@
 body {
     width: 320px;
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-    background: #ffffff;
-    color: #333333;
+    background: var(--weft-surface-soft);
+    color: var(--weft-ink);
     font-size: 13px;
 }
 
@@ -25,15 +47,42 @@ body {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 12px 14px;
-    border-bottom: 1px solid #eee;
-    background: #fafbfc;
+    padding: 13px 14px;
+    border-bottom: 1px solid rgba(255,255,255,.08);
+    background: var(--weft-surface-dark);
+}
+
+.brand {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    min-width: 0;
+}
+
+.brand-mark {
+    width: 30px;
+    height: 30px;
+    flex: 0 0 auto;
+}
+
+.brand-copy {
+    min-width: 0;
 }
 
 .app-title {
     font-size: 15px;
-    font-weight: 600;
+    font-weight: var(--weft-font-heading-weight);
     letter-spacing: -0.2px;
+    line-height: 1.1;
+    color: #f0f1f7;
+}
+
+.app-kicker {
+    display: block;
+    margin-top: 2px;
+    font-size: 10px;
+    color: #aeb1c3;
+    letter-spacing: .02em;
 }
 
 .icon-btn {
@@ -42,55 +91,69 @@ body {
     justify-content: center;
     width: 28px;
     height: 28px;
-    border: none;
-    border-radius: 6px;
-    background: none;
-    color: #666;
+    border: 1px solid #4a4c61;
+    border-radius: 8px;
+    background: #34364b;
+    color: #f0f1f7;
     cursor: pointer;
 }
 
 .icon-btn:hover {
-    background: #ececec;
-    color: #222;
+    background: #404258;
+    border-color: #77738f;
+}
+
+.icon-btn img {
+    width: 18px;
+    height: 18px;
 }
 
 /* Session selector */
 .session-controls {
-    padding: 12px 14px 8px;
+    padding: 14px 14px 9px;
+    background: #fff;
 }
 
 .session-row {
+    align-items: center;
     display: flex;
-    gap: 6px;
+    gap: 9px;
+}
+
+.session-icon {
+    width: 24px;
+    height: 24px;
+    flex: 0 0 auto;
 }
 
 .session-select {
     flex: 1;
     min-width: 0;
-    padding: 7px 9px;
+    padding: 8px 9px;
     font-size: 13px;
-    border: 1px solid #ddd;
-    border-radius: 7px;
+    border: 1px solid var(--weft-line);
+    border-radius: var(--weft-radius-md);
     background: #fff;
     color: #333;
 }
 
 .session-select:focus {
     outline: none;
-    border-color: #2196f3;
+    border-color: var(--weft-accent);
 }
 
 .session-meta {
-    margin-top: 6px;
+    margin: 6px 0 0 33px;
     font-size: 11px;
-    color: #999;
+    color: var(--weft-muted);
 }
 
 /* Recent snippets peek */
 .recent-list {
-    padding: 0 14px;
+    padding: 2px 14px 4px;
     max-height: 220px;
     overflow-y: auto;
+    background: #fff;
 }
 
 .recent-empty {
@@ -105,18 +168,33 @@ body {
     display: flex;
     gap: 8px;
     align-items: flex-start;
-    padding: 8px;
+    padding: 9px;
     margin-bottom: 6px;
-    background: #fafbfc;
-    border: 1px solid #eee;
-    border-radius: 7px;
+    background: var(--weft-surface-soft);
+    border: 1px solid var(--weft-line);
+    border-radius: var(--weft-radius-md);
 }
 
 .recent-icon {
-    font-size: 12px;
-    line-height: 1.5;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    border-radius: 7px;
+    background: var(--weft-accent-tint);
+    color: var(--weft-accent-hover);
     flex-shrink: 0;
 }
+
+.recent-icon::before {
+    font-size: 12px;
+    line-height: 1;
+}
+
+.recent-icon-text::before { content: 'T'; font-weight: 700; font-size: 10px; }
+.recent-icon-link::before { content: '↗'; font-weight: 700; }
+.recent-icon-image::before { content: '▧'; font-weight: 700; }
 
 .recent-body {
     min-width: 0;
@@ -144,9 +222,10 @@ body {
 
 /* Actions */
 .bottom-bar {
-    padding: 10px 14px 14px;
-    border-top: 1px solid #eee;
-    margin-top: 4px;
+    padding: 11px 14px 14px;
+    border-top: 1px solid var(--weft-line);
+    margin-top: 0;
+    background: var(--weft-surface-soft);
 }
 
 .bottom-bar-row {
@@ -155,23 +234,51 @@ body {
 }
 
 .action-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
     flex: 1;
-    padding: 9px 10px;
-    font-size: 13px;
+    padding: 9px 8px;
+    font-size: 12px;
     font-weight: 500;
-    border-radius: 7px;
+    border-radius: var(--weft-radius-md);
     border: 1px solid transparent;
     cursor: pointer;
     transition: background 0.15s, border-color 0.15s;
 }
 
+.asset-mask {
+    display: inline-block;
+    width: 15px;
+    height: 15px;
+    flex: 0 0 auto;
+    background: currentColor;
+    -webkit-mask-position: center;
+    -webkit-mask-repeat: no-repeat;
+    -webkit-mask-size: contain;
+    mask-position: center;
+    mask-repeat: no-repeat;
+    mask-size: contain;
+}
+
+.asset-branching {
+    -webkit-mask-image: url('assets/others/branching.svg');
+    mask-image: url('assets/others/branching.svg');
+}
+
+.asset-snapshots {
+    -webkit-mask-image: url('assets/others/snapshots.svg');
+    mask-image: url('assets/others/snapshots.svg');
+}
+
 .action-btn.primary {
-    background: #2196f3;
+    background: var(--weft-accent);
     color: #fff;
 }
 
 .action-btn.primary:hover {
-    background: #1976d2;
+    background: var(--weft-accent-hover);
 }
 
 .action-btn.secondary {
@@ -181,8 +288,8 @@ body {
 }
 
 .action-btn.secondary:hover {
-    border-color: #2196f3;
-    color: #2196f3;
+    border-color: var(--weft-accent);
+    color: var(--weft-accent);
 }
 
 .popup-hint {

@@ -549,10 +549,10 @@ document.addEventListener('DOMContentLoaded', async function() {
     // Scenario chips run immediately. The prompt itself is never shown to the
     // user — the transcript records the intent ("Report"), not the instruction.
     const SCENARIO_LABELS = {
-        report: '📄 ' + t('sc_report'),
-        rewrite: '✍️ ' + t('sc_rewrite'),
-        verify: '🔍 ' + t('sc_verify'),
-        summarize: '📝 ' + t('sc_summarize'),
+        report: t('sc_report'),
+        rewrite: t('sc_rewrite'),
+        verify: t('sc_verify'),
+        summarize: t('sc_summarize'),
         compare: t('sc_compare'),
         extract: t('sc_extract'),
         table: t('sc_table'),
@@ -815,7 +815,7 @@ document.addEventListener('DOMContentLoaded', async function() {
 
     /**
      * Update a quick-action button's label without destroying its icon.
-     * These buttons are `<svg> + <span>`, so assigning textContent would wipe
+     * These buttons are `<img>/<svg> + <span>`, so assigning textContent would wipe
      * the icon. Pass null to restore the original label.
      */
     function setBtnLabel(btn, text) {

@@ -46,8 +46,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             item.className = 'recent-item';
 
             const icon = document.createElement('span');
-            icon.className = 'recent-icon';
-            icon.textContent = s.type === 'image' ? '🖼' : (s.type === 'link' ? '🔗' : '✂');
+            icon.className = `recent-icon recent-icon-${s.type === 'image' ? 'image' : (s.type === 'link' ? 'link' : 'text')}`;
             item.appendChild(icon);
 
             const body = document.createElement('div');
@@ -121,14 +120,14 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     document.getElementById('showOnPage').addEventListener('click', () => {
         if (!currentSession) return;
-        const btn = document.getElementById('showOnPage');
+        const label = document.getElementById('showOnPageLabel');
         chrome.runtime.sendMessage(
             { type: 'highlightSessionOnPage', sessionName: currentSession },
             (result) => {
                 if (chrome.runtime.lastError) return;
                 const n = result && result.highlighted ? result.highlighted : 0;
-                btn.textContent = n > 0 ? t('popup_shown').replace('%s', n) : t('popup_shown_none');
-                setTimeout(() => { btn.textContent = t('popup_show_on_page'); }, 2000);
+                label.textContent = n > 0 ? t('popup_shown').replace('%s', n) : t('popup_shown_none');
+                setTimeout(() => { label.textContent = t('popup_show_on_page'); }, 2000);
             }
         );
     });

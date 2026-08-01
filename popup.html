@@ -3,21 +3,26 @@
 <head>
   <meta charset="UTF-8">
   <title>Weft</title>
-  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="styles.css?v=3.0.1-ui2">
 </head>
 <body>
   <div id="content">
     <div class="header">
-      <h1 class="app-title">Weft</h1>
+      <div class="brand">
+        <img class="brand-mark" src="assets/icon-32.png" alt="">
+        <div class="brand-copy">
+          <h1 class="app-title">Weft</h1>
+          <span class="app-kicker">Research workspace</span>
+        </div>
+      </div>
       <button id="openSettings" class="icon-btn" title="Settings" data-i18n-title="popup_settings">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <circle cx="12" cy="12" r="3"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/>
-        </svg>
+        <img src="assets/others/settings.svg" alt="">
       </button>
     </div>
 
     <div class="session-controls">
       <div class="session-row">
+        <img class="session-icon" src="assets/others/snapshots.svg" alt="">
         <select id="sessionSelect" class="session-select" title="Active session" data-i18n-title="popup_active_session"></select>
       </div>
       <div class="session-meta" id="sessionMeta"></div>
@@ -27,11 +32,13 @@
 
     <div class="bottom-bar">
       <div class="bottom-bar-row">
-        <button id="openChat" class="action-btn primary" data-i18n="popup_open_workbench">
-          Open Workbench
+        <button id="openChat" class="action-btn primary">
+          <span class="asset-mask asset-branching" aria-hidden="true"></span>
+          <span data-i18n="popup_open_workbench">Open Workbench</span>
         </button>
-        <button id="showOnPage" class="action-btn secondary" title="Highlight this session's snippets on the current page" data-i18n="popup_show_on_page">
-          Show on Page
+        <button id="showOnPage" class="action-btn secondary" title="Highlight this session's snippets on the current page">
+          <span class="asset-mask asset-snapshots" aria-hidden="true"></span>
+          <span id="showOnPageLabel" data-i18n="popup_show_on_page">Show on Page</span>
         </button>
       </div>
       <div class="popup-hint" data-i18n="popup_hint">

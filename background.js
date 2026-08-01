@@ -584,7 +584,7 @@ async function sendNotification(title, message) {
     if (chrome.notifications) {
         chrome.notifications.create(`cyber-assistant-${Date.now()}`, {
             type: "basic",
-            iconUrl: chrome.runtime.getURL("assets/icon.png"),
+            iconUrl: chrome.runtime.getURL("assets/icon-128.png"),
             title: title,
             message: message,
         });
