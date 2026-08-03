@@ -1,37 +1,34 @@
-/* global Store */
+/* global Store, I18N, t */
 (async () => {
     'use strict';
 
+    await I18N.init();
+    I18N.apply();
+
     // Seed a demo session so the scenarios are explorable without collecting first.
     try {
-        const sessions = await Store.getSessions();
-        if (!sessions['Demo · Electric vehicles']) {
-            const now = Date.now();
-            const demo = [
-                {
-                    id: 'demo-1', type: 'text',
-                    content: 'Global EV sales passed 14 million units in 2023, roughly 18% of all new cars sold worldwide.',
-                    sourceUrl: 'https://example.com/ev-report', sourceTitle: 'Global EV Outlook',
-                    timestamp: now, tags: ['stats'],
-                },
-                {
-                    id: 'demo-2', type: 'text',
-                    content: 'China accounted for about 60% of global EV sales in 2023, driven by aggressive pricing and dense charging infrastructure.',
-                    sourceUrl: 'https://example.com/china-ev', sourceTitle: 'China EV Market Note',
-                    timestamp: now + 1, tags: ['market'],
-                },
-                {
-                    id: 'demo-3', type: 'text',
-                    content: 'Some analysts caution that EV growth may slow in markets where charging access lags and subsidies are being phased out.',
-                    sourceUrl: 'https://example.com/ev-skeptic', sourceTitle: 'A More Cautious View',
-                    timestamp: now + 2, tags: ['counterpoint'],
-                },
-            ];
-            const all = await Store.getSessions();
-            all['Demo · Electric vehicles'] = demo;
-            await Store.setSessions(all);
-            await Store.setCurrentSession('Demo · Electric vehicles');
-        }
+        const now = Date.now();
+        const demo = [
+            {
+                id: 'demo-1', type: 'text',
+                content: t('onboarding_demo_sales_content'),
+                sourceUrl: 'https://example.com/ev-report', sourceTitle: t('onboarding_demo_sales_source'),
+                timestamp: now, tags: ['stats'],
+            },
+            {
+                id: 'demo-2', type: 'text',
+                content: t('onboarding_demo_china_content'),
+                sourceUrl: 'https://example.com/china-ev', sourceTitle: t('onboarding_demo_china_source'),
+                timestamp: now + 1, tags: ['market'],
+            },
+            {
+                id: 'demo-3', type: 'text',
+                content: t('onboarding_demo_caution_content'),
+                sourceUrl: 'https://example.com/ev-skeptic', sourceTitle: t('onboarding_demo_caution_source'),
+                timestamp: now + 2, tags: ['counterpoint'],
+            },
+        ];
+        await Store.createSessionIfMissing(t('onboarding_demo_session'), demo, { activate: true });
     } catch (e) {
         console.warn('[Weft] demo seed failed', e);
     }
@@ -45,7 +42,9 @@
     function render() {
         steps.forEach((s, n) => s.classList.toggle('active', n === i));
         dots.forEach((d, n) => d.classList.toggle('active', n === i));
-        nextBtn.textContent = i === steps.length - 1 ? 'Get started' : 'Next';
+        nextBtn.textContent = i === steps.length - 1
+            ? t('onboarding_get_started')
+            : t('onboarding_next');
     }
 
     nextBtn.addEventListener('click', () => {

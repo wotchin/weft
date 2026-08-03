@@ -3,24 +3,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     await I18N.init();
     I18N.apply();
 
-    // ---- Language ----
     const uiLanguageSelect = document.getElementById('uiLanguage');
-    for (const lang of I18N.LANGUAGES) {
-        const opt = document.createElement('option');
-        opt.value = lang.code;
-        opt.textContent = lang.label;
-        uiLanguageSelect.appendChild(opt);
-    }
-    const { uiLanguage } = await chrome.storage.local.get(['uiLanguage']);
-    uiLanguageSelect.value = uiLanguage || 'auto';
-
-    // Apply immediately so the change is visible without a save/reload.
-    uiLanguageSelect.addEventListener('change', async () => {
-        await chrome.storage.local.set({ uiLanguage: uiLanguageSelect.value });
-        await I18N.init();
-        I18N.apply();
-    });
-
     const providerSelect = document.getElementById('provider');
     const apiBaseUrlInput = document.getElementById('apiBaseUrl');
     const apiKeyInput = document.getElementById('apiKey');
@@ -36,17 +19,80 @@ document.addEventListener('DOMContentLoaded', async () => {
     const searchKeyGroup = document.getElementById('searchKeyGroup');
     const searchEndpointInput = document.getElementById('searchEndpoint');
     const searchEndpointGroup = document.getElementById('searchEndpointGroup');
+    const searchProviderNote = document.getElementById('searchProviderNote');
+    const searchTestButton = document.getElementById('testSearch');
+    const searchStatus = document.getElementById('searchStatus');
     const saveButton = document.getElementById('saveSettings');
     const testButton = document.getElementById('testConnection');
     const statusMessage = document.getElementById('statusMessage');
+    let statusTimer = null;
 
-    // Populate provider dropdown from the preset table
-    for (const [id, p] of Object.entries(PROVIDERS)) {
-        const opt = document.createElement('option');
-        opt.value = id;
-        opt.textContent = p.label;
-        providerSelect.appendChild(opt);
+    function localized(key, fallback = '') {
+        const message = t(key);
+        return message === key ? fallback : message;
     }
+
+    function formatMessage(key, params = {}) {
+        let message = t(key);
+        for (const [name, rawValue] of Object.entries(params)) {
+            const value = typeof rawValue === 'function' ? rawValue() : rawValue;
+            message = message.replaceAll(`{{${name}}}`, String(value ?? ''));
+            if (name === 's') message = message.replace('%s', String(value ?? ''));
+        }
+        return message;
+    }
+
+    function renderStatus(element) {
+        const spec = element._weftI18nStatus;
+        if (!spec) return;
+        element.textContent = formatMessage(spec.key, spec.params);
+        element.className = `status-message ${spec.type}`;
+        element.style.display = 'block';
+    }
+
+    function setStatus(element, key, type, params = {}) {
+        element._weftI18nStatus = { key, type, params };
+        renderStatus(element);
+    }
+
+    function showStatus(key, type = 'success', params = {}) {
+        if (statusTimer) clearTimeout(statusTimer);
+        setStatus(statusMessage, key, type, params);
+        if (type !== 'info') {
+            statusTimer = setTimeout(() => {
+                statusMessage.style.display = 'none';
+                statusMessage._weftI18nStatus = null;
+                statusTimer = null;
+            }, 4000);
+        }
+    }
+
+    function rebuildLanguageOptions(selectedValue = uiLanguageSelect.value || 'auto') {
+        uiLanguageSelect.replaceChildren();
+        for (const lang of I18N.LANGUAGES) {
+            const opt = document.createElement('option');
+            opt.value = lang.code;
+            opt.textContent = localized(lang.labelKey, lang.label);
+            uiLanguageSelect.appendChild(opt);
+        }
+        uiLanguageSelect.value = selectedValue;
+    }
+
+    function rebuildProviderOptions(selectedValue = providerSelect.value || 'openai') {
+        providerSelect.replaceChildren();
+        for (const [id, provider] of Object.entries(PROVIDERS)) {
+            const opt = document.createElement('option');
+            opt.value = id;
+            opt.textContent = localized(provider.labelKey, provider.label);
+            providerSelect.appendChild(opt);
+        }
+        providerSelect.value = selectedValue;
+    }
+
+    // ---- Language ----
+    const { uiLanguage } = await chrome.storage.local.get(['uiLanguage']);
+    rebuildLanguageOptions(uiLanguage || 'auto');
+    rebuildProviderOptions();
 
     // Normalize legacy vision values to the new vocabulary
     function normalizeVision(v) {
@@ -71,17 +117,32 @@ document.addEventListener('DOMContentLoaded', async () => {
         searchKeyGroup.style.display = (provider === 'tavily' || provider === 'brave') ? '' : 'none';
         searchEndpointGroup.style.display = provider === 'searxng' ? '' : 'none';
 
-        const note = document.getElementById('searchProviderNote');
-        const testBtn = document.getElementById('testSearch');
         const notes = {
             searxng: t('settings_search_note_self'),
             tavily: t('settings_search_note_tavily'),
             brave: t('settings_search_note_brave'),
         };
-        note.textContent = notes[provider] || '';
-        note.style.display = notes[provider] ? '' : 'none';
-        testBtn.style.display = provider && provider !== 'none' ? '' : 'none';
+        searchProviderNote.textContent = notes[provider] || '';
+        searchProviderNote.style.display = notes[provider] ? '' : 'none';
+        searchTestButton.style.display = provider && provider !== 'none' ? '' : 'none';
     }
+
+    function refreshDynamicCopy() {
+        rebuildLanguageOptions(uiLanguageSelect.value);
+        rebuildProviderOptions(providerSelect.value);
+        applySearchUI(searchProviderSelect.value);
+        renderStatus(statusMessage);
+        renderStatus(searchStatus);
+    }
+
+    // Apply immediately so the change is visible without a save/reload.
+    uiLanguageSelect.addEventListener('change', async () => {
+        const selectedLanguage = uiLanguageSelect.value;
+        await chrome.storage.local.set({ uiLanguage: selectedLanguage });
+        await I18N.init();
+        I18N.apply();
+        refreshDynamicCopy();
+    });
 
     providerSelect.value = PROVIDERS[cfg.provider] ? cfg.provider : 'openai';
     apiBaseUrlInput.value = cfg.baseUrl || '';
@@ -109,15 +170,6 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
     }
 
-    function showStatus(message, type = 'success') {
-        statusMessage.textContent = message;
-        statusMessage.className = `status-message ${type}`;
-        statusMessage.style.display = 'block';
-        if (type !== 'info') {
-            setTimeout(() => { statusMessage.style.display = 'none'; }, 4000);
-        }
-    }
-
     function readForm() {
         const provider = providerSelect.value;
         const p = getProvider(provider);
@@ -133,17 +185,57 @@ document.addEventListener('DOMContentLoaded', async () => {
         };
     }
 
+    function localizeSearchError(error) {
+        const message = String(error || '');
+        const exact = {
+            'No search provider selected.': 'settings_search_error_no_provider',
+            'Tavily API key not set.': 'settings_search_error_key_required',
+            'Brave API key not set.': 'settings_search_error_key_required',
+            'No SearXNG address set.': 'settings_search_error_endpoint_required',
+            'Address must start with http:// or https://': 'settings_search_error_endpoint_protocol',
+            'The instance did not respond in time.': 'settings_search_error_timeout',
+            'Could not reach that address. Check the URL and that the instance is online.': 'settings_search_error_unreachable',
+            'Connected, but the provider returned no results.': 'settings_search_error_no_results',
+        };
+        if (exact[message]) return t(exact[message]);
+        if (/web page instead of JSON|JSON API is disabled/i.test(message)) {
+            return t('settings_search_error_json_disabled');
+        }
+        const status = /HTTP\s+(\d+)/i.exec(message)?.[1];
+        if (status) return formatMessage('settings_search_error_http', { status });
+        console.warn('[Weft] Unrecognized search connection error', message);
+        return t('settings_search_error_unknown');
+    }
+
+    function localizeLlmError(result) {
+        const keys = {
+            auth: 'settings_llm_error_auth',
+            rate_limit: 'settings_llm_error_rate_limit',
+            context_length: 'settings_llm_error_context_length',
+            network: 'settings_llm_error_network',
+            timeout: 'settings_llm_error_timeout',
+            abort: 'settings_llm_error_abort',
+            server: 'settings_llm_error_server',
+            bad_request: 'settings_llm_error_bad_request',
+            empty_response: 'settings_llm_error_empty_response',
+            output_limit: 'settings_llm_error_output_limit',
+        };
+        if (keys[result?.kind]) return t(keys[result.kind]);
+        console.warn('[Weft] Unrecognized LLM connection error', result?.error);
+        return t('settings_llm_error_unknown');
+    }
+
     // Save settings
     saveButton.addEventListener('click', async () => {
         const cfgOut = readForm();
         const p = getProvider(cfgOut.provider);
 
         if (p.needsKey && !cfgOut.apiKey) {
-            showStatus('Please enter an API key.', 'error');
+            showStatus('settings_api_key_required', 'error');
             return;
         }
         if (!cfgOut.model) {
-            showStatus('Please enter a model name.', 'error');
+            showStatus('settings_model_required', 'error');
             return;
         }
 
@@ -160,9 +252,10 @@ document.addEventListener('DOMContentLoaded', async () => {
             });
             // Clear any legacy flat keys now that we write the unified config.
             await chrome.storage.local.remove(['apiKey', 'apiBaseUrl', 'modelName']);
-            showStatus('Settings saved successfully!', 'success');
+            showStatus('settings_save_success', 'success');
         } catch (error) {
-            showStatus('Error saving settings: ' + error.message, 'error');
+            console.error('[Weft] Failed to save settings', error);
+            showStatus('settings_save_error', 'error');
         }
     });
 
@@ -176,16 +269,17 @@ document.addEventListener('DOMContentLoaded', async () => {
             endpoint: searchEndpointInput.value.trim(),
         };
 
-        out.className = 'status-message info';
-        out.style.display = 'block';
-        out.textContent = t('settings_search_testing');
+        setStatus(out, 'settings_search_testing', 'info');
         btn.disabled = true;
         try {
             const res = await SearchProvider.testConnection(cfg);
-            out.className = `status-message ${res.ok ? 'success' : 'error'}`;
-            out.textContent = res.ok
-                ? t('settings_search_ok').replace('%s', res.count)
-                : `${t('settings_search_fail')} ${res.error}`;
+            if (res.ok) {
+                setStatus(out, 'settings_search_ok', 'success', { s: res.count });
+            } else {
+                setStatus(out, 'settings_search_failed_detail', 'error', {
+                    detail: () => localizeSearchError(res.error),
+                });
+            }
         } finally {
             btn.disabled = false;
         }
@@ -196,25 +290,28 @@ document.addEventListener('DOMContentLoaded', async () => {
         const cfgOut = readForm();
         const p = getProvider(cfgOut.provider);
         if (p.needsKey && !cfgOut.apiKey) {
-            showStatus('Please enter an API key first.', 'error');
+            showStatus('settings_api_key_required', 'error');
             return;
         }
         if (!cfgOut.model) {
-            showStatus('Please enter a model name first.', 'error');
+            showStatus('settings_model_required', 'error');
             return;
         }
 
-        showStatus('Testing connection...', 'info');
+        showStatus('settings_connection_testing', 'info');
         testButton.disabled = true;
         try {
             const result = await LLMClient.testConnection(cfgOut);
             if (result.ok) {
-                showStatus(`Connection successful! Model responded: "${(result.sample || 'OK').substring(0, 50)}"`, 'success');
+                showStatus('settings_connection_success', 'success');
             } else {
-                showStatus(`Connection failed: ${result.error}${result.hint ? ' — ' + result.hint : ''}`, 'error');
+                showStatus('settings_connection_failed_detail', 'error', {
+                    detail: () => localizeLlmError(result),
+                });
             }
         } catch (error) {
-            showStatus(`Connection error: ${error.message}`, 'error');
+            console.error('[Weft] Connection test failed unexpectedly', error);
+            showStatus('settings_connection_error', 'error');
         } finally {
             testButton.disabled = false;
         }

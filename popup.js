@@ -12,10 +12,102 @@ document.addEventListener('DOMContentLoaded', async () => {
     const sessionSelect = document.getElementById('sessionSelect');
     const sessionMeta = document.getElementById('sessionMeta');
     const recentList = document.getElementById('recentList');
+    const showOnPageBtn = document.getElementById('showOnPage');
+    const showOnPageLabel = document.getElementById('showOnPageLabel');
+    const [activePageTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    const currentWindowId = activePageTab?.windowId;
 
     const RECENT_LIMIT = 4;
     let sessions = {};
     let currentSession = null;
+    let highlightStateGeneration = 0;
+    let annotationInFlight = false;
+
+    function createRequestId() {
+        if (globalThis.crypto?.randomUUID) return crypto.randomUUID();
+        return `smart-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+    }
+
+    function setShowOnPageState(active) {
+        showOnPageBtn.classList.toggle('is-active', active);
+        showOnPageBtn.setAttribute('aria-pressed', String(active));
+        showOnPageLabel.textContent = t(active ? 'popup_hide_on_page' : 'popup_show_on_page');
+        showOnPageBtn.title = t(active ? 'wb_remove_from_page' : 'wb_show_on_page');
+    }
+
+    function sendAnnotationMessage(type, sessionName) {
+        return new Promise((resolve) => {
+            let settled = false;
+            const finish = (value) => {
+                if (settled) return;
+                settled = true;
+                clearTimeout(timer);
+                resolve(value);
+            };
+            const timer = setTimeout(() => finish(null), 5000);
+            try {
+                chrome.runtime.sendMessage({
+                    type,
+                    sessionName,
+                    tabId: activePageTab?.id,
+                    url: activePageTab?.url || '',
+                }, (result) => {
+                    if (chrome.runtime.lastError) finish(null);
+                    else finish(result || null);
+                });
+            } catch {
+                finish(null);
+            }
+        });
+    }
+
+    async function hideSessionAnnotations(sessionName) {
+        if (!sessionName || !activePageTab?.id) return;
+        await sendAnnotationMessage('hideSessionOnPage', sessionName);
+    }
+
+    async function refreshHighlightState() {
+        const generation = ++highlightStateGeneration;
+        const sessionName = currentSession;
+        if (!sessionName || !activePageTab?.id || !/^https?:/i.test(activePageTab.url || '')) {
+            setShowOnPageState(false);
+            showOnPageBtn.disabled = true;
+            return;
+        }
+        const result = await sendAnnotationMessage('getSessionHighlightState', sessionName);
+        if (generation !== highlightStateGeneration || currentSession !== sessionName) return;
+        if (result && !result.error) setShowOnPageState(Boolean(result.active));
+        showOnPageBtn.disabled = annotationInFlight;
+    }
+
+    async function openWorkbench(preparation, options = {}) {
+        // sidePanel.open must be initiated while the click's user activation is
+        // still live, before awaiting storage or window queries.
+        const activateCurrentSession = options.activateCurrentSession !== false;
+        const preparationPromise = Promise.all([
+            preparation || Promise.resolve(),
+            activateCurrentSession && currentSession
+                ? Store.setCurrentSession(currentSession)
+                : Promise.resolve(),
+        ]);
+        let panelPromise;
+        try {
+            if (!chrome.sidePanel?.open || !Number.isInteger(currentWindowId)) throw new Error('Side panel unavailable');
+            panelPromise = chrome.sidePanel.open({ windowId: currentWindowId });
+            await Promise.all([preparationPromise, panelPromise]);
+            window.close();
+        } catch {
+            await preparationPromise.catch(() => {});
+            await chrome.windows.create({
+                url: chrome.runtime.getURL(options.smartReadRequestId
+                    ? `chat.html?smartReadRequestId=${encodeURIComponent(options.smartReadRequestId)}`
+                    : 'chat.html'),
+                type: 'popup',
+                width: 900,
+                height: 700,
+            });
+        }
+    }
 
     function formatTime(ts) {
         if (!ts) return '';
@@ -90,51 +182,88 @@ document.addEventListener('DOMContentLoaded', async () => {
             sessionMeta.textContent = t('popup_no_session');
         }
         renderRecent();
+        await refreshHighlightState();
     }
 
     sessionSelect.addEventListener('change', async () => {
-        currentSession = sessionSelect.value;
+        const previousSession = currentSession;
+        const nextSession = sessionSelect.value;
+        await hideSessionAnnotations(previousSession);
+        if (sessionSelect.value !== nextSession) return;
+        currentSession = nextSession;
         await Store.setCurrentSession(currentSession);
         const count = (sessions[currentSession] || []).length;
         sessionMeta.textContent = t('popup_snippet_count').replace('%s', count);
         renderRecent();
+        await refreshHighlightState();
     });
 
     // Open the Workbench in the side panel. Must happen inside the click
     // gesture; fall back to a window if the side panel isn't available.
-    document.getElementById('openChat').addEventListener('click', async () => {
-        if (currentSession) await Store.setCurrentSession(currentSession);
-        try {
-            const win = await chrome.windows.getCurrent();
-            await chrome.sidePanel.open({ windowId: win.id });
-            window.close();
-        } catch {
-            chrome.windows.create({
-                url: chrome.runtime.getURL('chat.html'),
-                type: 'popup',
-                width: 900,
-                height: 700,
-            });
-        }
+    document.getElementById('openChat').addEventListener('click', () => openWorkbench());
+
+    document.getElementById('smartRead').addEventListener('click', async () => {
+        const tab = activePageTab;
+        if (!tab?.id || !/^https?:/i.test(tab.url || '')) return;
+        const requestId = createRequestId();
+        const pendingWrite = Store.setPendingSmartRead({
+            requestId,
+            tabId: tab.id,
+            url: tab.url,
+            sourceTitle: tab.title || '',
+            windowId: currentWindowId,
+            requestedAt: Date.now(),
+            source: 'popup',
+        });
+        // Smart Read creates and activates its own new session. Do not race it
+        // with a write that restores the popup's previously selected session.
+        await openWorkbench(pendingWrite, {
+            activateCurrentSession: false,
+            smartReadRequestId: requestId,
+        });
     });
 
-    document.getElementById('showOnPage').addEventListener('click', () => {
-        if (!currentSession) return;
-        const label = document.getElementById('showOnPageLabel');
-        chrome.runtime.sendMessage(
-            { type: 'highlightSessionOnPage', sessionName: currentSession },
-            (result) => {
-                if (chrome.runtime.lastError) return;
-                const n = result && result.highlighted ? result.highlighted : 0;
-                label.textContent = n > 0 ? t('popup_shown').replace('%s', n) : t('popup_shown_none');
-                setTimeout(() => { label.textContent = t('popup_show_on_page'); }, 2000);
-            }
-        );
+    showOnPageBtn.addEventListener('click', async () => {
+        if (!currentSession || annotationInFlight) return;
+        const sessionName = currentSession;
+        annotationInFlight = true;
+        ++highlightStateGeneration;
+        showOnPageBtn.disabled = true;
+        showOnPageBtn.setAttribute('aria-busy', 'true');
+        try {
+            await sendAnnotationMessage('toggleSessionOnPage', sessionName);
+        } finally {
+            annotationInFlight = false;
+            showOnPageBtn.removeAttribute('aria-busy');
+            await refreshHighlightState();
+        }
     });
 
     document.getElementById('openSettings').addEventListener('click', () => {
         chrome.tabs.create({ url: chrome.runtime.getURL('settings.html') });
     });
 
+    chrome.storage.onChanged.addListener((changes, areaName) => {
+        if (areaName === 'local' && (changes.sessions || changes.currentSession)) {
+            load().catch(() => {});
+        }
+    });
+    chrome.runtime.onMessage.addListener((message) => {
+        if (
+            message.type === 'pageAnnotationStateChanged'
+            && message.tabId === activePageTab?.id
+            && message.sessionName === currentSession
+        ) {
+            refreshHighlightState().catch(() => {});
+        }
+        return false;
+    });
+
     await load();
+
+    const smartReadBtn = document.getElementById('smartRead');
+    if (!activePageTab?.id || !/^https?:/i.test(activePageTab.url || '')) {
+        smartReadBtn.disabled = true;
+        smartReadBtn.title = t('wb_page_unavailable');
+    }
 });

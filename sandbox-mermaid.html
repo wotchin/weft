@@ -15,42 +15,65 @@
         mermaid.initialize({
             startOnLoad: false,
             theme: 'default',
-            securityLevel: 'loose',
+            securityLevel: 'strict',
+            htmlLabels: false,
             fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
-            flowchart: { useMaxWidth: true, htmlLabels: true },
+            flowchart: { useMaxWidth: true, htmlLabels: false },
             mindmap: { useMaxWidth: true },
             sequence: { useMaxWidth: true },
         });
 
         let renderCounter = 0;
+        const parentWindow = window.parent;
+
+        function sendToParent(message) {
+            if (parentWindow !== window) parentWindow.postMessage(message, '*');
+        }
 
         window.addEventListener('message', async (event) => {
-            if (event.data && event.data.type === 'render-mermaid') {
-                const code = event.data.code;
+            if (event.source !== parentWindow || !event.data) return;
+
+            const requestId = typeof event.data.requestId === 'string'
+                ? event.data.requestId
+                : '';
+            if (event.data.type === 'mermaid-ping') {
+                sendToParent({ type: 'mermaid-ready', requestId });
+                return;
+            }
+
+            if (event.data.type === 'render-mermaid') {
+                const code = typeof event.data.code === 'string' ? event.data.code : '';
+                const safeCode = `---
+config:
+  htmlLabels: false
+  flowchart:
+    htmlLabels: false
+---
+${code}`;
                 const container = document.getElementById('container');
                 container.innerHTML = '';
 
                 try {
                     const id = `mermaid-${++renderCounter}`;
-                    const { svg } = await mermaid.render(id, code);
+                    const { svg } = await mermaid.render(id, safeCode);
                     container.innerHTML = svg;
-                    event.source.postMessage({
+                    sendToParent({
                         type: 'mermaid-result',
+                        requestId,
                         svg: svg,
-                    }, '*');
+                    });
                 } catch (err) {
-                    event.source.postMessage({
+                    sendToParent({
                         type: 'mermaid-result',
+                        requestId,
                         error: err.message || 'Mermaid rendering failed',
-                    }, '*');
+                    });
                 }
             }
         });
 
         // Signal ready
-        if (window.parent !== window) {
-            window.parent.postMessage({ type: 'mermaid-ready' }, '*');
-        }
+        sendToParent({ type: 'mermaid-ready' });
     </script>
 </body>
 </html>

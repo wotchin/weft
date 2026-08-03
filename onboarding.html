@@ -2,16 +2,19 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Welcome to Weft</title>
+    <title data-i18n="onboarding_page_title">Welcome to Weft</title>
     <style>
+        @font-face { font-family: 'Inter'; font-style: normal; font-weight: 400; font-display: swap; src: url('assets/fonts/inter-400.woff2') format('woff2'); }
+        @font-face { font-family: 'Inter'; font-style: normal; font-weight: 500; font-display: swap; src: url('assets/fonts/inter-500.woff2') format('woff2'); }
+        @font-face { font-family: 'Inter'; font-style: normal; font-weight: 600; font-display: swap; src: url('assets/fonts/inter-600.woff2') format('woff2'); }
         :root {
-            --weft-accent:#796cbf; --weft-accent-hover:#5d5294; --weft-accent-tint:#e7e5fe;
-            --weft-accent-soft:#f5f4ff; --weft-ink:#292a3d; --weft-muted:#858ba5; --weft-line:#e3e4ec;
+            --weft-accent:#6c5ce0; --weft-accent-hover:#5643c4; --weft-accent-tint:#ece8fc;
+            --weft-accent-soft:#f6f4fe; --weft-ink:#292a3d; --weft-muted:#858ba5; --weft-line:#e3e4ec;
         }
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            background: radial-gradient(circle at 15% 10%, #e7e5fe 0, transparent 32rem), #f7f7fb;
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: radial-gradient(circle at 15% 10%, #ece8fc 0, transparent 32rem), #f7f7fb;
             color: var(--weft-ink); min-height: 100vh; display: flex; align-items: center; justify-content: center;
         }
         .card {
@@ -32,8 +35,16 @@
             background: var(--weft-accent-soft); border: 1px solid var(--weft-accent-tint); border-radius: 12px;
             padding: 16px 12px; flex: 1; min-width: 130px;
         }
-        .flow-item .ico { height:28px; display:flex; align-items:center; justify-content:center; }
+        .flow-item .ico { height:28px; display:flex; align-items:center; justify-content:center; color: var(--weft-accent); }
         .flow-item .ico img { width:26px; height:26px; object-fit:contain; }
+        .flow-item .ico .asset-mask { width:24px; height:24px; }
+        .asset-mask {
+            display: inline-block; background: currentColor;
+            -webkit-mask-position: center; -webkit-mask-repeat: no-repeat; -webkit-mask-size: contain;
+            mask-position: center; mask-repeat: no-repeat; mask-size: contain;
+        }
+        .asset-snapshots { -webkit-mask-image: url('assets/others/snapshots.svg'); mask-image: url('assets/others/snapshots.svg'); }
+        .asset-branching { -webkit-mask-image: url('assets/others/branching.svg'); mask-image: url('assets/others/branching.svg'); }
         .flow-item .t { font-weight: 600; font-size: 13px; margin-top: 6px; }
         .flow-item .d { font-size: 12px; color: #777; margin-top: 4px; }
         .dots { display: flex; gap: 8px; justify-content: center; margin: 24px 0 20px; }
@@ -53,43 +64,44 @@
 </head>
 <body>
     <div class="card">
-        <div class="logo"><img src="assets/icon-48.png" alt=""><span>Weft</span></div>
-        <div class="tagline">Your traceable research clipboard.</div>
+        <div class="logo"><img src="assets/icon.svg" alt=""><span>Weft</span></div>
+        <div class="tagline" data-i18n="onboarding_tagline">Your traceable research clipboard.</div>
 
         <div class="step active" data-step="0">
-            <h2>Collect → Synthesize → Trace</h2>
+            <h2 data-i18n="onboarding_flow_title">Collect → Synthesize → Trace</h2>
             <div class="flow">
-                <div class="flow-item"><div class="ico"><img src="assets/others/snapshots.svg" alt=""></div><div class="t">Collect</div><div class="d">Select text/images on any page, right-click to save into a session.</div></div>
-                <div class="flow-item"><div class="ico"><img src="assets/others/branching.svg" alt=""></div><div class="t">Synthesize</div><div class="d">Report, Rewrite, Diagram or Verify — one click in the Workbench.</div></div>
-                <div class="flow-item"><div class="ico"><img src="assets/icon-32.png" alt=""></div><div class="t">Trace</div><div class="d">Every claim links back to its exact source passage.</div></div>
+                <div class="flow-item"><div class="ico"><span class="asset-mask asset-snapshots" aria-hidden="true"></span></div><div class="t" data-i18n="onboarding_collect_title">Collect</div><div class="d" data-i18n="onboarding_collect_desc">Select text/images on any page, right-click to save into a session.</div></div>
+                <div class="flow-item"><div class="ico"><span class="asset-mask asset-branching" aria-hidden="true"></span></div><div class="t" data-i18n="onboarding_synthesize_title">Synthesize</div><div class="d" data-i18n="onboarding_synthesize_desc">Report, Rewrite, Diagram or Verify — one click in the Workbench.</div></div>
+                <div class="flow-item"><div class="ico"><img src="assets/icon.svg" alt=""></div><div class="t" data-i18n="onboarding_trace_title">Trace</div><div class="d" data-i18n="onboarding_trace_desc">Every claim links back to its exact source passage.</div></div>
             </div>
-            <p>A demo session has been added so you can try the scenarios right away.</p>
+            <p data-i18n="onboarding_demo_ready">A demo session has been added so you can try the scenarios right away.</p>
         </div>
 
         <div class="step" data-step="1">
-            <h2>Connect a model</h2>
-            <p>Weft is bring-your-own-key. Pick a provider (OpenAI, Anthropic, Gemini, DeepSeek, Moonshot or local Ollama) and paste your key in Settings.</p>
-            <p>No key handy? Choose <strong>Chrome Built-in AI</strong> to try summarize/rewrite with no key on Chrome 138+.</p>
-            <p style="margin-top:12px;"><button class="ghost" id="openSettings">Open Settings</button></p>
+            <h2 data-i18n="onboarding_connect_title">Connect a model</h2>
+            <p data-i18n="onboarding_connect_desc">Weft is bring-your-own-key. Pick a provider (OpenAI, Anthropic, Gemini, DeepSeek, Moonshot or local Ollama) and paste your key in Settings.</p>
+            <p data-i18n="onboarding_builtin_desc">No key handy? Choose Chrome Built-in AI to try summarize/rewrite with no key on Chrome 138+.</p>
+            <p style="margin-top:12px;"><button class="ghost" id="openSettings" data-i18n="onboarding_open_settings">Open Settings</button></p>
         </div>
 
         <div class="step" data-step="2">
-            <h2>You're set</h2>
-            <p>Open the side panel (the Workbench) from the toolbar, or click the extension icon for the quick collection basket.</p>
-            <p>Tip: right-click any selected text → <em>Save to Session</em>, or use the floating toolbar that appears on selection.</p>
+            <h2 data-i18n="onboarding_ready_title">You're set</h2>
+            <p data-i18n="onboarding_ready_desc">Open the side panel (the Workbench) from the toolbar, or click the extension icon for the quick collection basket.</p>
+            <p data-i18n="onboarding_tip">Tip: right-click any selected text → Save to Session, or use the floating toolbar that appears on selection.</p>
         </div>
 
         <div class="dots">
             <div class="dot active"></div><div class="dot"></div><div class="dot"></div>
         </div>
         <div class="btns">
-            <button class="ghost" id="skipBtn">Skip</button>
-            <button class="primary" id="nextBtn">Next</button>
+            <button class="ghost" id="skipBtn" data-i18n="onboarding_skip">Skip</button>
+            <button class="primary" id="nextBtn" data-i18n="onboarding_next">Next</button>
         </div>
     </div>
 
     <script src="lib/idb.js"></script>
     <script src="lib/store.js"></script>
+    <script src="lib/i18n.js"></script>
     <script src="onboarding.js"></script>
 </body>
 </html>

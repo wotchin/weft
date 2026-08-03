@@ -8,7 +8,8 @@
     "lint": "eslint .",
     "format": "prettier --write \"**/*.{js,json,css,html,md}\"",
     "validate": "node scripts/validate-manifest.mjs",
-    "test": "node test/unit.mjs",
+    "test": "node test/unit.mjs && node scripts/check-i18n.mjs",
+    "test:i18n": "node scripts/check-i18n.mjs",
     "pack": "bash scripts/pack.sh",
     "check": "npm run validate && npm run lint && npm test"
   },

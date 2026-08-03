@@ -3,27 +3,27 @@
 <head>
   <meta charset="UTF-8">
   <title>Weft</title>
-  <link rel="stylesheet" href="styles.css?v=3.0.1-ui2">
+  <link rel="stylesheet" href="styles.css?v=3.0.1-ui3">
 </head>
 <body>
   <div id="content">
     <div class="header">
       <div class="brand">
-        <img class="brand-mark" src="assets/icon-32.png" alt="">
+        <img class="brand-mark" src="assets/icon.svg" alt="">
         <div class="brand-copy">
           <h1 class="app-title">Weft</h1>
-          <span class="app-kicker">Research workspace</span>
+          <span class="app-kicker" data-i18n="popup_kicker">Research workspace</span>
         </div>
       </div>
-      <button id="openSettings" class="icon-btn" title="Settings" data-i18n-title="popup_settings">
-        <img src="assets/others/settings.svg" alt="">
+      <button id="openSettings" class="icon-btn" title="Settings" data-i18n-title="popup_settings" data-i18n-aria-label="popup_settings">
+        <span class="asset-mask asset-settings" aria-hidden="true"></span>
       </button>
     </div>
 
     <div class="session-controls">
       <div class="session-row">
-        <img class="session-icon" src="assets/others/snapshots.svg" alt="">
-        <select id="sessionSelect" class="session-select" title="Active session" data-i18n-title="popup_active_session"></select>
+        <span class="asset-mask asset-snapshots session-icon" aria-hidden="true"></span>
+        <select id="sessionSelect" class="session-select" title="Active session" data-i18n-title="popup_active_session" data-i18n-aria-label="popup_active_session"></select>
       </div>
       <div class="session-meta" id="sessionMeta"></div>
     </div>
@@ -31,13 +31,17 @@
     <div id="recentList" class="recent-list"></div>
 
     <div class="bottom-bar">
+      <button id="smartRead" class="smart-read-launcher" title="Create a new focused session containing key evidence from this page" data-i18n-title="wb_smart_read_hint">
+        <span class="asset-mask asset-takeaways" aria-hidden="true"></span>
+        <span data-i18n="popup_smart_read">Smart Read This Page</span>
+      </button>
       <div class="bottom-bar-row">
         <button id="openChat" class="action-btn primary">
-          <span class="asset-mask asset-branching" aria-hidden="true"></span>
+          <span class="asset-mask asset-open" aria-hidden="true"></span>
           <span data-i18n="popup_open_workbench">Open Workbench</span>
         </button>
-        <button id="showOnPage" class="action-btn secondary" title="Highlight this session's snippets on the current page">
-          <span class="asset-mask asset-snapshots" aria-hidden="true"></span>
+        <button id="showOnPage" class="action-btn secondary" title="Highlight snippets on this page" data-i18n-title="wb_show_on_page" aria-pressed="false">
+          <span class="asset-mask asset-eye" aria-hidden="true"></span>
           <span id="showOnPageLabel" data-i18n="popup_show_on_page">Show on Page</span>
         </button>
       </div>

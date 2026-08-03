@@ -12,7 +12,7 @@
     "message": "Provider"
   },
   "settings_provider_hint": {
-    "message": "Pick a provider to prefill its endpoint and a default model. Bring your own key — it never leaves your machine except to this endpoint."
+    "message": "Prefills the endpoint and model. Your key stays local, sent only to this endpoint."
   },
   "settings_key_label": {
     "message": "API Key"
@@ -35,6 +35,9 @@
   "popup_show_on_page": {
     "message": "Show on Page"
   },
+  "popup_hide_on_page": {
+    "message": "Remove Highlights"
+  },
   "action_copy": {
     "message": "Copy"
   },
@@ -54,7 +57,7 @@
     "message": "Search provider"
   },
   "settings_search_hint": {
-    "message": "Powers Deep Search and online cross-checking. Queries go only to the provider you pick. Weft never scrapes Google or Bing — that breaks their terms and gets extensions rejected."
+    "message": "Powers Deep Search and cross-checking. Queries go only to your chosen provider."
   },
   "settings_search_key": {
     "message": "Search API Key"
@@ -71,14 +74,95 @@
   "wb_export": {
     "message": "Export"
   },
+  "wb_export_hint": {
+    "message": "Export the latest completed AI result"
+  },
   "wb_clear": {
     "message": "Clear"
   },
-  "wb_ask_page": {
-    "message": "Ask about this page"
+  "wb_clear_hint": {
+    "message": "Clear the current conversation"
+  },
+  "wb_clear_chat_title": {
+    "message": "Clear conversation?"
+  },
+  "wb_clear_chat_description": {
+    "message": "This clears the conversation and stops any current task. Saved session snippets and page annotations are kept."
+  },
+  "wb_nothing_to_export": {
+    "message": "No completed AI result is available to export."
   },
   "wb_takeaways": {
     "message": "Key Takeaways"
+  },
+  "wb_smart_read": {
+    "message": "Smart Read"
+  },
+  "wb_smart_read_hint": {
+    "message": "Create a new focused session containing verified evidence from this page"
+  },
+  "popup_smart_read": {
+    "message": "Smart Read This Page"
+  },
+  "smart_read_purpose_title": {
+    "message": "What are you looking for?"
+  },
+  "smart_read_purpose_index_desc": {
+    "message": "This page contains many article links. Tell Weft which topics, companies, events, or decisions matter to you. Visible headlines and summaries will be sent to your configured model."
+  },
+  "smart_read_purpose_article_desc": {
+    "message": "Weft may only be able to see part of this article. Reload or sign in first for a complete reading, or optionally add a focus and continue with the currently rendered text."
+  },
+  "smart_read_purpose_placeholder": {
+    "message": "e.g. AI policy, market impact, risks to my portfolio"
+  },
+  "smart_read_purpose_required": {
+    "message": "Add a reading focus so Weft can choose among these links."
+  },
+  "smart_read_reading": {
+    "message": "Reading page…"
+  },
+  "smart_read_analysing": {
+    "message": "Finding evidence…"
+  },
+  "smart_read_saving": {
+    "message": "Creating session…"
+  },
+  "smart_read_highlighting": {
+    "message": "Highlighting…"
+  },
+  "smart_read_done": {
+    "message": "Saved %s verified passages to “%n”."
+  },
+  "smart_read_done_partial": {
+    "message": "Saved %s passages to “%n”; %m could not be located on the page."
+  },
+  "smart_read_no_content": {
+    "message": "Weft could not find enough readable content. If this is a subscriber article, make sure it is fully loaded and visible first."
+  },
+  "smart_read_access_gate": {
+    "message": "This article is still behind a visible access gate. Sign in or reload until the full text is visible, then run Smart Read again."
+  },
+  "smart_read_no_evidence": {
+    "message": "The model did not return any passages that could be verified against this page, so no session was created."
+  },
+  "smart_read_page_changed": {
+    "message": "The source tab changed while Weft was reading it. Return to the original page and try again."
+  },
+  "smart_read_index_label": {
+    "message": "Recommended links"
+  },
+  "smart_read_highlighted": {
+    "message": "%h of %t passages highlighted"
+  },
+  "smart_read_visible_only": {
+    "message": "Only content currently rendered on the page was analyzed. Weft did not bypass an access gate or fetch hidden text."
+  },
+  "smart_read_sources": {
+    "message": "Verified source:"
+  },
+  "smart_read_reused": {
+    "message": "Reopened “%n”; this page and reading focus were already saved."
   },
   "wb_deep_search": {
     "message": "Deep Search"
@@ -90,10 +174,7 @@
     "message": "Session context"
   },
   "wb_input_placeholder": {
-    "message": "Type your message or select a scenario above…"
-  },
-  "wb_web_search": {
-    "message": "🌐 Search web"
+    "message": "Ask this Session, or choose a scenario above…"
   },
   "wb_planning": {
     "message": "Planning…"
@@ -105,7 +186,7 @@
     "message": "Error"
   },
   "wb_page_unavailable": {
-    "message": "Not available on browser pages — open a normal web page to use this."
+    "message": "Not available on browser pages — try a regular web page."
   },
   "cite_no_source": {
     "message": "No source page saved for this citation."
@@ -141,7 +222,7 @@
     "message": "(image)"
   },
   "popup_hint": {
-    "message": "Select text on any page — a toolbar appears with Save and quick analyses."
+    "message": "Select text on a page to save or analyze it."
   },
   "popup_shown": {
     "message": "%s shown"
@@ -177,7 +258,10 @@
     "message": "Delete session"
   },
   "wb_show_on_page": {
-    "message": "Highlight this session's snippets on the current page"
+    "message": "Highlight snippets on this page"
+  },
+  "wb_remove_from_page": {
+    "message": "Remove highlights from this page"
   },
   "wb_search_snippets": {
     "message": "Search snippets…"
@@ -187,6 +271,12 @@
   },
   "wb_no_matches": {
     "message": "No snippets match your search."
+  },
+  "wb_show_more": {
+    "message": "Show %s more"
+  },
+  "wb_page_operation_timeout": {
+    "message": "The page took too long to respond. It may still be busy; wait a moment and try again."
   },
   "wb_open_source": {
     "message": "Open source page"
@@ -206,6 +296,9 @@
   "wb_delete_confirm": {
     "message": "Delete session “%s” and all its snippets?"
   },
+  "wb_delete_confirm_word": {
+    "message": "DELETE"
+  },
   "wb_type_to_confirm": {
     "message": "Type %s to confirm."
   },
@@ -215,23 +308,23 @@
   "wb_highlight_none": {
     "message": "No snippets from this session found on this page."
   },
+  "wb_highlights_removed": {
+    "message": "Page highlights removed."
+  },
   "wb_need_snippets": {
     "message": "Collect a few snippets first — then run a scenario."
   },
+  "wb_question_need_session": {
+    "message": "Questions start from the current Session. Use Smart Read or save at least one relevant snippet first."
+  },
   "wb_using_snippets": {
     "message": "%s snippets"
-  },
-  "wb_reading_page": {
-    "message": "Reading page…"
   },
   "wb_analysing": {
     "message": "Analysing…"
   },
   "wb_highlighting": {
     "message": "Highlighting…"
-  },
-  "wb_analyse_page": {
-    "message": "Analyse this page"
   },
   "sc_report": {
     "message": "Report"
@@ -294,7 +387,7 @@
     "message": "Enable smart context retrieval (RAG)"
   },
   "settings_rag_hint": {
-    "message": "When enabled, only the most relevant snippets are sent to the AI based on your query. When disabled, all snippets are sent. Useful when sessions contain many snippets to reduce token usage and improve answer quality."
+    "message": "Sends only the most relevant snippets instead of all of them — fewer tokens, sharper answers on large sessions."
   },
   "settings_rag_budget": {
     "message": "Context Token Budget"
@@ -315,7 +408,7 @@
     "message": "Interface & answer language"
   },
   "settings_lang_hint": {
-    "message": "Sets the interface language and asks the AI to answer in the same language, whatever language the source page is in. The interface is currently translated into English and 简体中文; other choices keep the English interface but still change the AI's answers."
+    "message": "Sets the interface language and the AI's reply language. English and 简体中文 have full interface translations; other languages only change the AI's replies."
   },
   "tb_save": {
     "message": "Save"
@@ -408,15 +501,774 @@
     "message": "Search failed:"
   },
   "settings_search_note_self": {
-    "message": "Point Weft at a SearXNG instance whose JSON API is open — in practice that means one you run yourself. Public instances almost always disable it."
+    "message": "Needs a SearXNG instance with its JSON API open (search.formats in settings.yml) — in practice, one you host yourself."
   },
   "settings_search_note_tavily": {
-    "message": "Free tier: about 1,000 searches a month, no credit card. Sign up at tavily.com, then paste the key below."
+    "message": "Free tier: about 1,000 searches a month, no card. Get a key at tavily.com."
   },
   "settings_search_note_brave": {
     "message": "Paid: Brave ended its free tier in 2026 and now bills per request."
   },
   "settings_search_json_note": {
     "message": "The instance must have the JSON output format enabled (search.formats in its settings.yml). Most public instances turn it off, so this usually means running your own."
+  },
+  "menu_save_to_session": {
+    "message": "Save to Session"
+  },
+  "menu_tag_as": {
+    "message": "Tag as…"
+  },
+  "tag_quote": {
+    "message": "quote"
+  },
+  "tag_data": {
+    "message": "data"
+  },
+  "tag_opinion": {
+    "message": "opinion"
+  },
+  "tag_reference": {
+    "message": "reference"
+  },
+  "tag_key_point": {
+    "message": "key point"
+  },
+  "tag_stats": {
+    "message": "stats"
+  },
+  "tag_market": {
+    "message": "market"
+  },
+  "tag_counterpoint": {
+    "message": "counterpoint"
+  },
+  "tag_generated": {
+    "message": "generated"
+  },
+  "tag_analysed": {
+    "message": "analysed"
+  },
+  "menu_quick_save_tag": {
+    "message": "Quick Save with Tag"
+  },
+  "menu_save_as_tag": {
+    "message": "Save as “%s”"
+  },
+  "menu_save_page_link": {
+    "message": "Save Page Link to Session"
+  },
+  "menu_analyse_selection": {
+    "message": "Analyse selection"
+  },
+  "menu_verify": {
+    "message": "Verify this"
+  },
+  "menu_explain": {
+    "message": "Explain in simple terms"
+  },
+  "menu_key_points": {
+    "message": "Extract key points"
+  },
+  "menu_counterarguments": {
+    "message": "Counterarguments"
+  },
+  "menu_diagram": {
+    "message": "Make a diagram…"
+  },
+  "menu_freeform": {
+    "message": "Ask a question…"
+  },
+  "menu_comment_to_session": {
+    "message": "Comment to Session"
+  },
+  "menu_add_to_session": {
+    "message": "Add to %s"
+  },
+  "notify_page_link_saved": {
+    "message": "Page link saved"
+  },
+  "notify_saved_as_tag": {
+    "message": "Saved as “%s”"
+  },
+  "notify_with_comment": {
+    "message": "With comment: %s"
+  },
+  "notify_saved": {
+    "message": "Saved"
+  },
+  "notify_comment_skipped": {
+    "message": "Saved (comment skipped)"
+  },
+  "notify_tag_added_title": {
+    "message": "Tag Added"
+  },
+  "notify_tagged_as": {
+    "message": "Tagged as “%s”"
+  },
+  "notify_info_title": {
+    "message": "Info"
+  },
+  "notify_save_before_tag": {
+    "message": "Save a snippet first, then tag it."
+  },
+  "modal_comment_title": {
+    "message": "Comment to “%s”"
+  },
+  "card_stats": {
+    "message": "%s s · %t tokens"
+  },
+  "card_elapsed": {
+    "message": "%s s"
+  },
+  "llm_error_auth": {
+    "message": "Your API key is missing or was rejected. Check Settings and try again."
+  },
+  "llm_error_rate_limit": {
+    "message": "The model is busy or its usage limit was reached. Wait a moment and try again."
+  },
+  "llm_error_context_length": {
+    "message": "This content is too long for the configured model."
+  },
+  "llm_error_network": {
+    "message": "Weft could not reach the model provider. Check your connection and endpoint."
+  },
+  "llm_error_timeout": {
+    "message": "The model took too long to respond. Please try again."
+  },
+  "llm_error_abort": {
+    "message": "The request was cancelled."
+  },
+  "llm_error_server": {
+    "message": "The model provider returned an error. Please try again."
+  },
+  "llm_error_bad_request": {
+    "message": "The model could not process this request. Check your model settings."
+  },
+  "llm_error_empty_response": {
+    "message": "The model returned an empty response."
+  },
+  "llm_error_output_limit": {
+    "message": "The model reached its output limit before completing the answer. Increase Max Tokens or request a shorter answer."
+  },
+  "llm_error_unknown": {
+    "message": "Something went wrong while generating the answer. Please try again."
+  },
+  "quick_error_unknown_action": {
+    "message": "This action is not available."
+  },
+  "quick_error_no_selection": {
+    "message": "Select some text first."
+  },
+  "highlight_group": {
+    "message": "Group %s"
+  },
+  "highlight_as": {
+    "message": "Highlight as:"
+  },
+  "highlight_remove": {
+    "message": "Remove highlight"
+  },
+  "wb_document_title": {
+    "message": "Weft — Workbench"
+  },
+  "wb_expand_hint": {
+    "message": "Open in a full window"
+  },
+  "wb_hide": {
+    "message": "Hide"
+  },
+  "wb_show": {
+    "message": "Show"
+  },
+  "wb_deep_search_hint": {
+    "message": "Find missing evidence, counterpoints, and updates for this Session"
+  },
+  "wb_diagram_hint": {
+    "message": "Turn this into a diagram"
+  },
+  "diagram_generate_title": {
+    "message": "Generate Diagram"
+  },
+  "diagram_pick_type": {
+    "message": "1. Pick a diagram type (or leave Auto):"
+  },
+  "diagram_what_to_visualize": {
+    "message": "2. What to visualize?"
+  },
+  "diagram_query_placeholder": {
+    "message": "e.g. “system architecture”, “user flow”, “comparison of X vs Y”…"
+  },
+  "diagram_source_label": {
+    "message": "Diagram source"
+  },
+  "diagram_source_session": {
+    "message": "Session Snippets"
+  },
+  "diagram_source_page": {
+    "message": "Current Page"
+  },
+  "diagram_source_both": {
+    "message": "Page + Session"
+  },
+  "action_generate": {
+    "message": "Generate"
+  },
+  "search_plan_title": {
+    "message": "Session Evidence Plan"
+  },
+  "action_execute": {
+    "message": "Execute"
+  },
+  "sc_report_hint": {
+    "message": "Synthesize your snippets into a cited report"
+  },
+  "sc_rewrite_hint": {
+    "message": "Merge the snippets into one coherent piece"
+  },
+  "sc_verify_hint": {
+    "message": "Cross-check the snippets against each other"
+  },
+  "sc_summarize_hint": {
+    "message": "Create a short overview of everything collected"
+  },
+  "sc_more_hint": {
+    "message": "More actions"
+  },
+  "action_send": {
+    "message": "Send"
+  },
+  "settings_page_title": {
+    "message": "Settings — Weft"
+  },
+  "settings_badge_language": {
+    "message": "LANG"
+  },
+  "settings_badge_api": {
+    "message": "API"
+  },
+  "settings_badge_generation": {
+    "message": "GEN"
+  },
+  "settings_badge_rag": {
+    "message": "RAG"
+  },
+  "settings_badge_search": {
+    "message": "WEB"
+  },
+  "settings_vision_auto": {
+    "message": "Auto-detect (based on model name)"
+  },
+  "settings_vision_on": {
+    "message": "Always enabled"
+  },
+  "settings_vision_off": {
+    "message": "Always disabled"
+  },
+  "settings_vision_hint": {
+    "message": "Auto-detect works for known vision models. Choose Always enabled for another vision-capable model; non-vision models receive image URLs as text."
+  },
+  "settings_rag_budget_hint": {
+    "message": "Maximum estimated snippet tokens to include when RAG is active. Sessions under 15K tokens are always sent in full."
+  },
+  "settings_search_option_none": {
+    "message": "Off"
+  },
+  "settings_search_option_tavily": {
+    "message": "Tavily — free tier, no card (recommended)"
+  },
+  "settings_search_option_searxng": {
+    "message": "SearXNG — your own instance"
+  },
+  "settings_search_option_brave": {
+    "message": "Brave Search — paid"
+  },
+  "onboarding_page_title": {
+    "message": "Welcome to Weft"
+  },
+  "onboarding_tagline": {
+    "message": "Your traceable research workspace."
+  },
+  "onboarding_flow_title": {
+    "message": "Collect → Synthesize → Trace"
+  },
+  "onboarding_collect_title": {
+    "message": "Collect"
+  },
+  "onboarding_collect_desc": {
+    "message": "Select text or images on any page, then right-click to save them to a session."
+  },
+  "onboarding_synthesize_title": {
+    "message": "Synthesize"
+  },
+  "onboarding_synthesize_desc": {
+    "message": "Create reports, rewrites, diagrams, or verifications with one click in the Workbench."
+  },
+  "onboarding_trace_title": {
+    "message": "Trace"
+  },
+  "onboarding_trace_desc": {
+    "message": "Every claim links back to its exact source passage."
+  },
+  "onboarding_demo_ready": {
+    "message": "A demo session has been added so you can try the scenarios right away."
+  },
+  "onboarding_connect_title": {
+    "message": "Connect a model"
+  },
+  "onboarding_connect_desc": {
+    "message": "Weft uses your own API key. Choose a provider and paste the key in Settings."
+  },
+  "onboarding_builtin_desc": {
+    "message": "No key handy? Choose Chrome Built-in AI to try summarizing and rewriting with no key on Chrome 138+."
+  },
+  "onboarding_open_settings": {
+    "message": "Open Settings"
+  },
+  "onboarding_ready_title": {
+    "message": "You're set"
+  },
+  "onboarding_ready_desc": {
+    "message": "Open the Workbench from the toolbar, or click the extension icon to use the quick collection basket."
+  },
+  "onboarding_tip": {
+    "message": "Tip: right-click selected text and choose Save to Session, or use the floating selection toolbar."
+  },
+  "onboarding_skip": {
+    "message": "Skip"
+  },
+  "onboarding_next": {
+    "message": "Next"
+  },
+  "onboarding_get_started": {
+    "message": "Get started"
+  },
+  "onboarding_demo_session": {
+    "message": "Demo · Electric vehicles"
+  },
+  "onboarding_demo_sales_content": {
+    "message": "Global EV sales passed 14 million units in 2023, roughly 18% of all new cars sold worldwide."
+  },
+  "onboarding_demo_sales_source": {
+    "message": "Global EV Outlook"
+  },
+  "onboarding_demo_tag_stats": {
+    "message": "stats"
+  },
+  "onboarding_demo_china_content": {
+    "message": "China accounted for about 60% of global EV sales in 2023, driven by aggressive pricing and dense charging infrastructure."
+  },
+  "onboarding_demo_china_source": {
+    "message": "China EV Market Note"
+  },
+  "onboarding_demo_tag_market": {
+    "message": "market"
+  },
+  "onboarding_demo_caution_content": {
+    "message": "Some analysts caution that EV growth may slow where charging access lags and subsidies are being phased out."
+  },
+  "onboarding_demo_caution_source": {
+    "message": "A More Cautious View"
+  },
+  "onboarding_demo_tag_counterpoint": {
+    "message": "counterpoint"
+  },
+  "popup_kicker": {
+    "message": "Research workspace"
+  },
+  "settings_search_error_json_disabled": {
+    "message": "The SearXNG instance has not enabled JSON output."
+  },
+  "settings_search_error_unknown": {
+    "message": "The search provider could not be reached. Check its settings and try again."
+  },
+  "settings_llm_error_unknown": {
+    "message": "An unknown provider error occurred."
+  },
+  "language_auto": {
+    "message": "Auto (follow browser)"
+  },
+  "language_en": {
+    "message": "English"
+  },
+  "language_zh_cn": {
+    "message": "Simplified Chinese"
+  },
+  "language_fr": {
+    "message": "French"
+  },
+  "language_de": {
+    "message": "German"
+  },
+  "language_es": {
+    "message": "Spanish"
+  },
+  "language_ja": {
+    "message": "Japanese"
+  },
+  "language_ko": {
+    "message": "Korean"
+  },
+  "language_pt": {
+    "message": "Portuguese"
+  },
+  "language_ru": {
+    "message": "Russian"
+  },
+  "provider_openai": {
+    "message": "OpenAI"
+  },
+  "provider_anthropic": {
+    "message": "Anthropic Claude"
+  },
+  "provider_gemini": {
+    "message": "Google Gemini"
+  },
+  "provider_deepseek": {
+    "message": "DeepSeek"
+  },
+  "provider_moonshot": {
+    "message": "Moonshot (Kimi)"
+  },
+  "provider_ollama": {
+    "message": "Ollama (local)"
+  },
+  "provider_builtin": {
+    "message": "Chrome Built-in AI"
+  },
+  "provider_custom": {
+    "message": "Custom (OpenAI-compatible)"
+  },
+  "settings_api_key_required": {
+    "message": "Please enter an API key."
+  },
+  "settings_model_required": {
+    "message": "Please enter a model name."
+  },
+  "settings_save_success": {
+    "message": "Settings saved successfully."
+  },
+  "settings_save_error": {
+    "message": "Could not save settings. Please try again."
+  },
+  "settings_connection_testing": {
+    "message": "Testing connection…"
+  },
+  "settings_connection_success": {
+    "message": "Connection successful."
+  },
+  "settings_connection_failed_detail": {
+    "message": "Connection failed: {{detail}}"
+  },
+  "settings_connection_error": {
+    "message": "Connection test failed unexpectedly. Please try again."
+  },
+  "settings_llm_error_auth": {
+    "message": "Authentication failed. Check that the API key matches the selected provider."
+  },
+  "settings_llm_error_rate_limit": {
+    "message": "The provider is rate-limiting requests. Wait a moment and try again."
+  },
+  "settings_llm_error_context_length": {
+    "message": "The request contains too much context. Reduce it and try again."
+  },
+  "settings_llm_error_network": {
+    "message": "Could not reach the provider. Check your network and Base URL."
+  },
+  "settings_llm_error_timeout": {
+    "message": "The provider did not respond in time."
+  },
+  "settings_llm_error_abort": {
+    "message": "The connection test was cancelled."
+  },
+  "settings_llm_error_server": {
+    "message": "The provider returned a server error. Try again shortly."
+  },
+  "settings_llm_error_bad_request": {
+    "message": "The request was rejected. Check the model name and settings."
+  },
+  "settings_llm_error_empty_response": {
+    "message": "The model returned no text. Increase Max Tokens or try another model."
+  },
+  "settings_llm_error_output_limit": {
+    "message": "The model reached its output limit. Increase Max Tokens or try a shorter prompt."
+  },
+  "settings_search_failed_detail": {
+    "message": "Search failed: {{detail}}"
+  },
+  "settings_search_error_no_provider": {
+    "message": "Select a search provider first."
+  },
+  "settings_search_error_key_required": {
+    "message": "Enter the search provider API key."
+  },
+  "settings_search_error_endpoint_required": {
+    "message": "Enter a SearXNG address."
+  },
+  "settings_search_error_endpoint_protocol": {
+    "message": "The address must start with http:// or https://."
+  },
+  "settings_search_error_timeout": {
+    "message": "The SearXNG instance did not respond in time."
+  },
+  "settings_search_error_unreachable": {
+    "message": "Could not reach that address. Check the URL and instance status."
+  },
+  "settings_search_error_no_results": {
+    "message": "Connected, but the provider returned no results."
+  },
+  "settings_search_error_http": {
+    "message": "The search provider returned HTTP {{status}}."
+  },
+  "action_copied": {
+    "message": "Copied!"
+  },
+  "action_copy_failed": {
+    "message": "Copy failed"
+  },
+  "search_plan_complete": {
+    "message": "Searches complete. Generating answer…"
+  },
+  "search_plan_empty": {
+    "message": "Could not create a search plan. Try rephrasing your question."
+  },
+  "deep_search_need_session": {
+    "message": "Deep Search starts from the current Session. Use Smart Read or save at least one relevant snippet first."
+  },
+  "deep_search_provider_required": {
+    "message": "Set up a web search provider in Settings before using Deep Search."
+  },
+  "search_plan_scope": {
+    "message": "Based on “%s” · searches via %p"
+  },
+  "search_plan_include_query": {
+    "message": "Include this search"
+  },
+  "search_plan_edit_query": {
+    "message": "Edit search query"
+  },
+  "search_plan_select_one": {
+    "message": "Select at least one search to continue."
+  },
+  "search_plan_stale": {
+    "message": "The Session or search provider changed. Review and generate a fresh plan."
+  },
+  "search_plan_type_primary": {
+    "message": "Primary source"
+  },
+  "search_plan_type_verify": {
+    "message": "Verification"
+  },
+  "search_plan_type_counterpoint": {
+    "message": "Counter-evidence"
+  },
+  "search_plan_type_update": {
+    "message": "Latest update"
+  },
+  "search_plan_type_context": {
+    "message": "Context"
+  },
+  "wb_deep_search_placeholder": {
+    "message": "What evidence should this Session investigate? Type a question, then click Deep Search again…"
+  },
+  "wb_export_document_title": {
+    "message": "Weft Export"
+  },
+  "wb_generated_output_source": {
+    "message": "Weft output"
+  },
+  "wb_generated_tag": {
+    "message": "generated"
+  },
+  "wb_image_cached_hint": {
+    "message": "Image cached — it can be sent to the model"
+  },
+  "wb_image_cached_status": {
+    "message": "[cached]"
+  },
+  "wb_image_not_cached_hint": {
+    "message": "Image not cached — Weft will retry before sending"
+  },
+  "wb_image_not_cached_status": {
+    "message": "[not cached]"
+  },
+  "wb_image_snippet_alt": {
+    "message": "Saved image"
+  },
+  "wb_no_session": {
+    "message": "No session"
+  },
+  "wb_page_generic": {
+    "message": "a webpage"
+  },
+  "wb_regarding_text": {
+    "message": "Regarding this text from %s:\n\n“%t”\n\n%q"
+  },
+  "wb_word_count": {
+    "message": "%s words"
+  },
+  "wb_error_abort": {
+    "message": "The request was cancelled."
+  },
+  "wb_error_api_key": {
+    "message": "Add an API key in Settings before using AI features."
+  },
+  "wb_error_auth": {
+    "message": "The API key was rejected. Check your provider settings."
+  },
+  "wb_error_bad_request": {
+    "message": "The model could not process this request. Check your model settings."
+  },
+  "wb_error_context_length": {
+    "message": "The selected content is too long for this model."
+  },
+  "wb_error_empty_response": {
+    "message": "The model returned an empty response."
+  },
+  "wb_error_generic": {
+    "message": "Something went wrong. Please try again."
+  },
+  "wb_error_network": {
+    "message": "Weft could not reach the configured service. Check your network and endpoint."
+  },
+  "wb_error_page_extraction": {
+    "message": "Weft could not read this page. Reload it and try again."
+  },
+  "wb_error_rate_limit": {
+    "message": "The service is busy or its usage limit was reached. Try again shortly."
+  },
+  "wb_error_search": {
+    "message": "Web search failed. Check the search provider settings and try again."
+  },
+  "wb_error_server": {
+    "message": "The service returned an error. Try again shortly."
+  },
+  "wb_error_session_changed": {
+    "message": "The session changed while Weft was preparing the result. Please try again."
+  },
+  "wb_error_target_tab_unavailable": {
+    "message": "The source tab is no longer available. Return to the page and try again."
+  },
+  "wb_error_page_changed": {
+    "message": "The source page changed during the operation. Return to the original page and try again."
+  },
+  "wb_error_timeout": {
+    "message": "The operation took too long. Please try again."
+  },
+  "diagram_copy_code": {
+    "message": "Copy Code"
+  },
+  "diagram_copy_svg": {
+    "message": "Copy SVG"
+  },
+  "diagram_draw_request": {
+    "message": "Draw diagram: %s (%t)"
+  },
+  "diagram_error_empty": {
+    "message": "The model did not return a diagram."
+  },
+  "diagram_error_no_content": {
+    "message": "There is no usable content to turn into a diagram."
+  },
+  "diagram_error_page_unavailable": {
+    "message": "Weft could not read the current page for this diagram."
+  },
+  "diagram_error_render": {
+    "message": "The diagram syntax could not be rendered safely. Try another type or simplify the request."
+  },
+  "diagram_error_renderer_unavailable": {
+    "message": "The diagram renderer is unavailable. Reload Weft and try again."
+  },
+  "diagram_error_timeout": {
+    "message": "Diagram rendering took too long. Please try again."
+  },
+  "diagram_error_type_mismatch": {
+    "message": "The generated diagram did not match the selected type. Please try again."
+  },
+  "diagram_error_unsafe": {
+    "message": "The generated SVG contained unsafe content and was blocked."
+  },
+  "diagram_export_code_label": {
+    "message": "Diagram code"
+  },
+  "diagram_export_source_label": {
+    "message": "Source content"
+  },
+  "diagram_export_title": {
+    "message": "Diagram — Weft"
+  },
+  "diagram_generate_request": {
+    "message": "Generate diagram"
+  },
+  "diagram_generating": {
+    "message": "Generating…"
+  },
+  "diagram_selected_text_request": {
+    "message": "Generate a diagram from selected text on %s"
+  },
+  "diagram_show_code": {
+    "message": "Show Code"
+  },
+  "diagram_hide_code": {
+    "message": "Hide Code"
+  },
+  "diagram_type_auto": {
+    "message": "Auto-detect"
+  },
+  "diagram_type_auto_desc": {
+    "message": "Let the model choose the best diagram type"
+  },
+  "diagram_type_flowchart": {
+    "message": "Flowchart"
+  },
+  "diagram_type_flowchart_desc": {
+    "message": "Processes, decisions, and workflows"
+  },
+  "diagram_type_mindmap": {
+    "message": "Mind Map"
+  },
+  "diagram_type_mindmap_desc": {
+    "message": "Topics, ideas, and their hierarchy"
+  },
+  "diagram_type_sequence": {
+    "message": "Sequence"
+  },
+  "diagram_type_sequence_desc": {
+    "message": "Interactions in chronological order"
+  },
+  "diagram_type_timeline": {
+    "message": "Timeline"
+  },
+  "diagram_type_timeline_desc": {
+    "message": "Events and milestones over time"
+  },
+  "diagram_type_pie": {
+    "message": "Pie Chart"
+  },
+  "diagram_type_pie_desc": {
+    "message": "Proportions and percentage breakdowns"
+  },
+  "diagram_type_class": {
+    "message": "Class Diagram"
+  },
+  "diagram_type_class_desc": {
+    "message": "Entities, attributes, and relationships"
+  },
+  "diagram_type_er": {
+    "message": "ER Diagram"
+  },
+  "diagram_type_er_desc": {
+    "message": "Database entities and relationships"
+  },
+  "diagram_type_quadrant": {
+    "message": "Quadrant Chart"
+  },
+  "diagram_type_quadrant_desc": {
+    "message": "Items compared across two dimensions"
+  },
+  "diagram_type_svg": {
+    "message": "Custom SVG"
+  },
+  "diagram_type_svg_desc": {
+    "message": "Free-form visual for complex concepts"
   }
 }

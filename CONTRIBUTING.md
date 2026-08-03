@@ -2,6 +2,8 @@
 
 Thanks for your interest! Weft is a vanilla-JS Manifest V3 Chrome extension — no build step, no framework.
 
+Our project's official website is through [Github Repository](https://github.com/wotchin/weft). Feel free to submit your pull requests or share your suggestions by github issues.
+
 ## Getting started
 
 1. Clone the repo.

@@ -1,17 +1,39 @@
 /* Weft popup — a compact launcher. Session and snippet management live in the
    Workbench (side panel), so this stylesheet stays deliberately small. */
 
+@font-face {
+    font-family: 'Inter';
+    font-style: normal;
+    font-weight: 400;
+    font-display: swap;
+    src: url('assets/fonts/inter-400.woff2') format('woff2');
+}
+@font-face {
+    font-family: 'Inter';
+    font-style: normal;
+    font-weight: 500;
+    font-display: swap;
+    src: url('assets/fonts/inter-500.woff2') format('woff2');
+}
+@font-face {
+    font-family: 'Inter';
+    font-style: normal;
+    font-weight: 600;
+    font-display: swap;
+    src: url('assets/fonts/inter-600.woff2') format('woff2');
+}
+
 /* Weft design tokens — from the "Weft Icon & UI Kit" design-system project.
    Accent values are the kit's --color-accent-500/600/700 steps, chosen for
    readable contrast on this popup's white ground rather than the kit's own
    dark-surface pairing. Radius/weight are declared for future adoption; existing
    component sizing below is left as-is so this pass doesn't reflow the popup. */
 :root {
-    --weft-accent: #796cbf;
-    --weft-accent-hover: #5d5294;
-    --weft-accent-tint: #e7e5fe;
-    --weft-accent-tint-strong: #d2cefd;
-    --weft-accent-soft: #f5f4ff;
+    --weft-accent: #6c5ce0;
+    --weft-accent-hover: #5643c4;
+    --weft-accent-tint: #ece8fc;
+    --weft-accent-tint-strong: #d8d0f8;
+    --weft-accent-soft: #f6f4fe;
     --weft-ink: #292a3d;
     --weft-muted: #858ba5;
     --weft-line: #e3e4ec;
@@ -31,7 +53,7 @@
 
 body {
     width: 320px;
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
     background: var(--weft-surface-soft);
     color: var(--weft-ink);
     font-size: 13px;
@@ -96,6 +118,7 @@ body {
     background: #34364b;
     color: #f0f1f7;
     cursor: pointer;
+    transition: background 0.15s, border-color 0.15s, transform 0.1s;
 }
 
 .icon-btn:hover {
@@ -103,9 +126,13 @@ body {
     border-color: #77738f;
 }
 
-.icon-btn img {
-    width: 18px;
-    height: 18px;
+.icon-btn:active {
+    transform: scale(0.94);
+}
+
+.icon-btn .asset-mask {
+    width: 16px;
+    height: 16px;
 }
 
 /* Session selector */
@@ -121,9 +148,10 @@ body {
 }
 
 .session-icon {
-    width: 24px;
-    height: 24px;
+    width: 20px;
+    height: 20px;
     flex: 0 0 auto;
+    color: var(--weft-accent);
 }
 
 .session-select {
@@ -173,6 +201,13 @@ body {
     background: var(--weft-surface-soft);
     border: 1px solid var(--weft-line);
     border-radius: var(--weft-radius-md);
+    box-shadow: 0 1px 2px rgba(41, 42, 61, 0.04);
+    transition: box-shadow 0.15s, border-color 0.15s;
+}
+
+.recent-item:hover {
+    border-color: var(--weft-accent-tint-strong);
+    box-shadow: 0 2px 8px rgba(41, 42, 61, 0.08);
 }
 
 .recent-icon {
@@ -233,6 +268,46 @@ body {
     gap: 8px;
 }
 
+.smart-read-launcher {
+    width: 100%;
+    min-height: 40px;
+    margin-bottom: 9px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    border: 1px solid #5643c4;
+    border-radius: 9px;
+    background: linear-gradient(135deg, #7565e5, #6250d0);
+    color: #fff;
+    font: 600 12px/1 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    cursor: pointer;
+    box-shadow: 0 5px 16px rgba(108, 92, 224, 0.23);
+    transition: transform 0.15s, box-shadow 0.15s, background 0.15s;
+}
+
+.smart-read-launcher:hover {
+    background: linear-gradient(135deg, #8273e9, #6c5ce0);
+    box-shadow: 0 7px 20px rgba(108, 92, 224, 0.3);
+    transform: translateY(-1px);
+}
+
+.smart-read-launcher:active {
+    transform: translateY(0);
+}
+
+.smart-read-launcher:disabled {
+    cursor: not-allowed;
+    opacity: 0.5;
+    box-shadow: none;
+    transform: none;
+}
+
+.smart-read-launcher .asset-mask {
+    width: 16px;
+    height: 16px;
+}
+
 .action-btn {
     display: inline-flex;
     align-items: center;
@@ -262,9 +337,19 @@ body {
     mask-size: contain;
 }
 
-.asset-branching {
-    -webkit-mask-image: url('assets/others/branching.svg');
-    mask-image: url('assets/others/branching.svg');
+.asset-open {
+    -webkit-mask-image: url('assets/others/open-workbench.svg');
+    mask-image: url('assets/others/open-workbench.svg');
+}
+
+.asset-eye {
+    -webkit-mask-image: url('assets/others/show-on-page.svg');
+    mask-image: url('assets/others/show-on-page.svg');
+}
+
+.asset-settings {
+    -webkit-mask-image: url('assets/others/settings.svg');
+    mask-image: url('assets/others/settings.svg');
 }
 
 .asset-snapshots {
@@ -272,24 +357,52 @@ body {
     mask-image: url('assets/others/snapshots.svg');
 }
 
+.asset-takeaways {
+    -webkit-mask-image: url('assets/others/key-takeaways.svg');
+    mask-image: url('assets/others/key-takeaways.svg');
+}
+
 .action-btn.primary {
     background: var(--weft-accent);
     color: #fff;
+    box-shadow: 0 1px 2px rgba(41, 34, 74, 0.06), 0 6px 16px -6px rgba(108, 92, 224, 0.55);
 }
 
 .action-btn.primary:hover {
     background: var(--weft-accent-hover);
+    box-shadow: 0 1px 2px rgba(41, 34, 74, 0.08), 0 8px 20px -6px rgba(86, 67, 196, 0.6);
+}
+
+.action-btn.primary:active {
+    transform: translateY(1px);
+    box-shadow: 0 1px 2px rgba(41, 34, 74, 0.08);
 }
 
 .action-btn.secondary {
     background: #fff;
     color: #555;
     border-color: #ddd;
+    box-shadow: 0 1px 2px rgba(41, 34, 74, 0.05);
 }
 
 .action-btn.secondary:hover {
     border-color: var(--weft-accent);
     color: var(--weft-accent);
+}
+
+.action-btn.secondary:active {
+    transform: translateY(1px);
+}
+
+.action-btn.secondary.is-active {
+    background: var(--weft-accent-tint);
+    border-color: var(--weft-accent);
+    color: var(--weft-accent-hover);
+}
+
+.action-btn:disabled {
+    opacity: 0.55;
+    cursor: default;
 }
 
 .popup-hint {

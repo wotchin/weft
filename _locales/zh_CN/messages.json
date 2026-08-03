@@ -12,7 +12,7 @@
     "message": "服务商"
   },
   "settings_provider_hint": {
-    "message": "选择服务商即可自动填入接口地址和默认模型。自带密钥——除了发送到你配置的这个接口，密钥不会离开你的电脑。"
+    "message": "自动填入接口地址和默认模型。密钥只存在本地，仅发送到你配置的接口。"
   },
   "settings_key_label": {
     "message": "API 密钥"
@@ -35,6 +35,9 @@
   "popup_show_on_page": {
     "message": "在页面上标注"
   },
+  "popup_hide_on_page": {
+    "message": "取消页面标注"
+  },
   "action_copy": {
     "message": "复制"
   },
@@ -54,7 +57,7 @@
     "message": "搜索服务商"
   },
   "settings_search_hint": {
-    "message": "为「深度搜索」和联网交叉核验提供支持。查询只发往你选择的服务商。Weft 不会抓取 Google 或 Bing——那违反其服务条款，且会导致扩展被拒审。"
+    "message": "为「深度搜索」和联网核验提供支持，查询只发往你选择的服务商。"
   },
   "settings_search_key": {
     "message": "搜索 API 密钥"
@@ -71,14 +74,95 @@
   "wb_export": {
     "message": "导出"
   },
+  "wb_export_hint": {
+    "message": "导出最近一个已完成的 AI 结果"
+  },
   "wb_clear": {
     "message": "清空"
   },
-  "wb_ask_page": {
-    "message": "分析当前页面"
+  "wb_clear_hint": {
+    "message": "清空当前对话"
+  },
+  "wb_clear_chat_title": {
+    "message": "清空当前对话？"
+  },
+  "wb_clear_chat_description": {
+    "message": "这会清空对话，并停止当前任务。已保存的会话片段和网页标注会保留。"
+  },
+  "wb_nothing_to_export": {
+    "message": "当前没有可导出的已完成 AI 结果。"
   },
   "wb_takeaways": {
     "message": "关键要点"
+  },
+  "wb_smart_read": {
+    "message": "智能阅读"
+  },
+  "wb_smart_read_hint": {
+    "message": "自动创建新的聚焦会话，并保存页面中经过核验的关键原文"
+  },
+  "popup_smart_read": {
+    "message": "智能阅读当前页面"
+  },
+  "smart_read_purpose_title": {
+    "message": "你这次想重点了解什么？"
+  },
+  "smart_read_purpose_index_desc": {
+    "message": "这个页面包含许多文章链接。请告诉 Weft 你关注的主题、公司、事件或决策；页面上可见的标题和摘要会发送给你配置的模型。"
+  },
+  "smart_read_purpose_article_desc": {
+    "message": "Weft 目前可能只能看到部分正文。若要完整分析，请先重新加载或确认已登录；你也可以填写阅读重点，并仅基于当前已渲染的内容继续。"
+  },
+  "smart_read_purpose_placeholder": {
+    "message": "例如：AI 政策、市场影响、投资组合风险"
+  },
+  "smart_read_purpose_required": {
+    "message": "请先填写阅读重点，Weft 才能从这些链接中进行筛选。"
+  },
+  "smart_read_reading": {
+    "message": "正在读取页面…"
+  },
+  "smart_read_analysing": {
+    "message": "正在查找关键证据…"
+  },
+  "smart_read_saving": {
+    "message": "正在创建会话…"
+  },
+  "smart_read_highlighting": {
+    "message": "正在标注页面…"
+  },
+  "smart_read_done": {
+    "message": "已将 %s 条核验原文保存到「%n」。"
+  },
+  "smart_read_done_partial": {
+    "message": "已将 %s 条原文保存到「%n」；另有 %m 条未能在页面中定位。"
+  },
+  "smart_read_no_content": {
+    "message": "Weft 未找到足够的可读内容。如果这是会员文章，请先确认正文已经完整加载并显示。"
+  },
+  "smart_read_access_gate": {
+    "message": "这篇文章仍被可见的访问限制遮挡。请先登录或重新加载，确认完整正文已经显示后再运行智能阅读。"
+  },
+  "smart_read_no_evidence": {
+    "message": "模型返回的内容无法在当前页面原文中核验，因此没有创建会话。"
+  },
+  "smart_read_page_changed": {
+    "message": "Weft 阅读期间源标签页发生了变化。请返回原页面后重试。"
+  },
+  "smart_read_index_label": {
+    "message": "推荐链接"
+  },
+  "smart_read_highlighted": {
+    "message": "已高亮 %h/%t 条原文"
+  },
+  "smart_read_visible_only": {
+    "message": "仅分析了页面当前已经渲染的内容；Weft 不会绕过访问限制，也不会抓取隐藏正文。"
+  },
+  "smart_read_sources": {
+    "message": "核验原文："
+  },
+  "smart_read_reused": {
+    "message": "已重新打开「%n」；这个页面和阅读重点此前已经保存。"
   },
   "wb_deep_search": {
     "message": "深度搜索"
@@ -90,10 +174,7 @@
     "message": "会话上下文"
   },
   "wb_input_placeholder": {
-    "message": "输入消息，或从上方选择一个场景…"
-  },
-  "wb_web_search": {
-    "message": "🌐 联网搜索"
+    "message": "围绕当前 Session 提问，或从上方选择一个场景…"
   },
   "wb_planning": {
     "message": "规划中…"
@@ -105,7 +186,7 @@
     "message": "错误"
   },
   "wb_page_unavailable": {
-    "message": "浏览器内置页面不支持此功能——请切换到普通网页后再试。"
+    "message": "浏览器内置页面不支持——请切换到普通网页。"
   },
   "cite_no_source": {
     "message": "该引用没有保存来源页面。"
@@ -141,7 +222,7 @@
     "message": "（图片）"
   },
   "popup_hint": {
-    "message": "在任意网页选中文字，会弹出工具条，可直接保存或快速分析。"
+    "message": "选中网页文字，即可保存或分析。"
   },
   "popup_shown": {
     "message": "已标注 %s 处"
@@ -177,7 +258,10 @@
     "message": "删除会话"
   },
   "wb_show_on_page": {
-    "message": "在当前页面标注本会话的片段"
+    "message": "在本页标注片段"
+  },
+  "wb_remove_from_page": {
+    "message": "取消本页标注"
   },
   "wb_search_snippets": {
     "message": "搜索片段…"
@@ -187,6 +271,12 @@
   },
   "wb_no_matches": {
     "message": "没有匹配的片段。"
+  },
+  "wb_show_more": {
+    "message": "再显示 %s 条"
+  },
+  "wb_page_operation_timeout": {
+    "message": "网页响应时间过长。它可能仍在忙碌，请稍等片刻后重试。"
   },
   "wb_open_source": {
     "message": "打开来源页面"
@@ -206,6 +296,9 @@
   "wb_delete_confirm": {
     "message": "删除会话「%s」及其全部片段？"
   },
+  "wb_delete_confirm_word": {
+    "message": "删除"
+  },
   "wb_type_to_confirm": {
     "message": "请输入 %s 以确认。"
   },
@@ -215,23 +308,23 @@
   "wb_highlight_none": {
     "message": "本页未找到该会话的片段。"
   },
+  "wb_highlights_removed": {
+    "message": "已取消本页标注。"
+  },
   "wb_need_snippets": {
     "message": "请先采集几条片段，再运行场景。"
   },
+  "wb_question_need_session": {
+    "message": "提问会从当前 Session 出发。请先使用智能阅读，或至少保存一条相关片段。"
+  },
   "wb_using_snippets": {
     "message": "%s 条片段"
-  },
-  "wb_reading_page": {
-    "message": "读取页面…"
   },
   "wb_analysing": {
     "message": "分析中…"
   },
   "wb_highlighting": {
     "message": "标注中…"
-  },
-  "wb_analyse_page": {
-    "message": "分析当前页面"
   },
   "sc_report": {
     "message": "报告"
@@ -294,7 +387,7 @@
     "message": "启用智能上下文检索（RAG）"
   },
   "settings_rag_hint": {
-    "message": "启用后，只把与你问题最相关的片段发给模型；关闭则发送全部片段。会话片段较多时可减少 token 消耗、提升回答质量。"
+    "message": "只发送与问题最相关的片段，而非全部——片段较多时更省 token、答案更聚焦。"
   },
   "settings_rag_budget": {
     "message": "上下文 Token 预算"
@@ -315,7 +408,7 @@
     "message": "界面与回答语言"
   },
   "settings_lang_hint": {
-    "message": "设置界面语言，并要求 AI 用同一种语言回答——无论原网页是什么语言。目前界面提供英文和简体中文；选择其他语言时界面保持英文，但 AI 的回答会用该语言。"
+    "message": "设置界面语言和 AI 回答语言。目前界面提供英文和简体中文；其他语言仅影响 AI 回答，界面保持英文。"
   },
   "tb_save": {
     "message": "保存"
@@ -408,15 +501,774 @@
     "message": "搜索失败："
   },
   "settings_search_note_self": {
-    "message": "填入一个开放了 JSON 接口的 SearXNG 地址——实际上基本意味着你自己搭的实例，公共实例几乎都关闭了该接口。"
+    "message": "需要一个开启 JSON 接口（settings.yml 中的 search.formats）的 SearXNG 实例——基本上就是自建实例。"
   },
   "settings_search_note_tavily": {
-    "message": "免费额度约每月 1000 次搜索，无需信用卡。到 tavily.com 注册后把密钥填在下面即可。"
+    "message": "免费约每月 1000 次搜索，无需信用卡。到 tavily.com 获取密钥。"
   },
   "settings_search_note_brave": {
     "message": "付费：Brave 已于 2026 年取消免费额度，现按请求量计费。"
   },
   "settings_search_json_note": {
     "message": "该实例必须开启 JSON 输出格式（settings.yml 里的 search.formats）。多数公共实例都关闭了它，所以通常需要自建。"
+  },
+  "menu_save_to_session": {
+    "message": "保存到会话"
+  },
+  "menu_tag_as": {
+    "message": "添加标签…"
+  },
+  "tag_quote": {
+    "message": "引用"
+  },
+  "tag_data": {
+    "message": "数据"
+  },
+  "tag_opinion": {
+    "message": "观点"
+  },
+  "tag_reference": {
+    "message": "参考资料"
+  },
+  "tag_key_point": {
+    "message": "关键要点"
+  },
+  "tag_stats": {
+    "message": "数据"
+  },
+  "tag_market": {
+    "message": "市场"
+  },
+  "tag_counterpoint": {
+    "message": "反方观点"
+  },
+  "tag_generated": {
+    "message": "生成内容"
+  },
+  "tag_analysed": {
+    "message": "已分析"
+  },
+  "menu_quick_save_tag": {
+    "message": "带标签快速保存"
+  },
+  "menu_save_as_tag": {
+    "message": "保存为“%s”"
+  },
+  "menu_save_page_link": {
+    "message": "保存页面链接到会话"
+  },
+  "menu_analyse_selection": {
+    "message": "分析选中内容"
+  },
+  "menu_verify": {
+    "message": "核验这段内容"
+  },
+  "menu_explain": {
+    "message": "用简单语言解释"
+  },
+  "menu_key_points": {
+    "message": "提取关键要点"
+  },
+  "menu_counterarguments": {
+    "message": "寻找反方观点"
+  },
+  "menu_diagram": {
+    "message": "生成图表…"
+  },
+  "menu_freeform": {
+    "message": "提出问题…"
+  },
+  "menu_comment_to_session": {
+    "message": "添加备注到会话"
+  },
+  "menu_add_to_session": {
+    "message": "添加到 %s"
+  },
+  "notify_page_link_saved": {
+    "message": "页面链接已保存"
+  },
+  "notify_saved_as_tag": {
+    "message": "已保存并标记为“%s”"
+  },
+  "notify_with_comment": {
+    "message": "备注：%s"
+  },
+  "notify_saved": {
+    "message": "已保存"
+  },
+  "notify_comment_skipped": {
+    "message": "已保存（未添加备注）"
+  },
+  "notify_tag_added_title": {
+    "message": "标签已添加"
+  },
+  "notify_tagged_as": {
+    "message": "已标记为“%s”"
+  },
+  "notify_info_title": {
+    "message": "提示"
+  },
+  "notify_save_before_tag": {
+    "message": "请先保存片段，再为它添加标签。"
+  },
+  "modal_comment_title": {
+    "message": "添加备注到“%s”"
+  },
+  "card_stats": {
+    "message": "%s 秒 · %t 个 Token"
+  },
+  "card_elapsed": {
+    "message": "%s 秒"
+  },
+  "llm_error_auth": {
+    "message": "API 密钥缺失或被拒绝，请检查设置后重试。"
+  },
+  "llm_error_rate_limit": {
+    "message": "模型正忙或使用额度已用完，请稍后重试。"
+  },
+  "llm_error_context_length": {
+    "message": "内容过长，超出了当前模型的上下文限制。"
+  },
+  "llm_error_network": {
+    "message": "Weft 无法连接模型服务商，请检查网络和接口地址。"
+  },
+  "llm_error_timeout": {
+    "message": "模型响应超时，请重试。"
+  },
+  "llm_error_abort": {
+    "message": "请求已取消。"
+  },
+  "llm_error_server": {
+    "message": "模型服务商返回错误，请稍后重试。"
+  },
+  "llm_error_bad_request": {
+    "message": "模型无法处理该请求，请检查模型设置。"
+  },
+  "llm_error_empty_response": {
+    "message": "模型返回了空响应。"
+  },
+  "llm_error_output_limit": {
+    "message": "模型达到输出 Token 上限，回答未能完整生成。请提高最大 Token 数或要求更简短的回答。"
+  },
+  "llm_error_unknown": {
+    "message": "生成回答时出现问题，请重试。"
+  },
+  "quick_error_unknown_action": {
+    "message": "当前操作不可用。"
+  },
+  "quick_error_no_selection": {
+    "message": "请先选择一段文字。"
+  },
+  "highlight_group": {
+    "message": "分组 %s"
+  },
+  "highlight_as": {
+    "message": "标注为："
+  },
+  "highlight_remove": {
+    "message": "取消标注"
+  },
+  "wb_document_title": {
+    "message": "Weft — 工作台"
+  },
+  "wb_expand_hint": {
+    "message": "在完整窗口中打开"
+  },
+  "wb_hide": {
+    "message": "收起"
+  },
+  "wb_show": {
+    "message": "展开"
+  },
+  "wb_deep_search_hint": {
+    "message": "围绕当前 Session 查找缺失证据、反方观点和最新进展"
+  },
+  "wb_diagram_hint": {
+    "message": "将内容转换为图表"
+  },
+  "diagram_generate_title": {
+    "message": "生成图表"
+  },
+  "diagram_pick_type": {
+    "message": "1. 选择图表类型（也可保持自动）："
+  },
+  "diagram_what_to_visualize": {
+    "message": "2. 想呈现什么内容？"
+  },
+  "diagram_query_placeholder": {
+    "message": "例如：“系统架构”“用户流程”“X 与 Y 的对比”…"
+  },
+  "diagram_source_label": {
+    "message": "图表内容来源"
+  },
+  "diagram_source_session": {
+    "message": "会话片段"
+  },
+  "diagram_source_page": {
+    "message": "当前页面"
+  },
+  "diagram_source_both": {
+    "message": "当前页面 + 会话"
+  },
+  "action_generate": {
+    "message": "生成"
+  },
+  "search_plan_title": {
+    "message": "Session 补证计划"
+  },
+  "action_execute": {
+    "message": "执行"
+  },
+  "sc_report_hint": {
+    "message": "将片段整合成带引用的报告"
+  },
+  "sc_rewrite_hint": {
+    "message": "将片段合并成一篇连贯的内容"
+  },
+  "sc_verify_hint": {
+    "message": "交叉核验各片段中的信息"
+  },
+  "sc_summarize_hint": {
+    "message": "快速概括已采集的全部内容"
+  },
+  "sc_more_hint": {
+    "message": "更多操作"
+  },
+  "action_send": {
+    "message": "发送"
+  },
+  "settings_page_title": {
+    "message": "设置 — Weft"
+  },
+  "settings_badge_language": {
+    "message": "语言"
+  },
+  "settings_badge_api": {
+    "message": "接口"
+  },
+  "settings_badge_generation": {
+    "message": "生成"
+  },
+  "settings_badge_rag": {
+    "message": "检索"
+  },
+  "settings_badge_search": {
+    "message": "联网"
+  },
+  "settings_vision_auto": {
+    "message": "自动检测（根据模型名称）"
+  },
+  "settings_vision_on": {
+    "message": "始终启用"
+  },
+  "settings_vision_off": {
+    "message": "始终禁用"
+  },
+  "settings_vision_hint": {
+    "message": "自动检测适用于常见视觉模型。其他支持视觉的模型请选择“始终启用”；不支持视觉的模型会把图片 URL 作为文本发送。"
+  },
+  "settings_rag_budget_hint": {
+    "message": "启用 RAG 时可包含的最大片段 Token 估算值。少于 1.5 万 Token 的会话始终会发送全部内容。"
+  },
+  "settings_search_option_none": {
+    "message": "关闭"
+  },
+  "settings_search_option_tavily": {
+    "message": "Tavily — 有免费额度，无需信用卡（推荐）"
+  },
+  "settings_search_option_searxng": {
+    "message": "SearXNG — 自建实例"
+  },
+  "settings_search_option_brave": {
+    "message": "Brave Search — 付费"
+  },
+  "onboarding_page_title": {
+    "message": "欢迎使用 Weft"
+  },
+  "onboarding_tagline": {
+    "message": "你的可追溯研究工作台。"
+  },
+  "onboarding_flow_title": {
+    "message": "收集 → 整合 → 追溯"
+  },
+  "onboarding_collect_title": {
+    "message": "收集"
+  },
+  "onboarding_collect_desc": {
+    "message": "在任意网页选择文本或图片，右键即可保存到会话。"
+  },
+  "onboarding_synthesize_title": {
+    "message": "整合"
+  },
+  "onboarding_synthesize_desc": {
+    "message": "在工作台中一键生成报告、改写、图表或核验结果。"
+  },
+  "onboarding_trace_title": {
+    "message": "追溯"
+  },
+  "onboarding_trace_desc": {
+    "message": "每项结论都能追溯到准确的原文片段。"
+  },
+  "onboarding_demo_ready": {
+    "message": "已添加演示会话，你可以立即体验各个场景。"
+  },
+  "onboarding_connect_title": {
+    "message": "连接模型"
+  },
+  "onboarding_connect_desc": {
+    "message": "Weft 使用你自己的 API 密钥。请选择服务商，并在设置中粘贴密钥。"
+  },
+  "onboarding_builtin_desc": {
+    "message": "没有密钥？在 Chrome 138 及更高版本中，可选择 Chrome 内置 AI 直接体验总结和改写。"
+  },
+  "onboarding_open_settings": {
+    "message": "打开设置"
+  },
+  "onboarding_ready_title": {
+    "message": "一切就绪"
+  },
+  "onboarding_ready_desc": {
+    "message": "从工具栏打开工作台，或点击扩展图标使用快速收集篮。"
+  },
+  "onboarding_tip": {
+    "message": "提示：右键点击所选文本并选择“保存到会话”，或使用选中文本后出现的浮动工具栏。"
+  },
+  "onboarding_skip": {
+    "message": "跳过"
+  },
+  "onboarding_next": {
+    "message": "下一步"
+  },
+  "onboarding_get_started": {
+    "message": "开始使用"
+  },
+  "onboarding_demo_session": {
+    "message": "演示 · 电动汽车"
+  },
+  "onboarding_demo_sales_content": {
+    "message": "2023 年全球电动汽车销量超过 1,400 万辆，约占全球新车销量的 18%。"
+  },
+  "onboarding_demo_sales_source": {
+    "message": "全球电动车展望"
+  },
+  "onboarding_demo_tag_stats": {
+    "message": "数据"
+  },
+  "onboarding_demo_china_content": {
+    "message": "2023 年中国约占全球电动汽车销量的 60%，这得益于积极的定价和密集的充电基础设施。"
+  },
+  "onboarding_demo_china_source": {
+    "message": "中国电动汽车市场简报"
+  },
+  "onboarding_demo_tag_market": {
+    "message": "市场"
+  },
+  "onboarding_demo_caution_content": {
+    "message": "一些分析师警告，在充电设施不足且补贴逐步退出的市场，电动汽车增长可能放缓。"
+  },
+  "onboarding_demo_caution_source": {
+    "message": "更谨慎的观点"
+  },
+  "onboarding_demo_tag_counterpoint": {
+    "message": "反方观点"
+  },
+  "popup_kicker": {
+    "message": "研究工作区"
+  },
+  "settings_search_error_json_disabled": {
+    "message": "该 SearXNG 实例尚未开启 JSON 输出。"
+  },
+  "settings_search_error_unknown": {
+    "message": "无法连接搜索服务商，请检查设置后重试。"
+  },
+  "settings_llm_error_unknown": {
+    "message": "服务商发生未知错误。"
+  },
+  "language_auto": {
+    "message": "自动（跟随浏览器）"
+  },
+  "language_en": {
+    "message": "英语"
+  },
+  "language_zh_cn": {
+    "message": "简体中文"
+  },
+  "language_fr": {
+    "message": "法语"
+  },
+  "language_de": {
+    "message": "德语"
+  },
+  "language_es": {
+    "message": "西班牙语"
+  },
+  "language_ja": {
+    "message": "日语"
+  },
+  "language_ko": {
+    "message": "韩语"
+  },
+  "language_pt": {
+    "message": "葡萄牙语"
+  },
+  "language_ru": {
+    "message": "俄语"
+  },
+  "provider_openai": {
+    "message": "OpenAI"
+  },
+  "provider_anthropic": {
+    "message": "Anthropic Claude"
+  },
+  "provider_gemini": {
+    "message": "Google Gemini"
+  },
+  "provider_deepseek": {
+    "message": "DeepSeek"
+  },
+  "provider_moonshot": {
+    "message": "Moonshot（Kimi）"
+  },
+  "provider_ollama": {
+    "message": "Ollama（本地）"
+  },
+  "provider_builtin": {
+    "message": "Chrome 内置 AI"
+  },
+  "provider_custom": {
+    "message": "自定义（兼容 OpenAI）"
+  },
+  "settings_api_key_required": {
+    "message": "请输入 API 密钥。"
+  },
+  "settings_model_required": {
+    "message": "请输入模型名称。"
+  },
+  "settings_save_success": {
+    "message": "设置已保存。"
+  },
+  "settings_save_error": {
+    "message": "无法保存设置，请重试。"
+  },
+  "settings_connection_testing": {
+    "message": "正在测试连接…"
+  },
+  "settings_connection_success": {
+    "message": "连接成功。"
+  },
+  "settings_connection_failed_detail": {
+    "message": "连接失败：{{detail}}"
+  },
+  "settings_connection_error": {
+    "message": "连接测试意外失败，请重试。"
+  },
+  "settings_llm_error_auth": {
+    "message": "身份验证失败，请检查 API 密钥是否与所选服务商匹配。"
+  },
+  "settings_llm_error_rate_limit": {
+    "message": "服务商限制了请求频率，请稍后重试。"
+  },
+  "settings_llm_error_context_length": {
+    "message": "请求包含的上下文过多，请减少后重试。"
+  },
+  "settings_llm_error_network": {
+    "message": "无法连接服务商，请检查网络和 Base URL。"
+  },
+  "settings_llm_error_timeout": {
+    "message": "服务商未能及时响应。"
+  },
+  "settings_llm_error_abort": {
+    "message": "连接测试已取消。"
+  },
+  "settings_llm_error_server": {
+    "message": "服务商返回服务器错误，请稍后重试。"
+  },
+  "settings_llm_error_bad_request": {
+    "message": "请求被拒绝，请检查模型名称和设置。"
+  },
+  "settings_llm_error_empty_response": {
+    "message": "模型没有返回文本，请提高最大 Token 数或换用其他模型。"
+  },
+  "settings_llm_error_output_limit": {
+    "message": "模型达到输出 Token 上限，请提高最大 Token 数或缩短提示词。"
+  },
+  "settings_search_failed_detail": {
+    "message": "搜索失败：{{detail}}"
+  },
+  "settings_search_error_no_provider": {
+    "message": "请先选择搜索服务商。"
+  },
+  "settings_search_error_key_required": {
+    "message": "请输入搜索服务商的 API 密钥。"
+  },
+  "settings_search_error_endpoint_required": {
+    "message": "请输入 SearXNG 地址。"
+  },
+  "settings_search_error_endpoint_protocol": {
+    "message": "地址必须以 http:// 或 https:// 开头。"
+  },
+  "settings_search_error_timeout": {
+    "message": "SearXNG 实例未能及时响应。"
+  },
+  "settings_search_error_unreachable": {
+    "message": "无法访问该地址，请检查 URL 和实例状态。"
+  },
+  "settings_search_error_no_results": {
+    "message": "已连接，但服务商没有返回结果。"
+  },
+  "settings_search_error_http": {
+    "message": "搜索服务商返回 HTTP {{status}}。"
+  },
+  "action_copied": {
+    "message": "已复制！"
+  },
+  "action_copy_failed": {
+    "message": "复制失败"
+  },
+  "search_plan_complete": {
+    "message": "搜索完成，正在生成回答…"
+  },
+  "search_plan_empty": {
+    "message": "无法生成搜索计划，请换一种方式描述问题。"
+  },
+  "deep_search_need_session": {
+    "message": "深度搜索会从当前 Session 出发。请先使用智能阅读，或至少保存一条相关片段。"
+  },
+  "deep_search_provider_required": {
+    "message": "使用深度搜索前，请先在设置中配置网络搜索服务。"
+  },
+  "search_plan_scope": {
+    "message": "基于“%s” · 将通过 %p 搜索"
+  },
+  "search_plan_include_query": {
+    "message": "包含这项搜索"
+  },
+  "search_plan_edit_query": {
+    "message": "编辑搜索关键词"
+  },
+  "search_plan_select_one": {
+    "message": "请至少选择一项搜索后再继续。"
+  },
+  "search_plan_stale": {
+    "message": "Session 或搜索服务已经变化，请重新生成并确认计划。"
+  },
+  "search_plan_type_primary": {
+    "message": "一手来源"
+  },
+  "search_plan_type_verify": {
+    "message": "交叉核验"
+  },
+  "search_plan_type_counterpoint": {
+    "message": "反方证据"
+  },
+  "search_plan_type_update": {
+    "message": "最新进展"
+  },
+  "search_plan_type_context": {
+    "message": "背景补充"
+  },
+  "wb_deep_search_placeholder": {
+    "message": "这个 Session 还需要研究什么证据？输入问题后，再次点击“深度搜索”…"
+  },
+  "wb_export_document_title": {
+    "message": "Weft 导出"
+  },
+  "wb_generated_output_source": {
+    "message": "Weft 生成结果"
+  },
+  "wb_generated_tag": {
+    "message": "生成内容"
+  },
+  "wb_image_cached_hint": {
+    "message": "图片已缓存，可以发送给模型"
+  },
+  "wb_image_cached_status": {
+    "message": "[已缓存]"
+  },
+  "wb_image_not_cached_hint": {
+    "message": "图片尚未缓存，Weft 会在发送前重试"
+  },
+  "wb_image_not_cached_status": {
+    "message": "[未缓存]"
+  },
+  "wb_image_snippet_alt": {
+    "message": "已保存的图片"
+  },
+  "wb_no_session": {
+    "message": "没有可用会话"
+  },
+  "wb_page_generic": {
+    "message": "某个网页"
+  },
+  "wb_regarding_text": {
+    "message": "关于 %s 中的这段文字：\n\n“%t”\n\n%q"
+  },
+  "wb_word_count": {
+    "message": "%s 字"
+  },
+  "wb_error_abort": {
+    "message": "请求已取消。"
+  },
+  "wb_error_api_key": {
+    "message": "请先在设置中添加 API 密钥，再使用 AI 功能。"
+  },
+  "wb_error_auth": {
+    "message": "API 密钥被拒绝，请检查服务商设置。"
+  },
+  "wb_error_bad_request": {
+    "message": "模型无法处理该请求，请检查模型设置。"
+  },
+  "wb_error_context_length": {
+    "message": "所选内容过长，超出了当前模型的上下文限制。"
+  },
+  "wb_error_empty_response": {
+    "message": "模型返回了空响应。"
+  },
+  "wb_error_generic": {
+    "message": "出现了问题，请重试。"
+  },
+  "wb_error_network": {
+    "message": "Weft 无法连接已配置的服务，请检查网络和接口地址。"
+  },
+  "wb_error_page_extraction": {
+    "message": "Weft 无法读取当前页面，请重新加载后重试。"
+  },
+  "wb_error_rate_limit": {
+    "message": "服务正忙或使用额度已用完，请稍后重试。"
+  },
+  "wb_error_search": {
+    "message": "联网搜索失败，请检查搜索服务商设置后重试。"
+  },
+  "wb_error_server": {
+    "message": "服务返回错误，请稍后重试。"
+  },
+  "wb_error_session_changed": {
+    "message": "Weft 准备结果时会话发生了变化，请重试。"
+  },
+  "wb_error_target_tab_unavailable": {
+    "message": "来源标签页已不可用，请返回该页面后重试。"
+  },
+  "wb_error_page_changed": {
+    "message": "操作期间来源页面发生了变化，请返回原页面后重试。"
+  },
+  "wb_error_timeout": {
+    "message": "操作超时，请重试。"
+  },
+  "diagram_copy_code": {
+    "message": "复制代码"
+  },
+  "diagram_copy_svg": {
+    "message": "复制 SVG"
+  },
+  "diagram_draw_request": {
+    "message": "生成图表：%s（%t）"
+  },
+  "diagram_error_empty": {
+    "message": "模型没有返回图表。"
+  },
+  "diagram_error_no_content": {
+    "message": "没有可用于生成图表的内容。"
+  },
+  "diagram_error_page_unavailable": {
+    "message": "Weft 无法读取当前页面来生成图表。"
+  },
+  "diagram_error_render": {
+    "message": "无法安全渲染图表语法，请换一种类型或简化要求。"
+  },
+  "diagram_error_renderer_unavailable": {
+    "message": "图表渲染器不可用，请重新加载 Weft 后重试。"
+  },
+  "diagram_error_timeout": {
+    "message": "图表渲染超时，请重试。"
+  },
+  "diagram_error_type_mismatch": {
+    "message": "生成的图表与所选类型不一致，请重试。"
+  },
+  "diagram_error_unsafe": {
+    "message": "生成的 SVG 包含不安全内容，已被拦截。"
+  },
+  "diagram_export_code_label": {
+    "message": "图表代码"
+  },
+  "diagram_export_source_label": {
+    "message": "来源内容"
+  },
+  "diagram_export_title": {
+    "message": "图表 — Weft"
+  },
+  "diagram_generate_request": {
+    "message": "生成图表"
+  },
+  "diagram_generating": {
+    "message": "生成中…"
+  },
+  "diagram_selected_text_request": {
+    "message": "根据 %s 中选中的文字生成图表"
+  },
+  "diagram_show_code": {
+    "message": "显示代码"
+  },
+  "diagram_hide_code": {
+    "message": "隐藏代码"
+  },
+  "diagram_type_auto": {
+    "message": "自动检测"
+  },
+  "diagram_type_auto_desc": {
+    "message": "由模型选择最合适的图表类型"
+  },
+  "diagram_type_flowchart": {
+    "message": "流程图"
+  },
+  "diagram_type_flowchart_desc": {
+    "message": "呈现流程、决策和工作步骤"
+  },
+  "diagram_type_mindmap": {
+    "message": "思维导图"
+  },
+  "diagram_type_mindmap_desc": {
+    "message": "呈现主题、想法及其层级"
+  },
+  "diagram_type_sequence": {
+    "message": "时序图"
+  },
+  "diagram_type_sequence_desc": {
+    "message": "按时间顺序呈现交互过程"
+  },
+  "diagram_type_timeline": {
+    "message": "时间线"
+  },
+  "diagram_type_timeline_desc": {
+    "message": "呈现随时间发生的事件和里程碑"
+  },
+  "diagram_type_pie": {
+    "message": "饼图"
+  },
+  "diagram_type_pie_desc": {
+    "message": "呈现比例和百分比分布"
+  },
+  "diagram_type_class": {
+    "message": "类图"
+  },
+  "diagram_type_class_desc": {
+    "message": "呈现实体、属性及其关系"
+  },
+  "diagram_type_er": {
+    "message": "实体关系图"
+  },
+  "diagram_type_er_desc": {
+    "message": "呈现数据库实体及其关系"
+  },
+  "diagram_type_quadrant": {
+    "message": "四象限图"
+  },
+  "diagram_type_quadrant_desc": {
+    "message": "从两个维度比较各个项目"
+  },
+  "diagram_type_svg": {
+    "message": "自定义 SVG"
+  },
+  "diagram_type_svg_desc": {
+    "message": "以自由形式呈现复杂概念"
   }
 }

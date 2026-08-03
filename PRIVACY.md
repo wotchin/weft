@@ -1,6 +1,6 @@
 # Weft — Privacy Policy
 
-_Last updated: 2026-07-23_
+_Last updated: 2026-08-01_
 
 Weft is a browser extension that helps you collect snippets from web pages and synthesize them using a Large Language Model (LLM) of your choice. Weft is built around a simple principle: **your data stays on your machine.**
 
@@ -13,10 +13,12 @@ Weft is a browser extension that helps you collect snippets from web pages and s
 
 Weft only reads the content of a web page when **you** ask it to — for example when you select text and save a snippet, use the selection toolbar, or run a page-level action. It does not silently monitor, log, or transmit your browsing.
 
+**Smart Read** is also user-initiated. It reads only the DOM content already rendered in the source tab. For an article, Weft sends selected readable text blocks to your configured LLM so it can propose key passages; for a link-heavy page, it sends visible headline and teaser text only after asking for your reading focus. Weft does not send cookies or login credentials, follow those links in the background, bypass an access gate, or retrieve hidden subscriber content. Before saving, every proposed article quotation is checked against the rendered source text. The resulting session stores the selected passages or links, not a complete copy of the page.
+
 ## What is sent to third parties
 
-- **Your chosen LLM provider.** When you run a synthesis action (report, rewrite, diagram, verify, summarize, etc.), the relevant snippet text and your prompt are sent to the LLM endpoint you configured, so it can generate a response. This is subject to that provider's own privacy policy.
-- **Optional web search.** If — and only if — you turn on web search, your search queries are sent to the provider you selected: a public SearXNG instance, your own SearXNG instance, or a keyed API (Tavily, Brave Search). Nothing else about your session is sent with the query. Weft does not scrape Google, Bing, or other search engines.
+- **Your chosen LLM provider.** When you run a synthesis action (report, rewrite, diagram, verify, summarize, Smart Read, etc.), the relevant snippet or page text and your prompt are sent to the LLM endpoint you configured, so it can generate a response. This is subject to that provider's own privacy policy.
+- **Optional Deep Search.** Weft first uses your configured LLM to compare your question with a bounded set of relevant Session evidence and propose an evidence-gap search plan. The exact queries are shown for you to select and edit. Only after you confirm are those query strings sent to the search provider you selected: a public SearXNG instance, your own SearXNG instance, or a keyed API (Tavily, Brave Search). The search provider does not receive the Session, comments, snippets or current webpage. Weft does not scrape Google, Bing, or other search engines.
 
 Weft does not use analytics, telemetry, advertising, or any third-party tracking. We do not sell or share your data.
 
@@ -40,4 +42,4 @@ Uninstalling Weft removes all locally stored data. You can also delete individua
 
 ## Contact
 
-Questions about privacy: open an issue on the project's GitHub repository.
+Questions about privacy: open an issue on the project's [GitHub repository](https://github.com/wotchin/weft)

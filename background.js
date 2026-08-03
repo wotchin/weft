@@ -11,18 +11,40 @@ importScripts(
 // 保存子菜单的 ID 数组，用于更新右键菜单
 let sessionMenuIds = [];
 let _updatingMenus = false;
+let _menuRefreshQueued = false;
 
-// Build all static (non-session) context menus
-function createStaticMenus() {
+function formatUiMessage(key, replacements = {}) {
+    let message = t(key);
+    for (const [token, value] of Object.entries(replacements)) {
+        message = message.replaceAll(`%${token}`, String(value));
+    }
+    return message;
+}
+
+const TAG_LABEL_KEYS = {
+    quote: 'tag_quote',
+    data: 'tag_data',
+    opinion: 'tag_opinion',
+    reference: 'tag_reference',
+    'key-point': 'tag_key_point',
+};
+
+function tagDisplayName(tag) {
+    return TAG_LABEL_KEYS[tag] ? t(TAG_LABEL_KEYS[tag]) : tag;
+}
+
+// Build all static (non-session) context menus in the user's selected language.
+async function createStaticMenus() {
+    await I18N.init();
     chrome.contextMenus.create({
         id: "saveToSession",
-        title: "Save to Session",
+        title: t('menu_save_to_session'),
         contexts: ["selection", "link", "page", "image"]
     });
 
     chrome.contextMenus.create({
         id: "tagSnippet",
-        title: "Tag as...",
+        title: t('menu_tag_as'),
         contexts: ["selection"]
     });
 
@@ -30,7 +52,7 @@ function createStaticMenus() {
     defaultTags.forEach(tag => {
         chrome.contextMenus.create({
             id: `tag-${tag}`,
-            title: tag,
+            title: tagDisplayName(tag),
             contexts: ["selection"],
             parentId: "tagSnippet"
         });
@@ -38,7 +60,7 @@ function createStaticMenus() {
 
     chrome.contextMenus.create({
         id: "saveWithTag",
-        title: "Quick Save with Tag",
+        title: t('menu_quick_save_tag'),
         contexts: ["selection"]
     });
 
@@ -46,7 +68,7 @@ function createStaticMenus() {
     quickTags.forEach(tag => {
         chrome.contextMenus.create({
             id: `saveTag-${tag}`,
-            title: `Save as "${tag}"`,
+            title: formatUiMessage('menu_save_as_tag', { s: tagDisplayName(tag) }),
             contexts: ["selection"],
             parentId: "saveWithTag"
         });
@@ -54,7 +76,7 @@ function createStaticMenus() {
 
     chrome.contextMenus.create({
         id: "savePageLink",
-        title: "Save Page Link to Session",
+        title: t('menu_save_page_link'),
         contexts: ["page"]
     });
 
@@ -64,18 +86,18 @@ function createStaticMenus() {
     // the toolbar must also be reachable here.
     chrome.contextMenus.create({
         id: "askAI",
-        title: "Analyse selection",
+        title: t('menu_analyse_selection'),
         contexts: ["selection"]
     });
 
     const askQuestions = [
-        { id: "askAI-verify",     title: "Verify this" },
-        { id: "askAI-explain",    title: "Explain in simple terms" },
-        { id: "askAI-key_points", title: "Extract key points" },
-        { id: "askAI-opposing",   title: "Counterarguments" },
+        { id: "askAI-verify",     title: t('menu_verify') },
+        { id: "askAI-explain",    title: t('menu_explain') },
+        { id: "askAI-key_points", title: t('menu_key_points') },
+        { id: "askAI-opposing",   title: t('menu_counterarguments') },
         { id: "askAI-separator",  title: "──────────", enabled: false },
-        { id: "askAI-diagram",    title: "Make a diagram…" },
-        { id: "askAI-freeform",   title: "Ask a question…" },
+        { id: "askAI-diagram",    title: t('menu_diagram') },
+        { id: "askAI-freeform",   title: t('menu_freeform') },
     ];
     askQuestions.forEach(q => {
         chrome.contextMenus.create({
@@ -87,17 +109,17 @@ function createStaticMenus() {
         });
     });
 
-    // ---- AI Page Insight (top-level, separate from tree) ----
+    // ---- Smart Read (top-level, separate from tree) ----
     chrome.contextMenus.create({
         id: "aiPageInsight",
-        title: "✦ AI Insight — Analyze This Page",
+        title: t('popup_smart_read'),
         contexts: ["page", "selection", "link", "image"]
     });
 
     // ---- Comment to Session ----
     chrome.contextMenus.create({
         id: "commentToSession",
-        title: "Comment to Session",
+        title: t('menu_comment_to_session'),
         contexts: ["selection"]
     });
 }
@@ -111,10 +133,8 @@ chrome.runtime.onInstalled.addListener((details) => {
         chrome.tabs.create({ url: chrome.runtime.getURL('onboarding.html') }).catch(() => {});
     }
 
-    createStaticMenus();
-
-    // 初始化右键菜单
-    updateSessionContextMenus();
+    // 初始化右键菜单（静态项和会话项一起原子重建）
+    void updateSessionContextMenus();
 
     // Enable side panel if the API is available (Chrome 114+)
     if (chrome.sidePanel) {
@@ -128,6 +148,8 @@ chrome.runtime.onInstalled.addListener((details) => {
 let lastSavedSnippetInfo = null;
 
 chrome.contextMenus.onClicked.addListener(async (info, tab) => {
+    // Service workers may restart long after the menus were created.
+    await I18N.init();
     if (info.menuItemId.startsWith("session-")) {
         const sessionName = info.menuItemId.replace("session-", "");
         const { sessions } = await chrome.storage.local.get(["sessions"]);
@@ -184,7 +206,7 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
         };
 
         await Store.addSnippet(targetSession, snippet);
-        sendNotification(`${targetSession} +1`, 'Page link saved');
+        sendNotification(`${targetSession} +1`, t('notify_page_link_saved'));
 
     } else if (info.menuItemId.startsWith("saveTag-")) {
         // 一键保存并打标签到默认 session
@@ -204,7 +226,10 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
 
         await Store.addSnippet(targetSession, snippet);
         lastSavedSnippetInfo = { sessionName: targetSession, snippetId: snippet.id };
-        sendNotification(`${targetSession} +1`, `Saved as "${tag}"`);
+        sendNotification(
+            `${targetSession} +1`,
+            formatUiMessage('notify_saved_as_tag', { s: tagDisplayName(tag) })
+        );
 
         // Auto-highlight the saved snippet on the page
         autoHighlightSnippet(tab, snippet);
@@ -279,7 +304,12 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
 
                 await Store.addSnippet(sessionName, snippet);
                 lastSavedSnippetInfo = { sessionName, snippetId: snippet.id };
-                sendNotification(`${sessionName} +1`, result.comment ? `With comment: ${result.comment.substring(0, 40)}` : 'Saved');
+                sendNotification(
+                    `${sessionName} +1`,
+                    result.comment
+                        ? formatUiMessage('notify_with_comment', { s: result.comment.substring(0, 40) })
+                        : t('notify_saved')
+                );
 
                 // Auto-highlight the saved snippet on the page
                 autoHighlightSnippet(tab, snippet);
@@ -300,62 +330,60 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
                 tags: [],
             };
             await Store.addSnippet(sessionName, snippet);
-            sendNotification(`${sessionName} +1`, 'Saved (comment skipped)');
+            sendNotification(`${sessionName} +1`, t('notify_comment_skipped'));
         }
 
     } else if (info.menuItemId === "aiPageInsight") {
-        // AI Page Insight — extract page content and open chat with full context
+        // Smart Read is completed by the workbench. Keep this user-gesture
+        // handler small: identify the source tab, then let chat.js own page
+        // extraction, purpose confirmation, LLM analysis and atomic saving.
+        // Page annotation remains a separate, explicit user toggle.
         if (!tab?.id) return;
 
-        try {
-            const results = await chrome.scripting.executeScript({
-                target: { tabId: tab.id },
-                func: () => {
-                    // Lightweight page extraction inline
-                    const REMOVE = ['script','style','noscript','iframe','svg','nav','footer','header','.ad','.ads','.sidebar','.menu','.comments','#comments'];
-                    const clone = document.body.cloneNode(true);
-                    REMOVE.forEach(s => { try { clone.querySelectorAll(s).forEach(el => el.remove()); } catch {} });
+        const requestId = generateId();
 
-                    const main = clone.querySelector('article,main,[role="main"],.article,.post,.content,.entry-content,#content,#main') || clone;
-                    const text = main.innerText || main.textContent || '';
-                    const headings = [...document.querySelectorAll('h1,h2,h3')].map(h => h.textContent.trim()).filter(Boolean).slice(0, 20);
-                    const meta = document.querySelector('meta[name="description"]');
+        const pendingWrite = Store.setPendingSmartRead({
+            requestId,
+            tabId: tab.id,
+            url: tab.url || info.pageUrl || '',
+            sourceTitle: tab.title || '',
+            windowId: tab.windowId,
+            requestedAt: Date.now(),
+            source: 'context-menu',
+        });
 
-                    return {
-                        title: document.title,
-                        url: location.href,
-                        description: meta ? meta.content : '',
-                        content: text.substring(0, 20000),
-                        headings,
-                        wordCount: text.split(/\s+/).length,
-                        selectedText: window.getSelection().toString().trim(),
-                    };
-                }
-            });
+        let panelOpened = false;
+        let panelOpenPromise = null;
+        if (chrome.sidePanel?.open) {
+            try {
+                const target = Number.isInteger(tab.windowId)
+                    ? { windowId: tab.windowId }
+                    : { tabId: tab.id };
+                // Initiate this before the first await so Chrome still sees the
+                // context-menu user gesture.
+                panelOpenPromise = chrome.sidePanel.open(target);
+            } catch (e) {
+                console.warn('Could not open Smart Read in the side panel:', e);
+            }
+        }
 
-            const pageData = results?.[0]?.result;
-            if (!pageData) return;
+        await pendingWrite;
+        if (panelOpenPromise) {
+            try {
+                await panelOpenPromise;
+                panelOpened = true;
+            } catch (e) {
+                console.warn('Could not open Smart Read in the side panel:', e);
+            }
+        }
 
-            await chrome.storage.local.set({
-                askAIContext: {
-                    selectedText: pageData.selectedText || '',
-                    question: '__PAGE_INSIGHT__',
-                    questionType: 'page-insight',
-                    sourceUrl: pageData.url,
-                    sourceTitle: pageData.title,
-                    pageData,
-                    timestamp: Date.now(),
-                }
-            });
-
-            chrome.windows.create({
-                url: chrome.runtime.getURL('chat.html?mode=askAI'),
+        if (!panelOpened) {
+            await chrome.windows.create({
+                url: chrome.runtime.getURL(`chat.html?mode=panel&smartReadRequestId=${encodeURIComponent(requestId)}`),
                 type: 'popup',
                 width: 900,
                 height: 700,
             });
-        } catch (e) {
-            console.warn('AI Page Insight extraction failed:', e);
         }
 
     } else if (info.menuItemId.startsWith("tag-")) {
@@ -363,18 +391,19 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
         const tag = info.menuItemId.replace("tag-", "");
 
         if (lastSavedSnippetInfo) {
-            const { sessions } = await chrome.storage.local.get(["sessions"]);
-            const session = sessions[lastSavedSnippetInfo.sessionName];
-            if (session) {
-                const snippet = session.find(s => s.id === lastSavedSnippetInfo.snippetId);
-                if (snippet && !snippet.tags.includes(tag)) {
-                    snippet.tags.push(tag);
-                    await chrome.storage.local.set({ "sessions": sessions });
-                    sendNotification("Tag Added", `Tagged as "${tag}"`);
-                }
+            const updated = await Store.updateSnippet(
+                lastSavedSnippetInfo.sessionName,
+                lastSavedSnippetInfo.snippetId,
+                (snippet) => ({ tags: [...new Set([...(snippet.tags || []), tag])] })
+            );
+            if (updated) {
+                sendNotification(
+                    t('notify_tag_added_title'),
+                    formatUiMessage('notify_tagged_as', { s: tagDisplayName(tag) })
+                );
             }
         } else {
-            sendNotification("Info", "Save a snippet first, then tag it.");
+            sendNotification(t('notify_info_title'), t('notify_save_before_tag'));
         }
     }
 });
@@ -382,45 +411,34 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
 // 更新右键菜单，根据已经存在的sessionNames更新子菜单
 async function updateSessionContextMenus() {
     // 防止并发调用
-    if (_updatingMenus) return;
+    if (_updatingMenus) {
+        _menuRefreshQueued = true;
+        return;
+    }
     _updatingMenus = true;
 
     try {
-        const { sessions = {} } = await chrome.storage.local.get(["sessions"]);
+        let sessions = await Store.normalizeLegacySessions((text) => ({
+            id: generateId(),
+            type: 'text',
+            content: text,
+            sourceUrl: '',
+            sourceTitle: '',
+            timestamp: Date.now(),
+            tags: [],
+        }));
 
         // 如果 sessions 为空，则创建一个新的默认 session
         if (Object.keys(sessions).length === 0) {
-            const defaultSessionName = "default";
-            sessions[defaultSessionName] = [];
-            await chrome.storage.local.set({ "sessions": sessions });
-        }
-
-        // 数据迁移：将旧格式的纯字符串数组转换为新格式的 snippet 对象数组
-        let needsMigration = false;
-        for (const name of Object.keys(sessions)) {
-            const items = sessions[name];
-            if (items.length > 0 && typeof items[0] === 'string') {
-                sessions[name] = items.map(text => ({
-                    id: generateId(),
-                    type: 'text',
-                    content: text,
-                    sourceUrl: '',
-                    sourceTitle: '',
-                    timestamp: Date.now(),
-                    tags: []
-                }));
-                needsMigration = true;
-            }
-        }
-        if (needsMigration) {
-            await chrome.storage.local.set({ "sessions": sessions });
+            await Store.createEmptySession("default");
+            sessions = await Store.getSessions();
         }
 
         // removeAll + full rebuild: guarantees deleted sessions are cleaned up
         // (the old per-ID approach failed when service worker restarted and
         //  sessionMenuIds was lost, leaving stale menu items)
         await chrome.contextMenus.removeAll();
-        createStaticMenus();
+        await createStaticMenus();
 
         const sessionNames = Object.keys(sessions);
         sessionMenuIds = [];
@@ -428,7 +446,7 @@ async function updateSessionContextMenus() {
             const menuId = `session-${sessionName}`;
             chrome.contextMenus.create({
                 id: menuId,
-                title: `Add to ${sessionName}`,
+                title: formatUiMessage('menu_add_to_session', { s: sessionName }),
                 contexts: ["selection", "link", "page", "image"],
                 parentId: "saveToSession"
             });
@@ -446,6 +464,10 @@ async function updateSessionContextMenus() {
         console.error('Error updating context menus:', error);
     } finally {
         _updatingMenus = false;
+        if (_menuRefreshQueued) {
+            _menuRefreshQueued = false;
+            void updateSessionContextMenus();
+        }
     }
 }
 
@@ -476,28 +498,38 @@ async function blobToResizedDataUrl(blob, maxSize = 1024, quality = 0.85) {
 
 // Fetch image from URL and convert to base64 data URL
 // Tries multiple strategies: plain fetch, fetch with Referer, no-cors mode
+const IMAGE_FETCH_TIMEOUT_MS = 10000;
+const MAX_IMAGE_SOURCE_BYTES = 15 * 1024 * 1024;
+
 async function fetchImageAsDataUrl(imageUrl, sourcePageUrl) {
     const strategies = [
         // Strategy 1: plain fetch
-        () => fetch(imageUrl),
+        (signal) => fetch(imageUrl, { signal }),
         // Strategy 2: with Referer header (bypasses some hotlink protections)
-        () => fetch(imageUrl, {
-            headers: { 'Referer': sourcePageUrl || new URL(imageUrl).origin + '/' }
+        (signal) => fetch(imageUrl, {
+            headers: { 'Referer': sourcePageUrl || new URL(imageUrl).origin + '/' },
+            signal,
         }),
         // Strategy 3: no-cache to bypass stale responses
-        () => fetch(imageUrl, { cache: 'no-cache' }),
+        (signal) => fetch(imageUrl, { cache: 'no-cache', signal }),
     ];
 
     for (const strategy of strategies) {
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), IMAGE_FETCH_TIMEOUT_MS);
         try {
-            const response = await strategy();
+            const response = await strategy(controller.signal);
             if (!response.ok) continue;
+            const declaredSize = Number(response.headers.get('content-length')) || 0;
+            if (declaredSize > MAX_IMAGE_SOURCE_BYTES) continue;
             const blob = await response.blob();
-            if (!blob.type.startsWith('image/')) continue;
+            if (!blob.type.startsWith('image/') || blob.size > MAX_IMAGE_SOURCE_BYTES) continue;
             const result = await blobToResizedDataUrl(blob);
             if (result) return result;
         } catch (e) {
             // Try next strategy
+        } finally {
+            clearTimeout(timer);
         }
     }
     console.warn('All fetch strategies failed for image:', imageUrl);
@@ -632,22 +664,34 @@ const QUICK_ACTIONS = {
 chrome.runtime.onConnect.addListener((port) => {
     if (port.name !== 'weft-quick') return;
 
+    let disconnected = false;
+    let activeController = null;
+    port.onDisconnect.addListener(() => {
+        disconnected = true;
+        activeController?.abort();
+        activeController = null;
+    });
+
     port.onMessage.addListener(async (msg) => {
         if (!msg || msg.type !== 'run') return;
         const spec = QUICK_ACTIONS[msg.action];
         if (!spec) {
-            port.postMessage({ type: 'error', message: 'Unknown action.' });
+            port.postMessage({ type: 'error', kind: 'unknown_action' });
             return;
         }
 
         const text = (msg.text || '').slice(0, 8000);
         if (!text) {
-            port.postMessage({ type: 'error', message: 'No text selected.' });
+            port.postMessage({ type: 'error', kind: 'no_selection' });
             return;
         }
 
         const started = Date.now();
         let out = '';
+        activeController?.abort();
+        const controller = new AbortController();
+        activeController = controller;
+        const isCurrentRun = () => !disconnected && activeController === controller;
         try {
             // Answer in the user's chosen language, not the page's.
             await I18N.init();
@@ -661,18 +705,22 @@ chrome.runtime.onConnect.addListener((port) => {
                 // after its thinking pass.
                 maxTokens: 1500,
                 temperature: 0.2,
+                signal: controller.signal,
                 onDelta: (delta) => {
+                    if (!isCurrentRun()) return;
                     out += delta;
                     try {
                         port.postMessage({ type: 'delta', delta, elapsed: Date.now() - started });
                     } catch { /* port closed by the page */ }
                 },
                 onReasoning: () => {
+                    if (!isCurrentRun()) return;
                     // Tell the card the model is thinking, without showing the
                     // chain-of-thought itself.
                     try { port.postMessage({ type: 'reasoning' }); } catch { /* closed */ }
                 },
             });
+            if (!isCurrentRun()) return;
 
             // Streaming responses rarely carry usage, so fall back to an estimate.
             const promptTokens = usage?.promptTokens
@@ -680,30 +728,87 @@ chrome.runtime.onConnect.addListener((port) => {
             const completionTokens = usage?.completionTokens
                 ?? WeftTokenizer.estimateTokens(out);
 
-            port.postMessage({
-                type: 'done',
-                text: out,
-                elapsed: Date.now() - started,
-                promptTokens,
-                completionTokens,
-                estimated: !usage,
-            });
+            try {
+                port.postMessage({
+                    type: 'done',
+                    text: out,
+                    elapsed: Date.now() - started,
+                    promptTokens,
+                    completionTokens,
+                    estimated: !usage,
+                });
+            } catch { /* port closed after the final token */ }
         } catch (e) {
-            port.postMessage({
-                type: 'error',
-                message: e.message || String(e),
-                hint: e.hint || '',
-            });
+            if (!isCurrentRun()) return;
+            try {
+                port.postMessage({
+                    type: 'error',
+                    kind: e.kind || 'unknown',
+                    status: Number.isFinite(e.status) ? e.status : undefined,
+                });
+            } catch { /* port closed while reporting the error */ }
+        } finally {
+            if (activeController === controller) activeController = null;
         }
     });
 });
 
+function inferChangedSessionName(sessionChange) {
+    const before = sessionChange?.oldValue || {};
+    const after = sessionChange?.newValue || {};
+    const names = new Set([...Object.keys(before), ...Object.keys(after)]);
+    const changed = [];
+
+    for (const name of names) {
+        const oldItems = before[name];
+        const newItems = after[name];
+        if (!Array.isArray(oldItems) || !Array.isArray(newItems)) {
+            if (oldItems !== newItems) changed.push(name);
+        } else if (JSON.stringify(oldItems) !== JSON.stringify(newItems)) {
+            changed.push(name);
+        }
+        if (changed.length > 1) return null;
+    }
+
+    return changed[0] || null;
+}
+
 // Sync context menus when sessions change (e.g. from popup)
 chrome.storage.onChanged.addListener((changes, areaName) => {
-    if (areaName === 'local' && changes.sessions) {
-        updateSessionContextMenus();
+    if (areaName !== 'local') return;
+    if (changes.sessions || changes.uiLanguage) {
+        void updateSessionContextMenus();
+    }
+    if (changes.uiLanguage) {
+        // Extension pages receive the runtime event; content scripts need a
+        // per-tab message because they live in a different execution world.
+        chrome.runtime.sendMessage({ type: 'uiLanguageChanged' }).catch(() => {});
+        chrome.tabs.query({}).then((tabs) => {
+            for (const tab of tabs) {
+                if (!Number.isInteger(tab.id)) continue;
+                chrome.tabs.sendMessage(tab.id, { type: 'uiLanguageChanged' }).catch(() => {});
+            }
+        }).catch(() => {});
+    }
+    if (changes.sessions) {
         // Notify chat page to invalidate RAG index cache
-        chrome.runtime.sendMessage({ type: 'snippetsChanged' }).catch(() => {});
+        const activatedSession = typeof changes.currentSession?.newValue === 'string'
+            ? changes.currentSession.newValue
+            : null;
+        const sessionName = activatedSession || inferChangedSessionName(changes.sessions);
+        chrome.runtime.sendMessage({
+            type: 'snippetsChanged',
+            ...(sessionName ? { sessionName } : {}),
+            activate: Boolean(activatedSession && activatedSession === sessionName),
+        }).catch(() => {});
+    } else if (changes.currentSession) {
+        const sessionName = typeof changes.currentSession.newValue === 'string'
+            ? changes.currentSession.newValue
+            : null;
+        chrome.runtime.sendMessage({
+            type: 'currentSessionChanged',
+            sessionName,
+        }).catch(() => {});
     }
 });
 
@@ -725,61 +830,205 @@ async function autoHighlightSnippet(tab, snippet) {
     }
 }
 
-/**
- * Highlight all snippets from a session that match the current page URL.
- * Called on-demand from popup or content script.
- */
-async function highlightSessionSnippetsOnPage(sessionName, tabId, tabUrl) {
+function sessionSnippetsForPage(sessions, sessionName, tabUrl) {
+    if (!sessions || !Array.isArray(sessions[sessionName])) return [];
+
+    // Article snippets point at the article itself. Index Smart Read snippets
+    // point at their destination article, so retain the originating index URL
+    // separately and match that when restoring homepage highlights.
+    return sessions[sessionName].filter((snippet) => {
+        if (!snippet?.content || !tabUrl) return false;
+        if (snippet.type === 'text') {
+            const pageMatches = snippet.smartReadPageType === 'article'
+                ? sameSmartReadPage(snippet.sourceUrl, tabUrl)
+                : samePage(snippet.sourceUrl, tabUrl);
+            return snippet.content.trim().length >= 8
+                && Boolean(snippet.sourceUrl && pageMatches);
+        }
+        return snippet.type === 'link'
+            && snippet.smartReadPageType === 'index'
+            && snippet.content.trim().length >= 2
+            && Boolean(snippet.sourcePageUrl && sameSmartReadPage(snippet.sourcePageUrl, tabUrl));
+    });
+}
+
+function annotationSetKey(sessionName, snippets) {
+    let hash = 0x811c9dc5;
+    const values = snippets.map((snippet) => [
+        snippet.id || '', snippet.type || '', snippet.content || '',
+        snippet.linkUrl || '', snippet.sourceUrl || '', snippet.sourcePageUrl || '',
+    ].join('\u001f')).sort();
+    const framed = `${sessionName}\u001e${values.join('\u001e')}`;
+    for (let index = 0; index < framed.length; index++) {
+        hash ^= framed.charCodeAt(index);
+        hash = Math.imul(hash, 0x01000193);
+    }
+    return `session-${snippets.length}-${(hash >>> 0).toString(16).padStart(8, '0')}`;
+}
+
+/** Send one atomic session-annotation command to the exact source tab. */
+async function sendSessionAnnotationCommand(command, sessionName, tabId, tabUrl) {
     const { sessions } = await chrome.storage.local.get(['sessions']);
-    if (!sessions || !sessions[sessionName]) return { highlighted: 0, total: 0 };
-
-    // Filter snippets that were saved from this page
-    const pageSnippets = sessions[sessionName].filter(s =>
-        s.type === 'text' && s.content && s.content.trim().length >= 8 &&
-        s.sourceUrl && tabUrl && samePage(s.sourceUrl, tabUrl)
-    );
-
-    if (pageSnippets.length === 0) return { highlighted: 0, total: 0 };
+    const pageSnippets = sessionSnippetsForPage(sessions, sessionName, tabUrl);
+    const setKey = annotationSetKey(sessionName, pageSnippets);
+    if (!Number.isInteger(tabId)) return { highlighted: 0, total: pageSnippets.length };
 
     try {
-        await chrome.tabs.sendMessage(tabId, {
-            type: 'highlightSnippets',
+        const result = await chrome.tabs.sendMessage(tabId, {
+            type: command === 'get' ? 'getSessionHighlightState' : 'toggleSessionHighlights',
+            mode: command === 'hide' ? 'hide' : command === 'show' ? 'show' : 'toggle',
+            sessionName,
+            setKey,
+            expectedUrl: tabUrl,
             snippets: pageSnippets,
         });
-        return { highlighted: pageSnippets.length, total: pageSnippets.length };
+
+        if (!result || typeof result !== 'object') {
+            return {
+                active: false, state: 'hidden', highlighted: 0,
+                total: pageSnippets.length, setKey, error: 'NO_RESPONSE',
+            };
+        }
+
+        return {
+            ...result,
+            active: Boolean(result.active),
+            total: Number.isFinite(result.total)
+                ? Math.max(0, Math.trunc(result.total))
+                : pageSnippets.length,
+            setKey,
+        };
     } catch (e) {
-        return { highlighted: 0, total: pageSnippets.length };
+        return {
+            active: false, state: 'hidden', highlighted: 0,
+            total: pageSnippets.length, setKey, error: 'CONTENT_UNAVAILABLE',
+        };
     }
 }
 
-/** Check if two URLs point to the same page (ignoring hash/query differences) */
-function samePage(url1, url2) {
+const TRACKING_PARAM_RE = /^(?:utm_.+|fbclid|gclid|dclid|msclkid|gbraid|wbraid|yclid|twclid|mc_cid|mc_eid|vero_(?:id|conv)|_hsenc|_hsmi|hscid|hsctatracking|mkt_tok|igshid)$/i;
+
+function comparablePageUrl(url) {
     try {
-        const a = new URL(url1);
-        const b = new URL(url2);
-        return a.origin === b.origin && a.pathname === b.pathname;
-    } catch (e) {
-        return url1 === url2;
+        const parsed = new URL(url);
+        parsed.hash = '';
+        const params = [];
+        parsed.searchParams.forEach((value, key) => {
+            if (!TRACKING_PARAM_RE.test(key)) params.push([key, value]);
+        });
+        params.sort((a, b) => a[0].localeCompare(b[0]) || a[1].localeCompare(b[1]));
+        parsed.search = '';
+        params.forEach(([key, value]) => parsed.searchParams.append(key, value));
+        return parsed.href;
+    } catch {
+        return String(url || '').split('#')[0];
     }
+}
+
+function comparablePagePath(url) {
+    try {
+        const parsed = new URL(url);
+        const pathname = parsed.pathname.length > 1
+            ? parsed.pathname.replace(/\/+$/u, '')
+            : parsed.pathname;
+        return `${parsed.origin}${pathname}`;
+    } catch {
+        return String(url || '').split(/[?#]/u)[0].replace(/\/+$/u, '');
+    }
+}
+
+/** Compare pages while ignoring only fragments and tracking parameters. */
+function samePage(url1, url2) {
+    return Boolean(url1 && url2) && comparablePageUrl(url1) === comparablePageUrl(url2);
+}
+
+/** Smart Read evidence is still guarded by an exact text/link match, so a
+ * canonical redirect may safely fall back to the same origin and path. */
+function sameSmartReadPage(url1, url2) {
+    return samePage(url1, url2)
+        || (Boolean(url1 && url2) && comparablePagePath(url1) === comparablePagePath(url2));
 }
 
 // Handle messages from chat.js and other extension pages
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (message.type === 'reCacheImages') {
-        handleReCacheImages(message.sessionName).then(sendResponse);
+        handleReCacheImages(message.sessionName)
+            .then(sendResponse)
+            .catch((error) => {
+                console.warn('Image re-cache failed:', error);
+                sendResponse({ updated: 0, failed: 0, skipped: 0, error: error.message || String(error) });
+            });
         return true;
     }
 
-    if (message.type === 'highlightSessionOnPage') {
-        // On-demand: highlight all session snippets from the current page
+    if (
+        message.type === 'toggleSessionOnPage'
+        || message.type === 'hideSessionOnPage'
+        || message.type === 'getSessionHighlightState'
+        || message.type === 'highlightSessionOnPage'
+    ) {
+        // Popup and Workbench normally identify the exact page explicitly.
+        // Keep the active-tab fallback only for compatibility with an older
+        // extension view that was already open during an update.
         (async () => {
-            const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-            if (!tab) { sendResponse({ highlighted: 0, total: 0 }); return; }
-            const result = await highlightSessionSnippetsOnPage(
-                message.sessionName, tab.id, tab.url
+            let tabId = Number.isInteger(message.tabId) ? message.tabId : sender.tab?.id;
+            let tabUrl = typeof message.url === 'string' && message.url ? message.url : sender.tab?.url;
+
+            if (Number.isInteger(tabId)) {
+                try {
+                    const tab = await chrome.tabs.get(tabId);
+                    const actualUrl = tab?.pendingUrl || tab?.url || '';
+                    if (tabUrl && !samePage(tabUrl, actualUrl)) {
+                        sendResponse({ active: false, state: 'hidden', highlighted: 0, total: 0, error: 'TARGET_PAGE_CHANGED' });
+                        return;
+                    }
+                    if (!/^https?:/i.test(actualUrl)) {
+                        sendResponse({ active: false, state: 'hidden', highlighted: 0, total: 0, error: 'PAGE_UNAVAILABLE' });
+                        return;
+                    }
+                    tabUrl = actualUrl;
+                } catch {
+                    sendResponse({ active: false, state: 'hidden', highlighted: 0, total: 0, error: 'TARGET_TAB_UNAVAILABLE' });
+                    return;
+                }
+            }
+
+            if (!Number.isInteger(tabId)) {
+                const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+                tabId = tab?.id;
+                if (!tabUrl) tabUrl = tab?.url || '';
+            }
+
+            if (!Number.isInteger(tabId)) {
+                sendResponse({ active: false, state: 'hidden', highlighted: 0, total: 0 });
+                return;
+            }
+
+            const result = await sendSessionAnnotationCommand(
+                message.type === 'getSessionHighlightState'
+                    ? 'get'
+                    : message.type === 'hideSessionOnPage'
+                        ? 'hide'
+                        : message.type === 'highlightSessionOnPage' ? 'show' : 'toggle',
+                message.sessionName,
+                tabId,
+                tabUrl || ''
             );
+            if (message.type !== 'getSessionHighlightState' && !result?.error) {
+                chrome.runtime.sendMessage({
+                    type: 'pageAnnotationStateChanged',
+                    tabId,
+                    url: tabUrl || '',
+                    sessionName: message.sessionName,
+                    setKey: result.setKey || '',
+                    active: Boolean(result.active),
+                    highlighted: result.highlighted || 0,
+                }).catch(() => {});
+            }
             sendResponse(result);
-        })();
+        })().catch(() => sendResponse({
+            active: false, state: 'hidden', highlighted: 0, total: 0, error: 'ANNOTATION_FAILED',
+        }));
         return true;
     }
 
@@ -803,7 +1052,15 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
                 'card_save', 'card_saved', 'card_save_hint', 'card_failed',
                 'card_close', 'card_disconnected', 'card_reload',
                 'toast_saved_to', 'toast_save_failed',
-                'modal_cancel', 'modal_save', 'modal_comment_ph',
+                'modal_cancel', 'modal_save', 'modal_comment_ph', 'modal_comment_title',
+                'card_elapsed', 'card_stats',
+                'llm_error_auth', 'llm_error_rate_limit', 'llm_error_context_length',
+                'llm_error_network', 'llm_error_timeout', 'llm_error_abort',
+                'llm_error_server', 'llm_error_bad_request',
+                'llm_error_empty_response', 'llm_error_output_limit', 'llm_error_unknown',
+                'quick_error_unknown_action', 'quick_error_no_selection',
+                'tag_quote', 'tag_data', 'tag_opinion', 'tag_reference', 'tag_key_point',
+                'tag_stats', 'tag_market', 'tag_counterpoint', 'tag_generated', 'tag_analysed',
             ];
             const out = {};
             for (const k of keys) out[k] = I18N.get(k) || k;
@@ -818,7 +1075,6 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         (async () => {
             const sessions = await Store.getSessions();
             const target = (await Store.getCurrentSession()) || Object.keys(sessions)[0] || 'default';
-            if (!sessions[target]) { sessions[target] = []; await Store.setSessions(sessions); }
 
             const snippet = {
                 id: generateId(),
@@ -841,7 +1097,6 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         (async () => {
             const sessions = await Store.getSessions();
             const target = (await Store.getCurrentSession()) || Object.keys(sessions)[0] || 'default';
-            if (!sessions[target]) { sessions[target] = []; await Store.setSessions(sessions); }
             await Store.addSnippet(target, {
                 id: generateId(),
                 type: 'text',
@@ -867,13 +1122,39 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     }
 });
 
-// Re-cache all images in a session that don't have cachedDataUrl
-async function handleReCacheImages(sessionName) {
+// Re-cache jobs are shared by every workbench/popup request handled by this
+// service-worker instance. A session is the right key because the operation is
+// based entirely on persisted snippets and does not depend on a source tab.
+const reCacheImageJobs = new Map();
+const reCacheFailureUntil = new Map();
+const RECACHE_FAILURE_BACKOFF_MS = 60000;
+
+function handleReCacheImages(sessionName) {
+    const key = typeof sessionName === 'string' ? sessionName : '';
+    if (!key) return Promise.resolve({ updated: 0, failed: 0, skipped: 0 });
+
+    const inFlight = reCacheImageJobs.get(key);
+    if (inFlight) return inFlight;
+
+    const job = runReCacheImages(key);
+    reCacheImageJobs.set(key, job);
+    const clear = () => {
+        if (reCacheImageJobs.get(key) === job) reCacheImageJobs.delete(key);
+    };
+    job.then(clear, clear);
+    return job;
+}
+
+async function runReCacheImages(sessionName) {
     const { sessions } = await chrome.storage.local.get(['sessions']);
-    if (!sessions || !sessions[sessionName]) return { updated: 0 };
+    if (!sessions || !Array.isArray(sessions[sessionName])) {
+        return { updated: 0, failed: 0, skipped: 0 };
+    }
 
     const snippets = sessions[sessionName];
-    let updated = 0;
+    const cachedIds = [];
+    let failed = 0;
+    let skipped = 0;
 
     for (const snippet of snippets) {
         if (snippet.type !== 'image') continue;
@@ -881,18 +1162,35 @@ async function handleReCacheImages(sessionName) {
         if (snippet.cachedDataUrl || snippet.hasCachedImage) continue;
         if (!snippet.imageUrl) continue;
 
-        const dataUrl = await fetchImageAsDataUrl(snippet.imageUrl, snippet.sourceUrl);
-        if (dataUrl) {
-            // Offload to IndexedDB; keep only a flag on the snippet.
+        const failureKey = `${sessionName}\n${snippet.id}\n${snippet.imageUrl}`;
+        const retryAt = reCacheFailureUntil.get(failureKey) || 0;
+        if (retryAt > Date.now()) {
+            skipped++;
+            continue;
+        }
+        if (retryAt) reCacheFailureUntil.delete(failureKey);
+
+        try {
+            const dataUrl = await fetchImageAsDataUrl(snippet.imageUrl, snippet.sourceUrl);
+            if (!dataUrl) {
+                failed++;
+                reCacheFailureUntil.set(failureKey, Date.now() + RECACHE_FAILURE_BACKOFF_MS);
+                continue;
+            }
+            // Store bytes first. The storage flag is committed once for every
+            // successful image after the loop, never once per image.
             await Store.putImage(snippet.id, dataUrl);
-            snippet.hasCachedImage = true;
-            delete snippet.cachedDataUrl;
-            updated++;
+            cachedIds.push(snippet.id);
+            reCacheFailureUntil.delete(failureKey);
+        } catch (error) {
+            failed++;
+            reCacheFailureUntil.set(failureKey, Date.now() + RECACHE_FAILURE_BACKOFF_MS);
+            console.warn('Could not re-cache image:', snippet.imageUrl, error);
         }
     }
 
-    if (updated > 0) {
-        await chrome.storage.local.set({ sessions });
-    }
-    return { updated };
+    const updated = cachedIds.length > 0
+        ? await Store.markImagesCached(sessionName, cachedIds)
+        : 0;
+    return { updated, failed, skipped };
 }

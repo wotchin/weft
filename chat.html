@@ -2,25 +2,25 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Weft — Workbench</title>
-    <link rel="stylesheet" href="chat.css?v=3.0.1-ui2">
+    <title data-i18n="wb_document_title">Weft — Workbench</title>
+    <link rel="stylesheet" href="chat.css?v=3.0.1-ui3">
 </head>
 <body>
     <div class="chat-container">
         <div class="chat-header">
             <div class="header-left">
-                <img class="brand-mark" src="assets/icon-32.png" alt="">
+                <img class="brand-mark" src="assets/icon.svg" alt="">
                 <h2 data-i18n="wb_title">Weft Workbench</h2>
             </div>
             <div class="header-right">
-                <button id="expandBtn" class="header-btn" title="Open in a full window" data-i18n="wb_expand" style="display:none;">Expand</button>
-                <button id="exportBtn" class="header-btn" title="Export result">
-                    <img src="assets/others/export-html.svg" alt="">
+                <button id="expandBtn" class="header-btn" title="Open in a full window" data-i18n="wb_expand" data-i18n-title="wb_expand_hint" data-i18n-aria-label="wb_expand" aria-label="Expand" style="display:none;">Expand</button>
+                <button id="exportBtn" class="header-btn" title="Export the latest completed AI result" data-i18n-title="wb_export_hint" data-i18n-aria-label="wb_export" aria-label="Export" disabled>
+                    <span class="asset-mask asset-export-html" aria-hidden="true"></span>
                     <span data-i18n="wb_export">Export</span>
                 </button>
-                <button id="clearChat" class="header-btn" title="Clear chat" data-i18n="wb_clear">Clear</button>
-                <button id="openSettingsBtn" class="header-btn icon-only" title="Settings" data-i18n-title="wb_settings" aria-label="Settings">
-                    <img src="assets/others/settings.svg" alt="">
+                <button id="clearChat" class="header-btn" title="Clear the current conversation" data-i18n="wb_clear" data-i18n-title="wb_clear_hint" data-i18n-aria-label="wb_clear" aria-label="Clear">Clear</button>
+                <button id="openSettingsBtn" class="header-btn icon-only" title="Settings" data-i18n-title="wb_settings" data-i18n-aria-label="wb_settings" aria-label="Settings">
+                    <span class="asset-mask asset-settings" aria-hidden="true"></span>
                 </button>
             </div>
         </div>
@@ -28,14 +28,14 @@
         <!-- Session panel: switch sessions and manage collected snippets -->
         <div class="context-panel" id="contextPanel">
             <div class="context-header">
-                <img class="context-heading-icon" src="assets/others/snapshots.svg" alt="">
-                <select id="sessionSelect" class="session-select-sm" title="Switch session" data-i18n-title="wb_switch_session"></select>
+                <span class="context-heading-icon asset-mask asset-snapshots" aria-hidden="true"></span>
+                <select id="sessionSelect" class="session-select-sm" title="Switch session" data-i18n-title="wb_switch_session" data-i18n-aria-label="wb_switch_session" aria-label="Switch session"></select>
                 <div class="session-tools">
-                    <button id="newSessionBtn" class="toggle-btn" title="New session" data-i18n-title="wb_new_session" aria-label="New session"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></button>
-                    <button id="renameSessionBtn" class="toggle-btn" title="Rename session" data-i18n-title="wb_rename_session" aria-label="Rename session"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m4 20 4.2-1 10.4-10.4a2.1 2.1 0 0 0-3-3L5.2 16 4 20Z"/><path d="m13.8 7.4 3 3"/></svg></button>
-                    <button id="deleteSessionBtn" class="toggle-btn danger" title="Delete session" data-i18n-title="wb_delete_session" aria-label="Delete session"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M9 7V4h6v3M7 7l1 13h8l1-13M10 11v5M14 11v5"/></svg></button>
-                    <button id="showOnPageBtn" class="toggle-btn" title="Highlight this session's snippets on the current page" data-i18n-title="wb_show_on_page" aria-label="Show snippets on page"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12s3.3-5 9-5 9 5 9 5-3.3 5-9 5-9-5-9-5Z"/><circle cx="12" cy="12" r="2.5"/></svg></button>
-                    <button id="toggleContext" class="toggle-btn">Hide</button>
+                    <button id="newSessionBtn" class="toggle-btn" title="New session" data-i18n-title="wb_new_session" data-i18n-aria-label="wb_new_session" aria-label="New session"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></button>
+                    <button id="renameSessionBtn" class="toggle-btn" title="Rename session" data-i18n-title="wb_rename_session" data-i18n-aria-label="wb_rename_session" aria-label="Rename session"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m4 20 4.2-1 10.4-10.4a2.1 2.1 0 0 0-3-3L5.2 16 4 20Z"/><path d="m13.8 7.4 3 3"/></svg></button>
+                    <button id="deleteSessionBtn" class="toggle-btn danger" title="Delete session" data-i18n-title="wb_delete_session" data-i18n-aria-label="wb_delete_session" aria-label="Delete session"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M9 7V4h6v3M7 7l1 13h8l1-13M10 11v5M14 11v5"/></svg></button>
+                    <button id="showOnPageBtn" class="toggle-btn" title="Highlight snippets on this page" data-i18n-title="wb_show_on_page" data-i18n-aria-label="wb_show_on_page" aria-label="Highlight snippets on this page" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12s3.3-5 9-5 9 5 9 5-3.3 5-9 5-9-5-9-5Z"/><circle cx="12" cy="12" r="2.5"/></svg></button>
+                    <button id="toggleContext" class="toggle-btn" data-i18n="wb_hide">Hide</button>
                 </div>
             </div>
             <div class="context-search">
@@ -46,10 +46,11 @@
         </div>
 
         <!-- Lightweight inline prompt (replaces window.prompt, which is unavailable here) -->
-        <div id="wbModal" class="wb-modal hidden">
+        <div id="wbModal" class="wb-modal hidden" role="dialog" aria-modal="true" aria-labelledby="wbModalTitle" aria-describedby="wbModalDescription wbModalError">
             <div class="wb-modal-card">
                 <div class="wb-modal-title" id="wbModalTitle"></div>
-                <input type="text" id="wbModalInput" class="wb-modal-input" autocomplete="off">
+                <div class="wb-modal-description" id="wbModalDescription"></div>
+                <input type="text" id="wbModalInput" class="wb-modal-input" autocomplete="off" aria-labelledby="wbModalTitle">
                 <div class="wb-modal-error" id="wbModalError"></div>
                 <div class="wb-modal-actions">
                     <button id="wbModalCancel" class="plan-btn plan-cancel" data-i18n="action_cancel">Cancel</button>
@@ -60,20 +61,16 @@
 
         <!-- Quick action buttons -->
         <div class="quick-actions" id="quickActions">
-            <button class="quick-action-btn" id="askPageBtn" title="Extract current page content and ask AI about it">
-                <img src="assets/others/ask-this-page.svg" alt="">
-                <span data-i18n="wb_ask_page">Ask about this page</span>
+            <button class="quick-action-btn smart-read-btn" id="smartReadBtn" title="Create a new focused session containing key evidence from this page" data-i18n-title="wb_smart_read_hint">
+                <span class="asset-mask asset-takeaways" aria-hidden="true"></span>
+                <span data-i18n="wb_smart_read">Smart Read</span>
             </button>
-            <button class="quick-action-btn" id="takeawaysBtn" title="Extract key takeaways from current page">
-                <img src="assets/others/key-takeaways.svg" alt="">
-                <span data-i18n="wb_takeaways">Key Takeaways</span>
-            </button>
-            <button class="quick-action-btn" id="deepSearchBtn" title="Search the web to supplement information">
+            <button class="quick-action-btn deep-search-btn" id="deepSearchBtn" title="Find missing evidence for this Session" data-i18n-title="wb_deep_search_hint">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
                 <span data-i18n="wb_deep_search">Deep Search</span>
             </button>
-            <button class="quick-action-btn diagram-btn" id="drawDiagramBtn" title="Generate a diagram from page or session content">
-                <img src="assets/others/branching.svg" alt="">
+            <button class="quick-action-btn diagram-btn" id="drawDiagramBtn" title="Turn this into a diagram" data-i18n-title="wb_diagram_hint">
+                <span class="asset-mask asset-branching" aria-hidden="true"></span>
                 <span data-i18n="wb_diagram">Draw Diagram</span>
             </button>
         </div>
@@ -81,34 +78,38 @@
         <!-- Diagram type selector (hidden by default) -->
         <div class="diagram-selector" id="diagramSelector" style="display:none;">
             <div class="diagram-selector-header">
-                <span>Generate Diagram</span>
-                <button id="cancelDiagram" class="plan-btn plan-cancel">Cancel</button>
+                <span data-i18n="diagram_generate_title">Generate Diagram</span>
+                <button id="cancelDiagram" class="plan-btn plan-cancel" data-i18n="action_cancel">Cancel</button>
             </div>
-            <div class="diagram-selector-step">1. Pick a diagram type (or leave Auto):</div>
+            <div class="diagram-selector-step" data-i18n="diagram_pick_type">1. Pick a diagram type (or leave Auto):</div>
             <div class="diagram-type-grid" id="diagramTypeGrid"></div>
-            <div class="diagram-selector-step">2. What to visualize?</div>
+            <div class="diagram-selector-step" data-i18n="diagram_what_to_visualize">2. What to visualize?</div>
             <div class="diagram-query-row">
-                <input type="text" id="diagramQuery" class="diagram-query-input" placeholder="e.g. &quot;system architecture&quot;, &quot;user flow&quot;, &quot;comparison of X vs Y&quot;...">
-                <select id="diagramSource" class="diagram-source-select">
-                    <option value="session">Session Snippets</option>
-                    <option value="page">Current Page</option>
-                    <option value="both">Page + Session</option>
+                <input type="text" id="diagramQuery" class="diagram-query-input" placeholder="e.g. &quot;system architecture&quot;, &quot;user flow&quot;, &quot;comparison of X vs Y&quot;..." data-i18n-placeholder="diagram_query_placeholder">
+                <select id="diagramSource" class="diagram-source-select" data-i18n-aria-label="diagram_source_label" aria-label="Diagram source">
+                    <option value="session" data-i18n="diagram_source_session">Session Snippets</option>
+                    <option value="page" data-i18n="diagram_source_page">Current Page</option>
+                    <option value="both" data-i18n="diagram_source_both" selected>Page + Session</option>
                 </select>
             </div>
             <div class="diagram-action-row">
-                <button id="generateDiagramBtn" class="plan-btn plan-confirm">Generate</button>
+                <button id="generateDiagramBtn" class="plan-btn plan-confirm" data-i18n="action_generate">Generate</button>
             </div>
         </div>
 
         <!-- Search plan panel (hidden by default) -->
         <div class="search-plan-panel" id="searchPlanPanel" style="display:none;">
             <div class="search-plan-header">
-                <span>Search Plan</span>
+                <div class="search-plan-heading">
+                    <span data-i18n="search_plan_title">Session Evidence Plan</span>
+                    <span class="search-plan-scope" id="searchPlanScope"></span>
+                </div>
                 <div class="search-plan-actions">
-                    <button id="confirmPlan" class="plan-btn plan-confirm">Execute</button>
-                    <button id="cancelPlan" class="plan-btn plan-cancel">Cancel</button>
+                    <button id="confirmPlan" class="plan-btn plan-confirm" data-i18n="action_execute">Execute</button>
+                    <button id="cancelPlan" class="plan-btn plan-cancel" data-i18n="action_cancel">Cancel</button>
                 </div>
             </div>
+            <div class="search-plan-assessment" id="searchPlanAssessment"></div>
             <div class="search-plan-body" id="searchPlanBody"></div>
             <div class="search-plan-progress" id="searchProgress" style="display:none;">
                 <div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
@@ -119,11 +120,11 @@
         <!-- Prompt template selector -->
         <div class="template-bar" id="templateBar">
             <div class="scenario-chips" id="scenarioChips">
-                <button class="chip chip-primary" data-scenario="report" title="Synthesize your snippets into a cited report"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h9l3 3v15H6V3Z"/><path d="M14 3v4h4M9 11h6M9 15h6"/></svg><span data-i18n="sc_report">Report</span></button>
-                <button class="chip" data-scenario="rewrite" title="Merge the snippets into one coherent piece"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m4 20 4.2-1 10.4-10.4a2.1 2.1 0 0 0-3-3L5.2 16 4 20Z"/><path d="m13.8 7.4 3 3"/></svg><span data-i18n="sc_rewrite">Rewrite</span></button>
-                <button class="chip" data-scenario="verify" title="Cross-check the snippets against each other"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m15.5 15.5 4 4M8 10.5l1.7 1.7 3.5-3.8"/></svg><span data-i18n="sc_verify">Verify</span></button>
-                <button class="chip" data-scenario="summarize" title="Short overview of everything collected"><span class="asset-mask asset-summarize" aria-hidden="true"></span><span data-i18n="sc_summarize">Summary</span></button>
-                <select id="moreScenarios" class="chip chip-select" title="More actions">
+                <button class="chip chip-primary" data-scenario="report" title="Synthesize your snippets into a cited report" data-i18n-title="sc_report_hint"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h9l3 3v15H6V3Z"/><path d="M14 3v4h4M9 11h6M9 15h6"/></svg><span data-i18n="sc_report">Report</span></button>
+                <button class="chip" data-scenario="rewrite" title="Merge the snippets into one coherent piece" data-i18n-title="sc_rewrite_hint"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m4 20 4.2-1 10.4-10.4a2.1 2.1 0 0 0-3-3L5.2 16 4 20Z"/><path d="m13.8 7.4 3 3"/></svg><span data-i18n="sc_rewrite">Rewrite</span></button>
+                <button class="chip" data-scenario="verify" title="Cross-check the snippets against each other" data-i18n-title="sc_verify_hint"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m15.5 15.5 4 4M8 10.5l1.7 1.7 3.5-3.8"/></svg><span data-i18n="sc_verify">Verify</span></button>
+                <button class="chip" data-scenario="summarize" title="Short overview of everything collected" data-i18n-title="sc_summarize_hint"><span class="asset-mask asset-summarize" aria-hidden="true"></span><span data-i18n="sc_summarize">Summary</span></button>
+                <select id="moreScenarios" class="chip chip-select" title="More actions" data-i18n-title="sc_more_hint" data-i18n-aria-label="sc_more_hint" aria-label="More actions">
                     <option value="" data-i18n="sc_more">More…</option>
                     <option value="compare" data-i18n="sc_compare">Compare &amp; contrast</option>
                     <option value="extract" data-i18n="sc_extract">Extract key points</option>
@@ -132,9 +133,6 @@
                     <option value="translate_en" data-i18n="sc_to_en">Translate to English</option>
                 </select>
             </div>
-            <label id="webSearchToggleLabel" class="web-search-toggle" style="display:none;" title="Gather web evidence before answering (uses your configured search provider)">
-                <input type="checkbox" id="webSearchToggle"> <span data-i18n="wb_web_search">🌐 Search web</span>
-            </label>
         </div>
 
         <div class="chat-messages" id="chatMessages">
@@ -149,7 +147,7 @@
                 rows="1"
                 class="chat-input"
             ></textarea>
-            <button id="sendMessage" class="send-btn" title="Send">
+            <button id="sendMessage" class="send-btn" title="Send" data-i18n-title="action_send" data-i18n-aria-label="action_send" aria-label="Send">
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
                     <line x1="12" y1="19" x2="12" y2="5"></line>
                     <polyline points="5 12 12 5 19 12"></polyline>
@@ -158,7 +156,14 @@
         </div>
     </div>
     <!-- Mermaid rendering sandbox (invisible) -->
-    <iframe id="mermaidSandbox" src="sandbox-mermaid.html" style="display:none;" sandbox="allow-scripts"></iframe>
+    <iframe
+        id="mermaidSandbox"
+        class="mermaid-sandbox-frame"
+        src="sandbox-mermaid.html"
+        sandbox="allow-scripts"
+        aria-hidden="true"
+        tabindex="-1"
+    ></iframe>
 
     <script src="lib/i18n.js"></script>
     <script src="lib/idb.js"></script>
@@ -175,6 +180,7 @@
     <script src="lib/vector-index.js"></script>
     <script src="lib/rag-indexer.js"></script>
     <script src="lib/rag-engine.js"></script>
+    <script src="lib/smart-read.js"></script>
     <script src="lib/page-extractor.js"></script>
     <script src="lib/highlighter.js"></script>
     <script src="lib/diagram-generator.js"></script>

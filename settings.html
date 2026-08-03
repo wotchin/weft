@@ -2,13 +2,16 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Settings - Weft</title>
+    <title data-i18n="settings_page_title">Settings - Weft</title>
     <style>
+        @font-face { font-family: 'Inter'; font-style: normal; font-weight: 400; font-display: swap; src: url('assets/fonts/inter-400.woff2') format('woff2'); }
+        @font-face { font-family: 'Inter'; font-style: normal; font-weight: 500; font-display: swap; src: url('assets/fonts/inter-500.woff2') format('woff2'); }
+        @font-face { font-family: 'Inter'; font-style: normal; font-weight: 600; font-display: swap; src: url('assets/fonts/inter-600.woff2') format('woff2'); }
         :root {
-            --weft-accent: #796cbf;
-            --weft-accent-hover: #5d5294;
-            --weft-accent-tint: #e7e5fe;
-            --weft-accent-soft: #f5f4ff;
+            --weft-accent: #6c5ce0;
+            --weft-accent-hover: #5643c4;
+            --weft-accent-tint: #ece8fc;
+            --weft-accent-soft: #f6f4fe;
             --weft-ink: #292a3d;
             --weft-muted: #858ba5;
             --weft-line: #e3e4ec;
@@ -21,7 +24,7 @@
             padding: 0;
         }
         body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
             background: radial-gradient(circle at 15% 0%, #eeecff 0, transparent 28rem), var(--weft-surface-soft);
             color: var(--weft-ink);
             min-height: 100vh;
@@ -70,13 +73,35 @@
             background: var(--weft-surface-dark);
             box-shadow: 0 14px 35px rgba(41,42,61,.14);
         }
-        .settings-hero > img {
+        .settings-hero .icon-chip {
+            display: flex;
+            align-items: center;
+            justify-content: center;
             width: 42px;
             height: 42px;
-            padding: 8px;
+            flex: 0 0 auto;
             border: 1px solid #4a4c61;
             border-radius: 12px;
             background: #34364b;
+            color: #f0f1f7;
+        }
+        .settings-hero .icon-chip .asset-mask {
+            width: 22px;
+            height: 22px;
+        }
+        .asset-mask {
+            display: inline-block;
+            background: currentColor;
+            -webkit-mask-position: center;
+            -webkit-mask-repeat: no-repeat;
+            -webkit-mask-size: contain;
+            mask-position: center;
+            mask-repeat: no-repeat;
+            mask-size: contain;
+        }
+        .asset-settings {
+            -webkit-mask-image: url('assets/others/settings.svg');
+            mask-image: url('assets/others/settings.svg');
         }
         .settings-card {
             background: #fff;
@@ -244,7 +269,7 @@
             <span data-i18n="settings_back_banner">Click the Weft icon in your toolbar to return to the extension popup.</span>
         </div>
         <div class="settings-hero">
-            <img src="assets/others/settings.svg" alt="">
+            <span class="icon-chip"><span class="asset-mask asset-settings" aria-hidden="true"></span></span>
             <div class="settings-header">
                 <h1 data-i18n="settings_title">Weft Settings</h1>
                 <p data-i18n="settings_subtitle">Configure your LLM API connection and preferences</p>
@@ -253,25 +278,25 @@
 
         <div class="settings-card">
             <div class="card-title">
-                <span class="icon">LANG</span>
+                <span class="icon" data-i18n="settings_badge_language">LANG</span>
                 <span data-i18n="settings_lang_title">Language</span>
             </div>
             <div class="form-group">
                 <label for="uiLanguage" data-i18n="settings_lang_label">Interface &amp; answer language</label>
                 <select id="uiLanguage"></select>
-                <div class="hint" data-i18n="settings_lang_hint">Sets the interface language and asks the AI to answer in the same language, whatever language the source page is in. The interface is currently translated into English and 简体中文; other choices keep the English interface but still change the AI's answers.</div>
+                <div class="hint" data-i18n="settings_lang_hint">Sets the interface language and the AI's reply language. English and 简体中文 have full interface translations; other languages only change the AI's replies.</div>
             </div>
         </div>
 
         <div class="settings-card">
             <div class="card-title">
-                <span class="icon">API</span>
+                <span class="icon" data-i18n="settings_badge_api">API</span>
                 <span data-i18n="settings_provider_title">LLM Provider</span>
             </div>
             <div class="form-group">
                 <label for="provider" data-i18n="settings_provider_label">Provider</label>
                 <select id="provider"></select>
-                <div class="hint" data-i18n="settings_provider_hint">Pick a provider to prefill its endpoint and a default model. Bring your own key — it never leaves your machine except to this endpoint.</div>
+                <div class="hint" data-i18n="settings_provider_hint">Prefills the endpoint and model. Your key stays local, sent only to this endpoint.</div>
             </div>
             <div class="form-group" id="apiKeyGroup">
                 <label for="apiKey" data-i18n="settings_key_label">API Key</label>
@@ -283,7 +308,7 @@
                 <div class="hint" data-i18n="settings_model_hint">Model identifier. Editable — model names change often.</div>
             </div>
             <div class="form-group">
-                <label for="apiBaseUrl" data-i18n="settings_baseurl_label">API Base URL <span style="font-weight:400;color:#999;">(advanced)</span></label>
+                <label for="apiBaseUrl" data-i18n="settings_baseurl_label">API Base URL (advanced)</label>
                 <input type="text" id="apiBaseUrl" placeholder="https://api.openai.com/v1">
                 <div class="hint" data-i18n="settings_baseurl_hint">Prefilled from the provider. Only change for self-hosted or proxy endpoints.</div>
             </div>
@@ -291,7 +316,7 @@
 
         <div class="settings-card">
             <div class="card-title">
-                <span class="icon">GEN</span>
+                <span class="icon" data-i18n="settings_badge_generation">GEN</span>
                 <span data-i18n="settings_gen_title">Generation Options</span>
             </div>
             <div class="form-group">
@@ -306,17 +331,17 @@
             <div class="form-group">
                 <label for="visionMode" data-i18n="settings_vision">Vision (Image Understanding)</label>
                 <select id="visionMode">
-                    <option value="auto">Auto-detect (based on model name)</option>
-                    <option value="on">Always enabled</option>
-                    <option value="off">Always disabled</option>
+                    <option value="auto" data-i18n="settings_vision_auto">Auto-detect (based on model name)</option>
+                    <option value="on" data-i18n="settings_vision_on">Always enabled</option>
+                    <option value="off" data-i18n="settings_vision_off">Always disabled</option>
                 </select>
-                <div class="hint">Auto-detect works for known models (GPT-4o, Claude, Gemini, Qwen-VL, etc). Use "Always enabled" if your model supports vision but isn't recognized. Models like DeepSeek-chat that don't support vision will receive image URLs as text instead.</div>
+                <div class="hint" data-i18n="settings_vision_hint">Auto-detect works for known models (GPT-4o, Claude, Gemini, Qwen-VL, etc). Use "Always enabled" if your model supports vision but isn't recognized. Models like DeepSeek-chat that don't support vision will receive image URLs as text instead.</div>
             </div>
         </div>
 
         <div class="settings-card">
             <div class="card-title">
-                <span class="icon">RAG</span>
+                <span class="icon" data-i18n="settings_badge_rag">RAG</span>
                 <span data-i18n="settings_rag_title">Smart Context Retrieval</span>
             </div>
             <div class="form-group">
@@ -324,29 +349,29 @@
                     <input type="checkbox" id="ragEnabled" style="width:auto;">
                     <span data-i18n="settings_rag_enable">Enable smart context retrieval (RAG)</span>
                 </label>
-                <div class="hint" data-i18n="settings_rag_hint">When enabled, only the most relevant snippets are sent to the AI based on your query. When disabled, all snippets are sent. Useful when sessions contain many snippets to reduce token usage and improve answer quality.</div>
+                <div class="hint" data-i18n="settings_rag_hint">Sends only the most relevant snippets instead of all of them — fewer tokens, sharper answers on large sessions.</div>
             </div>
             <div class="form-group">
                 <label for="ragTokenBudget" data-i18n="settings_rag_budget">Context Token Budget</label>
                 <input type="number" id="ragTokenBudget" placeholder="12000" min="1000" max="100000" step="1000">
-                <div class="hint">Maximum estimated tokens to include from snippets when RAG is active. Sessions smaller than 15K tokens will always send everything regardless of this setting.</div>
+                <div class="hint" data-i18n="settings_rag_budget_hint">Maximum estimated tokens to include from snippets when RAG is active. Sessions smaller than 15K tokens will always send everything regardless of this setting.</div>
             </div>
         </div>
 
         <div class="settings-card">
             <div class="card-title">
-                <span class="icon">WEB</span>
+                <span class="icon" data-i18n="settings_badge_search">WEB</span>
                 <span data-i18n="settings_search_title">Web Search (optional)</span>
             </div>
             <div class="form-group">
                 <label for="searchProvider" data-i18n="settings_search_label">Search provider</label>
                 <select id="searchProvider">
-                    <option value="none">Off</option>
-                    <option value="tavily">Tavily — free tier, no card (recommended)</option>
-                    <option value="searxng">SearXNG — your own instance</option>
-                    <option value="brave">Brave Search — paid</option>
+                    <option value="none" data-i18n="settings_search_option_none">Off</option>
+                    <option value="tavily" data-i18n="settings_search_option_tavily">Tavily — free tier, no card (recommended)</option>
+                    <option value="searxng" data-i18n="settings_search_option_searxng">SearXNG — your own instance</option>
+                    <option value="brave" data-i18n="settings_search_option_brave">Brave Search — paid</option>
                 </select>
-                <div class="hint" data-i18n="settings_search_hint">Powers Deep Search and online cross-checking. Queries go only to the provider you pick. Weft never scrapes Google or Bing — that breaks their terms and gets extensions rejected.</div>
+                <div class="hint" data-i18n="settings_search_hint">Powers Deep Search and cross-checking. Queries go only to your chosen provider.</div>
             </div>
             <div class="hint" id="searchProviderNote" style="margin:-6px 0 12px;"></div>
             <div class="form-group" id="searchKeyGroup" style="display:none;">
@@ -356,7 +381,6 @@
             <div class="form-group" id="searchEndpointGroup" style="display:none;">
                 <label for="searchEndpoint" data-i18n="settings_search_endpoint">SearXNG address</label>
                 <input type="text" id="searchEndpoint" placeholder="https://searx.example.com">
-                <div class="hint" data-i18n="settings_search_json_note">The instance must have the JSON output format enabled (<code>search.formats</code> in its settings.yml). Most public instances turn it off, so this usually means running your own.</div>
             </div>
             <button id="testSearch" class="test-btn" type="button" data-i18n="settings_search_test">Test search</button>
             <div id="searchStatus" class="status-message" style="margin-top:12px;"></div>
