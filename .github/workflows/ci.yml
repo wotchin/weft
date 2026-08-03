@@ -3,28 +3,83 @@ name: CI
 on:
   push:
     branches: [main, master]
+    tags: ['v*']
   pull_request:
 
+# Cancel superseded runs on the same ref to save minutes.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
 jobs:
-  build:
+  quality:
+    name: Lint · Validate · Test
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
         with:
           node-version: '20'
-      - name: Install dev deps
-        run: npm install
-      - name: Validate manifest
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci || npm install
+
+      - name: Validate manifest (icons, paths, CSP)
         run: npm run validate
+
       - name: Lint
         run: npm run lint
-      - name: Unit tests
+
+      - name: Unit tests + i18n key parity
         run: npm test
-      - name: Pack extension
+
+  build:
+    name: Build store package
+    runs-on: ubuntu-latest
+    needs: quality
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Read extension version
+        id: meta
+        run: |
+          VERSION=$(node -p "require('./manifest.json').version")
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "zip=weft-${VERSION}.zip" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci || npm install
+
+      - name: Pack extension zip
         run: npm run pack
+
+      - name: Verify zip contents
+        run: |
+          echo "=== Package contents ==="
+          unzip -l "${{ steps.meta.outputs.zip }}" | tee contents.txt
+          # Guard rails: nothing dev-only should ever reach the store zip.
+          ! grep -E 'node_modules/|\\.github/|test/|scripts/|eslint\\.config\\.js' contents.txt \
+            || { echo "Dev-only file leaked into store package"; exit 1; }
+          # Manifest is mandatory and must resolve all referenced files.
+          grep -q 'manifest.json' contents.txt
+          grep -q 'background.js' contents.txt
+
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
         with:
-          name: weft-extension
+          name: weft-extension-v${{ steps.meta.outputs.version }}
           path: weft-*.zip
+          retention-days: 30
+          if-no-files-found: error
