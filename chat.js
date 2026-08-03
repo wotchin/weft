@@ -72,6 +72,32 @@ document.addEventListener('DOMContentLoaded', async function() {
     let smartReadInFlight = false;
     let modalPromptInFlight = false;
     let activePromptCancel = null;
+
+    // 已知支持 Vision（多模态图片）的模型前缀/关键词
+    // Declared here (rather than near isVisionSupported() below) because
+    // restoreConversation() -> buildSystemMessage() -> isVisionSupported()
+    // can run before this point in file order during session restore; a
+    // `const` declared later would still be in its temporal dead zone then.
+    const VISION_CAPABLE_PATTERNS = [
+        /^gpt-4o/i,              // OpenAI gpt-4o, gpt-4o-mini
+        /^gpt-4-turbo/i,         // OpenAI gpt-4-turbo
+        /^gpt-4\.1/i,            // OpenAI gpt-4.1 系列
+        /^chatgpt-4o/i,          // OpenAI chatgpt-4o-latest
+        /^o1/i, /^o3/i, /^o4/i,  // OpenAI reasoning models with vision
+        /^claude-/i,             // Anthropic Claude 3+ (via compatible endpoint)
+        /^gemini/i,              // Google Gemini (via compatible endpoint)
+        /^llava/i,               // Ollama llava
+        /^bakllava/i,            // Ollama bakllava
+        /^llama.*vision/i,       // Llama vision variants
+        /^qwen.*vl/i,            // Qwen-VL 系列
+        /^qwen2\.5-vl/i,         // Qwen2.5-VL
+        /^glm-4v/i,              // GLM-4V (智谱)
+        /^yi-vision/i,           // Yi-Vision
+        /^internvl/i,            // InternVL
+        /^cogvlm/i,              // CogVLM
+        /^minicpm.*v/i,          // MiniCPM-V
+        /^step-.*v/i,            // StepFun vision models
+    ];
     let activeSmartReadRequestId = null;
     let discardSmartReadRequestsThrough = 0;
     let pendingSmartReadRetryTimer = null;
@@ -242,12 +268,55 @@ document.addEventListener('DOMContentLoaded', async function() {
             }
             if (generation !== sessionLoadGeneration) return;
             sessionSnippets = sessions[currentSession] || [];
+            await restoreConversation(currentSession);
         } else {
             sessionSnippets = [];
         }
         renderContextPanel();
         void refreshShowOnPageState();
         void reCacheMissingImages();
+    }
+
+    // Rebuild the chat UI and conversationHistory from persisted turns. System
+    // messages are reconstructed fresh via buildSystemMessage so config changes
+    // (provider, model, RAG context) always take effect on the restored thread.
+    async function restoreConversation(sessionName) {
+        // Any in-flight stream predating this load must not push into a stale
+        // history after we replace it.
+        conversationHistory = [];
+        activeIndexMap = null;
+        pendingSearchPlan = null;
+        chatMessages.replaceChildren();
+        removeTypingIndicator();
+        let turns;
+        try {
+            turns = await Store.getChat(sessionName);
+        } catch (e) {
+            console.warn('[Weft] chat restore failed', e);
+            return;
+        }
+        if (!Array.isArray(turns) || turns.length === 0) return;
+
+        // Seed a system message so the first restored follow-up still carries
+        // session grounding into the prompt.
+        try {
+            conversationHistory.push(await buildSystemMessage());
+        } catch (e) {
+            console.warn('[Weft] system rebuild on restore failed', e);
+        }
+        for (const turn of turns) {
+            if (!turn || (turn.role !== 'user' && turn.role !== 'assistant')) continue;
+            const content = typeof turn.content === 'string' ? turn.content : '';
+            if (turn.role === 'assistant') {
+                const contentDiv = appendMessage('', 'assistant', true, { exportable: true });
+                contentDiv.innerHTML = Render.markdown(content);
+                conversationHistory.push({ role: 'assistant', content });
+            } else {
+                appendMessage(content, 'user');
+                conversationHistory.push({ role: 'user', content });
+            }
+        }
+        scrollChatToBottom();
     }
 
     try {
@@ -794,28 +863,6 @@ document.addEventListener('DOMContentLoaded', async function() {
         }
     }
 
-    // 已知支持 Vision（多模态图片）的模型前缀/关键词
-    const VISION_CAPABLE_PATTERNS = [
-        /^gpt-4o/i,              // OpenAI gpt-4o, gpt-4o-mini
-        /^gpt-4-turbo/i,         // OpenAI gpt-4-turbo
-        /^gpt-4\.1/i,            // OpenAI gpt-4.1 系列
-        /^chatgpt-4o/i,          // OpenAI chatgpt-4o-latest
-        /^o1/i, /^o3/i, /^o4/i,  // OpenAI reasoning models with vision
-        /^claude-/i,             // Anthropic Claude 3+ (via compatible endpoint)
-        /^gemini/i,              // Google Gemini (via compatible endpoint)
-        /^llava/i,               // Ollama llava
-        /^bakllava/i,            // Ollama bakllava
-        /^llama.*vision/i,       // Llama vision variants
-        /^qwen.*vl/i,            // Qwen-VL 系列
-        /^qwen2\.5-vl/i,         // Qwen2.5-VL
-        /^glm-4v/i,              // GLM-4V (智谱)
-        /^yi-vision/i,           // Yi-Vision
-        /^internvl/i,            // InternVL
-        /^cogvlm/i,              // CogVLM
-        /^minicpm.*v/i,          // MiniCPM-V
-        /^step-.*v/i,            // StepFun vision models
-    ];
-
     // 判断当前模型是否支持 vision
     async function isVisionSupported() {
         const cfg = await Store.getLlmConfig();
@@ -965,7 +1012,13 @@ document.addEventListener('DOMContentLoaded', async function() {
         try {
             conversationHistory = [];
             conversationHistory.push(await buildSystemMessage());
-            conversationHistory.push({ role: 'user', content: prompt });
+            // Mark this entry so the transcript can be persisted as the user's
+            // intent (scenarioLabel) rather than the raw internal prompt, which
+            // must never be displayed back. The marker is non-enumerable so it
+            // is invisible to JSON serialization when the message is sent.
+            const userEntry = { role: 'user', content: prompt };
+            Object.defineProperty(userEntry, 'weftScenarioId', { value: id, enumerable: false });
+            conversationHistory.push(userEntry);
 
             removeTypingIndicator();
             const contentDiv = appendMessage('', 'assistant', true);
@@ -1223,8 +1276,38 @@ document.addEventListener('DOMContentLoaded', async function() {
         setMessageActionsEnabled(messageContentEl, true);
         if (Array.isArray(targetHistory)) {
             targetHistory.push({ role: "assistant", content: fullContent });
+            await persistConversationIfCurrent(targetHistory);
         }
         return fullContent;
+    }
+
+    // Save the user+assistant turns of the active session's conversation so a
+    // page reload / full-screen expansion / browser restart can restore it.
+    // System prompts are rebuilt on load, so they are intentionally dropped
+    // here to keep the stored payload small and resilient to config changes.
+    // Internal scenario prompts are replaced by their intent label so the raw
+    // prompt is never persisted or echoed back to the user.
+    async function persistConversationIfCurrent(history) {
+        if (!currentSession || !Array.isArray(history)) return;
+        try {
+            const turns = history
+                .filter((m) => m && (m.role === 'user' || m.role === 'assistant'))
+                .map((m) => {
+                    let content = typeof m.content === 'string' ? m.content : '';
+                    if (m.role === 'user' && m.weftScenarioId) {
+                        const label = scenarioLabel(m.weftScenarioId);
+                        const count = sessionSnippets.length;
+                        const using = count > 0
+                            ? ` · ${t('wb_using_snippets').replace('%s', count)}`
+                            : '';
+                        content = `${label}${using}`;
+                    }
+                    return { role: m.role, content };
+                });
+            await Store.setChat(currentSession, turns);
+        } catch (e) {
+            console.warn('[Weft] chat persist failed', e);
+        }
     }
 
     function setMessageActionsEnabled(contentElement, enabled) {

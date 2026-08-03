@@ -148,6 +148,70 @@ chrome.runtime.onInstalled.addListener((details) => {
 let lastSavedSnippetInfo = null;
 
 chrome.contextMenus.onClicked.addListener(async (info, tab) => {
+    // Smart Read must call sidePanel.open() before this listener's first
+    // await, or Chrome no longer considers it a user gesture and it always
+    // falls back to opening a new window instead of the side panel. This
+    // branch doesn't need translated strings, so handle it before I18N.init()
+    // rather than after.
+    if (info.menuItemId === "aiPageInsight") {
+        // Smart Read is completed by the workbench. Keep this user-gesture
+        // handler small: identify the source tab, then let chat.js own page
+        // extraction, purpose confirmation, LLM analysis and atomic saving.
+        // Page annotation remains a separate, explicit user toggle.
+        if (!tab?.id) return;
+
+        const requestId = generateId();
+
+        let panelOpened = false;
+        let panelOpenPromise = null;
+        if (chrome.sidePanel?.open) {
+            try {
+                const target = Number.isInteger(tab.windowId)
+                    ? { windowId: tab.windowId }
+                    : { tabId: tab.id };
+                // Initiate this before the first await so Chrome still sees the
+                // context-menu user gesture.
+                panelOpenPromise = chrome.sidePanel.open(target);
+                // Attach a handler synchronously so a fast rejection (e.g. the
+                // gesture already lapsed) can't surface as an unhandled
+                // rejection during the await below, before we get to it.
+                panelOpenPromise.catch(() => {});
+            } catch (e) {
+                console.warn('Could not open Smart Read in the side panel:', e);
+            }
+        }
+
+        const pendingWrite = Store.setPendingSmartRead({
+            requestId,
+            tabId: tab.id,
+            url: tab.url || info.pageUrl || '',
+            sourceTitle: tab.title || '',
+            windowId: tab.windowId,
+            requestedAt: Date.now(),
+            source: 'context-menu',
+        });
+
+        await pendingWrite;
+        if (panelOpenPromise) {
+            try {
+                await panelOpenPromise;
+                panelOpened = true;
+            } catch (e) {
+                console.warn('Could not open Smart Read in the side panel:', e);
+            }
+        }
+
+        if (!panelOpened) {
+            await chrome.windows.create({
+                url: chrome.runtime.getURL(`chat.html?mode=panel&smartReadRequestId=${encodeURIComponent(requestId)}`),
+                type: 'popup',
+                width: 900,
+                height: 700,
+            });
+        }
+        return;
+    }
+
     // Service workers may restart long after the menus were created.
     await I18N.init();
     if (info.menuItemId.startsWith("session-")) {
@@ -331,59 +395,6 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
             };
             await Store.addSnippet(sessionName, snippet);
             sendNotification(`${sessionName} +1`, t('notify_comment_skipped'));
-        }
-
-    } else if (info.menuItemId === "aiPageInsight") {
-        // Smart Read is completed by the workbench. Keep this user-gesture
-        // handler small: identify the source tab, then let chat.js own page
-        // extraction, purpose confirmation, LLM analysis and atomic saving.
-        // Page annotation remains a separate, explicit user toggle.
-        if (!tab?.id) return;
-
-        const requestId = generateId();
-
-        const pendingWrite = Store.setPendingSmartRead({
-            requestId,
-            tabId: tab.id,
-            url: tab.url || info.pageUrl || '',
-            sourceTitle: tab.title || '',
-            windowId: tab.windowId,
-            requestedAt: Date.now(),
-            source: 'context-menu',
-        });
-
-        let panelOpened = false;
-        let panelOpenPromise = null;
-        if (chrome.sidePanel?.open) {
-            try {
-                const target = Number.isInteger(tab.windowId)
-                    ? { windowId: tab.windowId }
-                    : { tabId: tab.id };
-                // Initiate this before the first await so Chrome still sees the
-                // context-menu user gesture.
-                panelOpenPromise = chrome.sidePanel.open(target);
-            } catch (e) {
-                console.warn('Could not open Smart Read in the side panel:', e);
-            }
-        }
-
-        await pendingWrite;
-        if (panelOpenPromise) {
-            try {
-                await panelOpenPromise;
-                panelOpened = true;
-            } catch (e) {
-                console.warn('Could not open Smart Read in the side panel:', e);
-            }
-        }
-
-        if (!panelOpened) {
-            await chrome.windows.create({
-                url: chrome.runtime.getURL(`chat.html?mode=panel&smartReadRequestId=${encodeURIComponent(requestId)}`),
-                type: 'popup',
-                width: 900,
-                height: 700,
-            });
         }
 
     } else if (info.menuItemId.startsWith("tag-")) {

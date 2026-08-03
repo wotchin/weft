@@ -2000,6 +2000,7 @@ const messageLifecycleFunctions = [
     'isNearChatBottom',
     'scrollChatToBottom',
     'processStream',
+    'persistConversationIfCurrent',
     'setMessageActionsEnabled',
     'appendMessage',
     'appendError',
