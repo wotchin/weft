@@ -501,7 +501,7 @@
     "message": "Search failed:"
   },
   "settings_search_note_self": {
-    "message": "Needs a SearXNG instance with its JSON API open (search.formats in settings.yml) — in practice, one you host yourself."
+    "message": "Needs a SearXNG instance with its JSON API open — in practice, one you host yourself."
   },
   "settings_search_note_tavily": {
     "message": "Free tier: about 1,000 searches a month, no card. Get a key at tavily.com."
@@ -546,7 +546,7 @@
     "message": "generated"
   },
   "tag_analysed": {
-    "message": "analysed"
+    "message": "analyzed"
   },
   "menu_quick_save_tag": {
     "message": "Quick Save with Tag"
@@ -558,7 +558,7 @@
     "message": "Save Page Link to Session"
   },
   "menu_analyse_selection": {
-    "message": "Analyse selection"
+    "message": "Analyze selection"
   },
   "menu_verify": {
     "message": "Verify this"

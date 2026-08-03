@@ -68,14 +68,22 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
     function rebuildLanguageOptions(selectedValue = uiLanguageSelect.value || 'auto') {
+        // Only languages with a shipped interface bundle (ui: true) plus 'auto'
+        // are selectable. Languages without a bundle only affect AI replies and
+        // are set elsewhere if ever needed.
+        const selectable = I18N.LANGUAGES.filter((l) => l.code === 'auto' || l.ui);
         uiLanguageSelect.replaceChildren();
-        for (const lang of I18N.LANGUAGES) {
+        for (const lang of selectable) {
             const opt = document.createElement('option');
             opt.value = lang.code;
             opt.textContent = localized(lang.labelKey, lang.label);
             uiLanguageSelect.appendChild(opt);
         }
-        uiLanguageSelect.value = selectedValue;
+        // Fall back to 'auto' if the stored value is no longer selectable
+        // (e.g. a legacy preference saved before non-ui languages were hidden).
+        uiLanguageSelect.value = selectable.some((l) => l.code === selectedValue)
+            ? selectedValue
+            : 'auto';
     }
 
     function rebuildProviderOptions(selectedValue = providerSelect.value || 'openai') {

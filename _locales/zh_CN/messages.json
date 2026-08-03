@@ -3,7 +3,7 @@
     "message": "Weft"
   },
   "extDescription": {
-    "message": "把分散在各个标签页里的碎片信息采集起来，一键整合成带引用来源的报告、重写稿、图表与真伪核验。"
+    "message": "把分散在各个标签页里的碎片信息采集起来，一键整合成带引用来源的报告、重写文档、生成图表或进行真伪核验等AI原生功能。"
   },
   "settings_provider_title": {
     "message": "大模型服务商"
@@ -186,7 +186,7 @@
     "message": "错误"
   },
   "wb_page_unavailable": {
-    "message": "浏览器内置页面不支持——请切换到普通网页。"
+    "message": "浏览器内置页面不支持，请切换到普通网页。"
   },
   "cite_no_source": {
     "message": "该引用没有保存来源页面。"
@@ -294,7 +294,7 @@
     "message": "已存在同名会话。"
   },
   "wb_delete_confirm": {
-    "message": "删除会话「%s」及其全部片段？"
+    "message": "删除会话「%s」及其全部片段?"
   },
   "wb_delete_confirm_word": {
     "message": "删除"
@@ -378,13 +378,13 @@
     "message": "0 = 确定性输出，越高越有创造性（0-2）"
   },
   "settings_vision": {
-    "message": "视觉（图片理解）"
+    "message": "图片理解"
   },
   "settings_rag_title": {
     "message": "智能上下文检索"
   },
   "settings_rag_enable": {
-    "message": "启用智能上下文检索（RAG）"
+    "message": "启用智能上下文检索"
   },
   "settings_rag_hint": {
     "message": "只发送与问题最相关的片段，而非全部——片段较多时更省 token、答案更聚焦。"
@@ -501,16 +501,16 @@
     "message": "搜索失败："
   },
   "settings_search_note_self": {
-    "message": "需要一个开启 JSON 接口（settings.yml 中的 search.formats）的 SearXNG 实例——基本上就是自建实例。"
+    "message": "SearXNG 实例，基本上就是自建实例。"
   },
   "settings_search_note_tavily": {
-    "message": "免费约每月 1000 次搜索，无需信用卡。到 tavily.com 获取密钥。"
+    "message": "免费约每月 1000 次搜索，到 tavily.com 获取密钥。"
   },
   "settings_search_note_brave": {
-    "message": "付费：Brave 已于 2026 年取消免费额度，现按请求量计费。"
+    "message": "付费：Brave 按请求量计费。"
   },
   "settings_search_json_note": {
-    "message": "该实例必须开启 JSON 输出格式（settings.yml 里的 search.formats）。多数公共实例都关闭了它，所以通常需要自建。"
+    "message": "该实例必须开启 JSON 输出格式，需要自建。"
   },
   "menu_save_to_session": {
     "message": "保存到会话"
@@ -786,7 +786,7 @@
     "message": "欢迎使用 Weft"
   },
   "onboarding_tagline": {
-    "message": "你的可追溯研究工作台。"
+    "message": "你的大模型原生信息整合工作台。"
   },
   "onboarding_flow_title": {
     "message": "收集 → 整合 → 追溯"
