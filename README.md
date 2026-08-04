@@ -8,16 +8,16 @@
 
 *An open-source, LLM-native Chrome extension for researchers, analysts, and knowledge workers.*
 
-[![Chrome Web Store](https://img.shields.io/badge/Chrome_Web_Store-Soon-4285F4?style=flat-square&logo=googlechrome&logoColor=white)](https://github.com/wotchin/weft/releases/latest)
+[![Install](https://img.shields.io/badge/Install-Sideload-4285F4?style=flat-square&logo=googlechrome&logoColor=white)](#-install)
 [![GitHub Release](https://img.shields.io/github/v/release/wotchin/weft?style=flat-square&logo=github&label=Release&color=blue)](https://github.com/wotchin/weft/releases/latest)
 [![CI](https://github.com/wotchin/weft/actions/workflows/ci.yml/badge.svg?branch=main&style=flat-square&logo=githubactions&logoColor=white)](https://github.com/wotchin/weft/actions/workflows/ci.yml)
 [![Release](https://github.com/wotchin/weft/actions/workflows/release.yml/badge.svg?style=flat-square&logo=githubactions&logoColor=white)](https://github.com/wotchin/weft/actions/workflows/release.yml)
-[![License: GPL-3.0](https://img.shields.io/badge/License-GPL--3.0-blue?style=flat-square&logo=gnu&logoColor=white)](LICENSE)
+[![License: AGPL-3.0](https://img.shields.io/badge/License-AGPL--3.0-blue?style=flat-square&logo=gnu&logoColor=white)](LICENSE)
 [![Manifest V3](https://img.shields.io/badge/Manifest-V3-34A853?style=flat-square&logo=googlechrome&logoColor=white)](https://developer.chrome.com/docs/extensions/mv3/intro/)
 [![Stars](https://img.shields.io/github/stars/wotchin/weft?style=flat-square&logo=github&color=yellow)](https://github.com/wotchin/weft/stargazers)
 [![Last Commit](https://img.shields.io/github/last-commit/wotchin/weft?style=flat-square&logo=git&logoColor=white)](https://github.com/wotchin/weft/commits/main)
 
-[Features](#-features) · [Workflow](#-core-workflow) · [Install](#-install) · [Providers](#-supported-providers) · [Docs](#-documentation) · [FAQ](#-faq)
+[Features](#-features) · [Workflow](#-core-workflow) · [Install](#-install) · [Providers](#-supported-providers) · [Under the hood](#where-engineering-rigor-lives) · [Docs](#-documentation) · [FAQ](#-faq)
 
 [English](README.md) · [简体中文](README.zh-CN.md)
 
@@ -66,11 +66,14 @@ One-click scenarios turn raw snippets into specific deliverables:
 
 ### 🏅 Private & local
 Snippets live in `chrome.storage.local` / IndexedDB.
-**No telemetry, no accounts, no third-party tracking, no servers we operate.**
+**No telemetry, no account, no third-party tracking.** Weft talks only to the
+provider endpoint you configure — there is no Weft server in the path.
 See [`PRIVACY.md`](PRIVACY.md).
 
 ### 🌍 Localized UI & multilingual answers
-Interface available in **English** and **简体中文**; AI replies can be requested in 9+ languages.
+Interface available in **English** and **简体中文**. AI replies can be requested in
+9 languages (adds French, German, Spanish, Japanese, Korean, Portuguese, Russian) —
+picking one of those keeps the English interface and only changes the answer language.
 
 ## 🧭 Core workflow
 
@@ -81,7 +84,7 @@ flowchart LR
     C --> D{Need more<br/>evidence?}
     D -- yes --> E[4. Deep Search<br/>review & approve plan]
     E --> C
-    D -- no --> F[5. Trace<br/>click [S#]/[W#] to source]
+    D -- no --> F["5. Trace<br/>click [S#]/[W#] to source"]
     C --> F
 ```
 
@@ -114,7 +117,7 @@ Available soon on the Chrome Web Store. Until then, use the dev build below.
 | Google Gemini | ✅ | Multimodal |
 | DeepSeek | ✅ | Cheap reasoning |
 | Moonshot (Kimi) | ✅ | Long context |
-| Qwen (Alibaba) | ✅ | via DashScope |
+| Qwen (Alibaba) | ✅ | via DashScope OpenAI-compatible mode |
 | Ollama | ❌ | Local, fully offline |
 | OpenAI-compatible | ✅ | Any endpoint exposing the OpenAI schema |
 | **Chrome built-in AI** | ❌ | On-device; nothing leaves your browser |
@@ -154,7 +157,7 @@ What you see is what runs in the browser.
 |---|---|
 | 📜 Privacy policy | [`PRIVACY.md`](PRIVACY.md) |
 | 🤝 Contributing guide | [`CONTRIBUTING.md`](CONTRIBUTING.md) |
-| 📋 License (GPL-3.0) | [`LICENSE`](LICENSE) |
+| 📋 License (AGPL-3.0) | [`LICENSE`](LICENSE) |
 | 🚦 CI / CD | [`.github/workflows/ci.yml`](.github/workflows/ci.yml), [`.github/workflows/release.yml`](.github/workflows/release.yml) |
 
 ## ❓ FAQ
@@ -172,7 +175,8 @@ It's the current Chrome extension standard. Weft's service worker (`background.j
 Currently Chrome/Chromium-only. We track MV3 cross-browser compatibility and will add Edge/Firefox when their side-panel APIs stabilize.
 
 **Is it free?**
-Yes — GPL-3.0, forever. Bring your own model.
+Yes. The extension is free and open source under AGPL-3.0, and the bring-your-own-key
+workflow will stay that way. The only thing you pay for is your own model provider.
 
 ## 🤝 Contributing
 
@@ -182,7 +186,7 @@ PRs and issues are very welcome! Weft is vanilla-JS MV3, so the dev loop is fast
 npm install          # dev tooling only (eslint, prettier)
 npm run check        # validate manifest + lint + unit tests
 npm run format       # prettier
-npm run pack         # build the store-ready zip
+npm run pack         # build the store-ready zip (needs the `zip` command)
 ```
 
 See [`CONTRIBUTING.md`](CONTRIBUTING.md) for details, and open an [issue](https://github.com/wotchin/weft/issues/new) if you want to discuss a feature before coding.
@@ -191,11 +195,16 @@ See [`CONTRIBUTING.md`](CONTRIBUTING.md) for details, and open an [issue](https:
 
 If Weft saves you time, please **star this repo** — it helps other researchers discover it, and keeps the project maintained.
 
-[![Star History Chart](https://api.star-history.com/svg?repos=wotchin/weft&type=Date)](https://star-history.com/#wotchin/weft&Date)
-
 ## 📝 License
 
-[GNU General Public License v3.0](LICENSE) © [@Wotchin](https://thejackstudio.com).
+[GNU Affero General Public License v3.0](LICENSE) © [@Wotchin](https://thejackstudio.com).
+
+You can use, modify and self-host Weft freely. AGPL-3.0 asks that if you distribute
+a modified version — or run one as a network service — you publish your changes
+under the same licence.
+
+If your organisation cannot accept copyleft terms, a separate commercial licence is
+available: [get in touch](https://thejackstudio.com).
 
 <div align="center">
 

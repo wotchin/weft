@@ -68,19 +68,21 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
     function rebuildLanguageOptions(selectedValue = uiLanguageSelect.value || 'auto') {
-        // Only languages with a shipped interface bundle (ui: true) plus 'auto'
-        // are selectable. Languages without a bundle only affect AI replies and
-        // are set elsewhere if ever needed.
-        const selectable = I18N.LANGUAGES.filter((l) => l.code === 'auto' || l.ui);
+        // Every language is selectable. Those with a shipped interface bundle
+        // (ui: true) also translate the interface; the rest keep the English
+        // interface and only change the language the AI answers in — which is
+        // what the field's hint text tells the user. I18N.init() already falls
+        // back to the English bundle for them.
+        const selectable = I18N.LANGUAGES;
         uiLanguageSelect.replaceChildren();
         for (const lang of selectable) {
             const opt = document.createElement('option');
             opt.value = lang.code;
             opt.textContent = localized(lang.labelKey, lang.label);
+            if (!lang.ui && lang.code !== 'auto') opt.dataset.aiOnly = 'true';
             uiLanguageSelect.appendChild(opt);
         }
-        // Fall back to 'auto' if the stored value is no longer selectable
-        // (e.g. a legacy preference saved before non-ui languages were hidden).
+        // Fall back to 'auto' if the stored value is not a language we know.
         uiLanguageSelect.value = selectable.some((l) => l.code === selectedValue)
             ? selectedValue
             : 'auto';

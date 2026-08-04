@@ -24,13 +24,17 @@ jobs:
       - name: Set up Node
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
-          cache: 'npm'
+          # Track the latest LTS (currently Node 24). Bumping every year is done
+          # by GitHub; we just follow `lts/*`.
+          node-version: 'lts/*'
 
       - name: Install dependencies
-        run: npm ci || npm install
+        # This repo intentionally has no lockfile (no build step, just two dev
+        # deps). Avoid `cache: 'npm'`, which would fail without a
+        # package-lock.json, and use `npm install` instead of `npm ci`.
+        run: npm install
 
-      - name: Validate manifest (icons, paths, CSP)
+      - name: Validate manifest + package allow-list
         run: npm run validate
 
       - name: Lint
@@ -56,11 +60,10 @@ jobs:
       - name: Set up Node
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
-          cache: 'npm'
+          node-version: 'lts/*'
 
       - name: Install dependencies
-        run: npm ci || npm install
+        run: npm install
 
       - name: Pack extension zip
         run: npm run pack
@@ -69,12 +72,18 @@ jobs:
         run: |
           echo "=== Package contents ==="
           unzip -l "${{ steps.meta.outputs.zip }}" | tee contents.txt
-          # Guard rails: nothing dev-only should ever reach the store zip.
-          ! grep -E 'node_modules/|\\.github/|test/|scripts/|eslint\\.config\\.js' contents.txt \
+          # scripts/package-files.mjs is an allow-list, so dev files cannot be
+          # packed in the first place. This is the belt-and-braces check on the
+          # produced artifact. YAML block scalars pass backslashes through
+          # verbatim, so these must be single-escaped — '\\.' would ask ERE for
+          # a literal backslash and silently match nothing.
+          ! grep -E 'node_modules/|\.github/|test/|scripts/|eslint\.config\.js|package\.json' contents.txt \
             || { echo "Dev-only file leaked into store package"; exit 1; }
-          # Manifest is mandatory and must resolve all referenced files.
-          grep -q 'manifest.json' contents.txt
-          grep -q 'background.js' contents.txt
+          # Core runtime files and the licence must be present.
+          for required in manifest.json background.js chat.html LICENSE; do
+            grep -q "$required" contents.txt \
+              || { echo "Missing from store package: $required"; exit 1; }
+          done
 
       - name: Upload build artifact
         uses: actions/upload-artifact@v4

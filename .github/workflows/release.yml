@@ -14,8 +14,10 @@ jobs:
   publish:
     name: Build · Publish to Chrome Web Store · GitHub Release
     runs-on: ubuntu-latest
-    # Guard against accidental releases from non-upstream forks.
-    if: github.repository == '${{ github.repository }}'
+    # Guard against accidental releases from non-upstream forks. This must name
+    # the upstream repo literally — comparing github.repository to itself is
+    # always true and guards nothing.
+    if: github.repository == 'wotchin/weft'
 
     steps:
       - uses: actions/checkout@v4
@@ -36,11 +38,11 @@ jobs:
       - name: Set up Node
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
-          cache: 'npm'
+          node-version: 'lts/*'
 
       - name: Install dependencies
-        run: npm ci || npm install
+        # No lockfile in this repo — see ci.yml for the rationale.
+        run: npm install
 
       - name: Gate — lint + test + validate manifest
         run: npm run check

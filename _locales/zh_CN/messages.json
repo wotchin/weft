@@ -929,6 +929,9 @@
   "provider_moonshot": {
     "message": "Moonshot（Kimi）"
   },
+  "provider_qwen": {
+    "message": "通义千问（DashScope）"
+  },
   "provider_ollama": {
     "message": "Ollama（本地）"
   },

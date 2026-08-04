@@ -35,6 +35,9 @@ const add = (p) => p && refs.add(p);
 add(manifest.background?.service_worker);
 add(manifest.action?.default_popup);
 add(manifest.options_page);
+// side_panel.default_path carries a query string ("chat.html?mode=panel");
+// strip it so the file itself is what gets checked.
+add(manifest.side_panel?.default_path?.split('?')[0]);
 for (const cs of manifest.content_scripts || []) (cs.js || []).forEach(add);
 for (const p of manifest.sandbox?.pages || []) add(p);
 for (const size of Object.values(manifest.icons || {})) add(size);
