@@ -224,6 +224,18 @@
   "popup_hint": {
     "message": "Select text on a page to save or analyze it."
   },
+  "footer_project": {
+    "message": "Weft"
+  },
+  "footer_version": {
+    "message": "Version $1"
+  },
+  "footer_repo_link_text": {
+    "message": "View on GitHub"
+  },
+  "footer_tagline": {
+    "message": "Weave knowledge into insight"
+  },
   "popup_shown": {
     "message": "%s shown"
   },

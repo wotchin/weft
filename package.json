@@ -1,6 +1,6 @@
 {
   "name": "weft",
-  "version": "3.0.1",
+  "version": "3.0.2",
   "description": "Collect fragments from across your tabs and weave them into cited reports, rewrites, diagrams and fact-checks.",
   "license": "AGPL-3.0-only",
   "private": true,
@@ -11,7 +11,7 @@
     "validate": "node scripts/validate-manifest.mjs && node scripts/package-files.mjs --check",
     "test": "node test/unit.mjs && node scripts/check-i18n.mjs",
     "test:i18n": "node scripts/check-i18n.mjs",
-    "pack": "bash scripts/pack.sh",
+    "pack": "node scripts/pack.mjs",
     "check": "npm run validate && npm run lint && npm test"
   },
   "devDependencies": {

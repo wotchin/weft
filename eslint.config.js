@@ -86,7 +86,10 @@ export default [
         languageOptions: {
             sourceType: 'module',
             globals: {
+                // Node.js built-ins used by scripts/ (pack.mjs etc.)
                 process: 'readonly',
+                Buffer: 'readonly',
+                __dirname: 'readonly',
             },
         },
     },

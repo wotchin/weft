@@ -412,3 +412,81 @@ body {
     color: #aaa;
     text-align: center;
 }
+
+/* Shared "about" footer rendered by lib/footer.js (popup, Workbench, settings). */
+.weft-footer {
+    padding: 8px 14px 10px;
+    background: #fff;
+    border-top: 1px solid var(--weft-line);
+    font-size: 10.5px;
+    line-height: 1.4;
+    color: var(--weft-muted);
+    text-align: center;
+}
+
+.weft-footer-row {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    flex-wrap: wrap;
+}
+
+.weft-footer-brand {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+}
+
+.weft-footer-name {
+    font-weight: 600;
+    color: var(--weft-ink);
+}
+
+.weft-footer-sep {
+    opacity: 0.5;
+}
+
+.weft-footer-version {
+    font-variant-numeric: tabular-nums;
+}
+
+.weft-footer-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    color: var(--weft-accent-hover);
+    text-decoration: none;
+    border-radius: 3px;
+    transition: color 0.15s, background 0.15s;
+}
+
+.weft-footer-link:hover {
+    color: var(--weft-accent);
+    text-decoration: underline;
+}
+
+.weft-footer-github {
+    width: 13px;
+    height: 13px;
+    flex: 0 0 auto;
+}
+
+.weft-footer-sub {
+    margin-top: 3px;
+    font-size: 10px;
+    opacity: 0.85;
+    display: flex;
+    align-items: baseline;
+    justify-content: center;
+    gap: 4px;
+    flex-wrap: wrap;
+}
+
+.weft-footer-copy { opacity: 0.9; }
+
+.weft-footer-tagline {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}

@@ -224,6 +224,18 @@
   "popup_hint": {
     "message": "选中网页文字，即可保存或分析。"
   },
+  "footer_project": {
+    "message": "Weft"
+  },
+  "footer_version": {
+    "message": "版本 $1"
+  },
+  "footer_repo_link_text": {
+    "message": "在 GitHub 上查看"
+  },
+  "footer_tagline": {
+    "message": "将所知织成洞见"
+  },
   "popup_shown": {
     "message": "已标注 %s 处"
   },

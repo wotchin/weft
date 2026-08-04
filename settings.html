@@ -253,6 +253,41 @@
             color: var(--weft-accent-hover);
             border: 1px solid var(--weft-accent-tint);
         }
+        /* Shared "about" footer rendered by lib/footer.js. */
+        .weft-footer {
+            margin-top: 22px;
+            padding: 14px 16px 6px;
+            border-top: 1px solid var(--weft-line);
+            text-align: center;
+            font-size: 12px;
+            line-height: 1.5;
+            color: var(--weft-muted);
+        }
+        .weft-footer-row {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            flex-wrap: wrap;
+        }
+        .weft-footer-brand { display: inline-flex; align-items: center; gap: 5px; }
+        .weft-footer-name { font-weight: 600; color: var(--weft-ink); }
+        .weft-footer-sep { opacity: 0.5; }
+        .weft-footer-version { font-variant-numeric: tabular-nums; }
+        .weft-footer-link {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            color: var(--weft-accent-hover);
+            text-decoration: none;
+            border-radius: 3px;
+            transition: color 0.15s;
+        }
+        .weft-footer-link:hover { color: var(--weft-accent); text-decoration: underline; }
+        .weft-footer-github { width: 14px; height: 14px; flex: 0 0 auto; }
+        .weft-footer-sub { margin-top: 4px; font-size: 11px; opacity: 0.85; display: flex; align-items: baseline; justify-content: center; gap: 6px; flex-wrap: wrap; }
+        .weft-footer-copy { opacity: 0.9; }
+        .weft-footer-tagline { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         @media (max-width: 560px) {
             .settings-container { margin-top: 18px; padding: 0 12px; }
             .settings-hero { padding: 18px; }
@@ -391,6 +426,8 @@
             <button id="testConnection" class="test-btn" data-i18n="settings_test">Test Connection</button>
         </div>
         <div id="statusMessage" class="status-message"></div>
+
+        <footer class="weft-footer weft-footer-settings" id="weftFooter"></footer>
     </div>
     <script src="lib/idb.js"></script>
     <script src="lib/store.js"></script>
@@ -398,6 +435,7 @@
     <script src="lib/llm-client.js"></script>
     <script src="lib/search-provider.js"></script>
     <script src="lib/i18n.js"></script>
+    <script src="lib/footer.js"></script>
     <script src="settings.js"></script>
 </body>
 </html>

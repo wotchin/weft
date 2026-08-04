@@ -1707,3 +1707,86 @@ body.mode-panel .header-btn {
 .diagram-code-block.show {
     display: block;
 }
+
+/* Shared "about" footer rendered by lib/footer.js (popup, Workbench, settings). */
+.weft-footer {
+    padding: 6px 16px 8px;
+    background: #fff;
+    border-top: 1px solid var(--weft-line, #e3e4ec);
+    font-size: 10.5px;
+    line-height: 1.4;
+    color: var(--weft-muted, #858ba5);
+    text-align: center;
+}
+
+.weft-footer-row {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    flex-wrap: wrap;
+}
+
+.weft-footer-brand {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+}
+
+.weft-footer-name {
+    font-weight: 600;
+    color: var(--weft-ink, #292a3d);
+}
+
+.weft-footer-sep {
+    opacity: 0.5;
+}
+
+.weft-footer-version {
+    font-variant-numeric: tabular-nums;
+}
+
+.weft-footer-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    color: var(--weft-accent-hover, #5643c4);
+    text-decoration: none;
+    border-radius: 3px;
+    transition: color 0.15s, background 0.15s;
+}
+
+.weft-footer-link:hover {
+    color: var(--weft-accent, #6c5ce0);
+    text-decoration: underline;
+}
+
+.weft-footer-github {
+    width: 13px;
+    height: 13px;
+    flex: 0 0 auto;
+}
+
+.weft-footer-sub {
+    margin-top: 3px;
+    font-size: 10px;
+    opacity: 0.85;
+    display: flex;
+    align-items: baseline;
+    justify-content: center;
+    gap: 4px;
+    flex-wrap: wrap;
+}
+
+.weft-footer-copy { opacity: 0.9; }
+
+.weft-footer-tagline {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* The Workbench footer sits right under the composer — keep it slim. */
+.weft-footer-chat {
+    padding: 5px 16px 7px;
+}
