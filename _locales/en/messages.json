@@ -75,7 +75,7 @@
     "message": "Export"
   },
   "wb_export_hint": {
-    "message": "Export the latest completed AI result"
+    "message": "Export the snippets collected in this session"
   },
   "wb_clear": {
     "message": "Clear"
@@ -90,7 +90,7 @@
     "message": "This clears the conversation and stops any current task. Saved session snippets and page annotations are kept."
   },
   "wb_nothing_to_export": {
-    "message": "No completed AI result is available to export."
+    "message": "No snippets to export in this session."
   },
   "wb_takeaways": {
     "message": "Key Takeaways"
@@ -388,6 +388,21 @@
   },
   "settings_temperature_hint": {
     "message": "0 = deterministic, higher = more creative (0-2)"
+  },
+  "settings_reasoning": {
+    "message": "Reasoning (Thinking Mode)"
+  },
+  "settings_reasoning_auto": {
+    "message": "Auto (off for known reasoning models)"
+  },
+  "settings_reasoning_off": {
+    "message": "Always off (faster, recommended)"
+  },
+  "settings_reasoning_on": {
+    "message": "Always on (slower, may exceed budget)"
+  },
+  "settings_reasoning_hint": {
+    "message": "Reasoning models (DeepSeek V4, Kimi K3) think before answering. Turning it off avoids spending your whole token budget on chain-of-thought; turning it on is slower but can improve hard problems."
   },
   "settings_vision": {
     "message": "Vision (Image Understanding)"
@@ -833,6 +848,21 @@
   "onboarding_builtin_desc": {
     "message": "No key handy? Choose Chrome Built-in AI to try summarizing and rewriting with no key on Chrome 138+."
   },
+  "onboarding_builtin_detected_ready_desc": {
+    "message": "Your browser has on-device AI ready to go — no API key needed for Weft's synthesis features. The model is already on this device."
+  },
+  "onboarding_builtin_detected_download_desc": {
+    "message": "Your browser supports on-device AI. Enabling it lets you try Weft's synthesis features with no API key — a large model file (~1 GB or more) downloads automatically the first time you ask a question."
+  },
+  "onboarding_builtin_use_builtin": {
+    "message": "Use built-in AI"
+  },
+  "onboarding_builtin_decline": {
+    "message": "I'll set up my own"
+  },
+  "onboarding_builtin_chosen": {
+    "message": "✓ Using Chrome built-in AI. You can change this later in Settings."
+  },
   "onboarding_open_settings": {
     "message": "Open Settings"
   },
@@ -1087,6 +1117,9 @@
   },
   "wb_export_document_title": {
     "message": "Weft Export"
+  },
+  "wb_export_snippets_title": {
+    "message": "Session Snippets"
   },
   "wb_generated_output_source": {
     "message": "Weft output"

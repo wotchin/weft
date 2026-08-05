@@ -608,6 +608,70 @@ try {
 ok('llm: unsupported function-call finishes are never treated as final text',
     functionCallError?.kind === 'bad_request' && functionCallError.retryable === false);
 
+// DeepSeek V4 and Kimi K3 are reasoning models that default to thinking=enabled.
+// Without an explicit `thinking: {type: 'disabled'}` in the body their whole
+// max_tokens budget is spent on chain-of-thought and they return empty content.
+// The client must inject the override for known reasoning models.
+const reasoningAutoContext = makeContext();
+let reasoningAutoBody = null;
+reasoningAutoContext.fetch = async (_url, options) => {
+    reasoningAutoBody = JSON.parse(options.body);
+    return {
+        ok: true, status: 200,
+        async json() {
+            return { choices: [{ message: { content: 'ok' }, finish_reason: 'stop' }], usage: {} };
+        },
+    };
+};
+load(reasoningAutoContext, ['lib/providers.js', 'lib/store.js', 'lib/llm-client.js'],
+    'globalThis.__llmApi = LLMClient;');
+await reasoningAutoContext.__llmApi.chat([{ role: 'user', content: 'hi' }], {
+    stream: false,
+    config: { provider: 'deepseek', apiKey: 'k', baseUrl: 'https://api.deepseek.com', model: 'deepseek-v4-flash' },
+});
+ok('llm: DeepSeek V4 reasoning models get thinking=disabled by default',
+    reasoningAutoBody?.thinking?.type === 'disabled');
+
+const reasoningOnContext = makeContext();
+let reasoningOnBody = null;
+reasoningOnContext.fetch = async (_url, options) => {
+    reasoningOnBody = JSON.parse(options.body);
+    return {
+        ok: true, status: 200,
+        async json() {
+            return { choices: [{ message: { content: 'ok' }, finish_reason: 'stop' }], usage: {} };
+        },
+    };
+};
+load(reasoningOnContext, ['lib/providers.js', 'lib/store.js', 'lib/llm-client.js'],
+    'globalThis.__llmApi = LLMClient;');
+await reasoningOnContext.__llmApi.chat([{ role: 'user', content: 'hi' }], {
+    stream: false,
+    config: { provider: 'deepseek', apiKey: 'k', baseUrl: 'https://api.deepseek.com', model: 'deepseek-v4-pro', reasoning: 'on' },
+});
+ok('llm: reasoning=on sends thinking=enabled even on reasoning models',
+    reasoningOnBody?.thinking?.type === 'enabled');
+
+const reasoningUnknownContext = makeContext();
+let reasoningUnknownBody = null;
+reasoningUnknownContext.fetch = async (_url, options) => {
+    reasoningUnknownBody = JSON.parse(options.body);
+    return {
+        ok: true, status: 200,
+        async json() {
+            return { choices: [{ message: { content: 'ok' }, finish_reason: 'stop' }], usage: {} };
+        },
+    };
+};
+load(reasoningUnknownContext, ['lib/providers.js', 'lib/store.js', 'lib/llm-client.js'],
+    'globalThis.__llmApi = LLMClient;');
+await reasoningUnknownContext.__llmApi.chat([{ role: 'user', content: 'hi' }], {
+    stream: false,
+    config: { provider: 'openai', apiKey: 'k', baseUrl: 'https://api.openai.com/v1', model: 'gpt-4o-mini' },
+});
+ok('llm: non-reasoning providers never receive a thinking field',
+    !('thinking' in (reasoningUnknownBody || {})));
+
 // A provider that never responds must be aborted by the shared LLM timeout,
 // so every UI caller eventually leaves its busy state.
 const timeoutContext = makeContext();
@@ -2365,6 +2429,7 @@ async function runClearCallback({
             let sessionTransitionInFlight = false;
             let activeSmartReadRequestId = __activeRequestId;
             let discardSmartReadRequestsThrough = 0;
+            let currentSession = 'TestSession';
             let modalPromptInFlight = __modalOpen;
             let activePromptCancel = __modalOpen ? () => {
                 __state.events.push('modal-cancel');
@@ -2386,6 +2451,11 @@ async function runClearCallback({
                 async discardPendingSmartRead(requestId) {
                     __state.events.push('discard:' + requestId);
                     __state.discardedRequestIds.push(requestId);
+                    return true;
+                },
+                async setChat(sessionName, turns) {
+                    __state.events.push('setChat:' + sessionName);
+                    __state.setChatCalls.push({ sessionName, turns });
                     return true;
                 },
             };
@@ -2412,7 +2482,8 @@ async function runClearCallback({
             __state: {
                 promptArgs: null, resetCount: 0, reloadCount: 0,
                 nativeConfirmCount: 0, nativeAlertCount: 0,
-                modalCancelCount: 0, discardedRequestIds: [], timeoutDelays: [], events: [],
+                modalCancelCount: 0, discardedRequestIds: [], timeoutDelays: [],
+                setChatCalls: [], events: [],
             },
         }
     );
@@ -2430,8 +2501,19 @@ ok('workbench clear: cancel is inert and idle confirmation resets the conversati
     clearCancelled.resetCount === 0 && clearCancelled.reloadCount === 0 &&
     clearIdle.resetCount === 1 && clearIdle.reloadCount === 0 &&
     clearIdle.promptArgs?.[2]?.confirmOnly === true);
+ok('workbench clear: idle clear persists an empty chat so it stays cleared',
+    clearCancelled.setChatCalls.length === 0 &&
+    clearIdle.setChatCalls.length === 1 &&
+    clearIdle.setChatCalls[0].sessionName === 'TestSession' &&
+    Array.isArray(clearIdle.setChatCalls[0].turns) &&
+    clearIdle.setChatCalls[0].turns.length === 0);
 ok('workbench clear: a busy confirmation reloads to cancel every late producer',
     clearBusy.resetCount === 0 && clearBusy.reloadCount === 1);
+ok('workbench clear: busy clear persists an empty chat before the reload',
+    clearBusy.setChatCalls.length === 1 &&
+    clearBusy.setChatCalls[0].turns.length === 0 &&
+    clearBusy.events.indexOf('setChat:TestSession') >= 0 &&
+    clearBusy.events.indexOf('setChat:TestSession') < clearBusy.events.indexOf('reload'));
 ok('workbench clear: active Smart Read is discarded before the recovery reload',
     clearActiveSmartRead.discardedRequestIds.join(',') === 'smart-read-active' &&
     clearActiveSmartRead.timeoutDelays.includes(800) &&
@@ -2456,6 +2538,7 @@ const claimDuringClearRace = await vm.runInNewContext(
         let sessionTransitionInFlight = false;
         let discardSmartReadRequestsThrough = 0;
         let activeSmartReadRequestId = null;
+        let currentSession = 'TestSession';
         const smartReadConsumerId = 'consumer-test';
         const SMART_READ_REQUEST_LEASE_MS = 120000;
         const Date = { now: () => 2000 };
@@ -2490,6 +2573,7 @@ const claimDuringClearRace = await vm.runInNewContext(
             async releasePendingSmartRead() { __state.releaseCount++; },
             async finishPendingSmartRead() { __state.finishCount++; },
             async renewPendingSmartRead() {},
+            async setChat() {},
         };
         const setInterval = () => 1;
         const clearInterval = () => {};
@@ -2586,40 +2670,6 @@ ok('workbench clear: reset removes visible, model and transient conversation sta
     resetConversationResult.typingRemoved === 1 &&
     resetConversationResult.exportDisabled);
 
-const meaningfulExportFunction = extractFunction(chatSource, 'isMeaningfulExportContent');
-const lastExportableFunction = extractFunction(chatSource, 'lastExportableResult');
-const markedExportResult = {
-    exportable: true, isConnected: true, textContent: 'Completed answer',
-    querySelector() { return null; },
-};
-const unmarkedAssistantResult = {
-    exportable: false, isConnected: true, textContent: 'Newer partial answer',
-    querySelector() { return null; },
-};
-const exportSelectionState = { selector: '' };
-const selectedExportResult = vm.runInNewContext(
-    `(() => {
-        const chatMessages = __chatMessages;
-        ${meaningfulExportFunction}
-        ${lastExportableFunction}
-        return lastExportableResult();
-    })()`,
-    {
-        __chatMessages: {
-            querySelectorAll(selector) {
-                exportSelectionState.selector = selector;
-                const matchesMarked = selector.includes('[data-exportable="true"]');
-                const matchesEveryAssistant = selector.includes('.message.assistant');
-                return [markedExportResult, unmarkedAssistantResult].filter((candidate) =>
-                    (matchesMarked && candidate.exportable) || matchesEveryAssistant);
-            },
-        },
-    }
-);
-ok('workbench export: selection ignores newer unmarked or partial assistant content',
-    selectedExportResult === markedExportResult &&
-    !exportSelectionState.selector.includes('.message.assistant'));
-
 const staticExportFunction = extractFunction(chatSource, 'staticExportFragment');
 const exportControls = [
     { removed: false, remove() { this.removed = true; } },
@@ -2710,18 +2760,17 @@ ok('workbench export: delayed cleanup revokes the URL and removes the anchor',
     downloadState.removed && downloadState.revoked.join(',') === 'blob:weft-test');
 
 const exportCallback = extractEventCallback(chatSource, 'exportBtn', 'click');
-async function runExportCallback(hasResult) {
+async function runExportCallback({ session, snippets }) {
     return vm.runInNewContext(
         `(async () => {
-            const content = __hasResult ? { id: 'complete' } : null;
-            const lastExportableResult = () => content;
-            const staticExportFragment = (value) => {
-                __state.fragmentInput = value;
-                return '<main>safe</main>';
+            const currentSession = __session;
+            const sessionSnippets = __snippets;
+            const Store = {
+                getSession(name) { __state.requestedSession = name; return Promise.resolve(__snippets); }
             };
-            const buildWorkbenchExportDocument = (fragment) => {
-                __state.documentInput = fragment;
-                return '<!doctype html>' + fragment;
+            const buildSessionSnippetsDocument = (snippets, name) => {
+                __state.documentInput = { snippets, name };
+                return '<!doctype html>snippets-' + name;
             };
             const downloadHtmlFile = (...args) => { __state.downloadArgs = args; };
             const t = (key) => key;
@@ -2733,25 +2782,36 @@ async function runExportCallback(hasResult) {
             return __state;
         })()`,
         {
-            __hasResult: hasResult,
+            __session: session,
+            __snippets: snippets,
             __state: {
-                fragmentInput: null, documentInput: null, downloadArgs: null,
+                requestedSession: null, documentInput: null, downloadArgs: null,
                 notifications: [], nativeAlertCount: 0, nativeConfirmCount: 0,
             },
         }
     );
 }
-const exportedResultState = await runExportCallback(true);
-const emptyExportState = await runExportCallback(false);
-ok('workbench export: header action exports the selected completed result',
-    exportedResultState.fragmentInput?.id === 'complete' &&
-    exportedResultState.documentInput === '<main>safe</main>' &&
-    exportedResultState.downloadArgs?.[0] === '<!doctype html><main>safe</main>' &&
-    /weft-export-\d{4}-\d{2}-\d{2}\.html/.test(exportedResultState.downloadArgs?.[1] || '') &&
+const exportedSnippets = [
+    { content: 'hello world', sourceUrl: 'https://example.com', tags: ['idea'], comment: 'note' }
+];
+const exportedResultState = await runExportCallback({ session: 'MySession', snippets: exportedSnippets });
+const emptyExportState = await runExportCallback({ session: 'MySession', snippets: [] });
+const noSessionState = await runExportCallback({ session: null, snippets: exportedSnippets });
+ok('workbench export: header action exports the current session snippets',
+    exportedResultState.requestedSession === 'MySession' &&
+    Array.isArray(exportedResultState.documentInput?.snippets) &&
+    exportedResultState.documentInput?.snippets.length === 1 &&
+    exportedResultState.documentInput?.name === 'MySession' &&
+    exportedResultState.downloadArgs?.[0] === '<!doctype html>snippets-MySession' &&
+    /weft-snippets-MySession-\d{4}-\d{2}-\d{2}\.html/.test(exportedResultState.downloadArgs?.[1] || '') &&
     exportedResultState.notifications.length === 0);
-ok('workbench export: empty state uses an in-app notice, never a native alert',
+ok('workbench export: empty session uses an in-app notice, never a native alert',
     !emptyExportState.downloadArgs && emptyExportState.notifications.length === 1 &&
-    [exportedResultState, emptyExportState].every((state) =>
+    emptyExportState.notifications[0] === 'wb_nothing_to_export');
+ok('workbench export: no current session also surfaces an in-app notice',
+    !noSessionState.downloadArgs && noSessionState.notifications.length === 1 &&
+    noSessionState.requestedSession === null &&
+    [exportedResultState, emptyExportState, noSessionState].every((state) =>
         state.nativeAlertCount === 0 && state.nativeConfirmCount === 0));
 
 // Exercise cleanSvg itself with a tiny XML DOM double. In particular, the
@@ -3065,6 +3125,24 @@ ok('page annotations: shared cancellation and page identity guard every async jo
     contentAssistSource.includes('sharedJobId !== window.__cyberHighlightJobId') &&
     contentAssistSource.includes('comparableAnnotationUrl(location.href) !== expectedPageKey') &&
     contentAssistSource.includes('highlightJobCancelled(jobId, sharedJobId, expectedPageKey)'));
+
+// Test Connection only needs proof the wire is up. A truncated-but-non-empty
+// answer (finish_reason "length") is conclusive, so the probe must tolerate the
+// `output_limit` error chat() raises and treat any non-empty sample as success.
+const llmClientSource = read('lib/llm-client.js');
+const testConnStart = llmClientSource.indexOf('async function testConnection');
+const testConnEnd = llmClientSource.indexOf('return { chat, completeJSON, testConnection');
+const testConnSource = llmClientSource.slice(testConnStart, testConnEnd);
+ok('llm: connection probe treats a truncated non-empty answer as success',
+    /kind === 'output_limit'/u.test(testConnSource) &&
+    /e\.sample/u.test(testConnSource));
+ok('llm: connection probe prompt requests a concrete short answer',
+    /Reply with/i.test(testConnSource));
+ok('llm: connection probe surfaces provider metadata on failure',
+    /finishReason|reasoningPresent|usage/i.test(testConnSource));
+ok('llm: chat attaches partial sample text to output-limit errors',
+    /statusError\.sample = text/u.test(llmClientSource));
+
 const ragDeadlineStart = chatSource.indexOf('function retrieveRagWithDeadline');
 const ragDeadlineEnd = chatSource.indexOf('// Prompt templates', ragDeadlineStart);
 const ragDeadlineSource = chatSource.slice(ragDeadlineStart, ragDeadlineEnd);

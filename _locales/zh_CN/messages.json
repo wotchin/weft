@@ -75,7 +75,7 @@
     "message": "导出"
   },
   "wb_export_hint": {
-    "message": "导出最近一个已完成的 AI 结果"
+    "message": "导出当前 Session 收集的 Snippets"
   },
   "wb_clear": {
     "message": "清空"
@@ -90,7 +90,7 @@
     "message": "这会清空对话，并停止当前任务。已保存的会话片段和网页标注会保留。"
   },
   "wb_nothing_to_export": {
-    "message": "当前没有可导出的已完成 AI 结果。"
+    "message": "当前 Session 没有可导出的 Snippets。"
   },
   "wb_takeaways": {
     "message": "关键要点"
@@ -389,6 +389,21 @@
   "settings_temperature_hint": {
     "message": "0 = 确定性输出，越高越有创造性（0-2）"
   },
+  "settings_reasoning": {
+    "message": "推理（思考模式）"
+  },
+  "settings_reasoning_auto": {
+    "message": "自动（对已知推理模型关闭）"
+  },
+  "settings_reasoning_off": {
+    "message": "始终关闭（更快，推荐）"
+  },
+  "settings_reasoning_on": {
+    "message": "始终开启（更慢，可能超出预算）"
+  },
+  "settings_reasoning_hint": {
+    "message": "推理模型（DeepSeek V4、Kimi K3）会先思考再回答。关闭可避免将整个 token 预算耗费在思考链上；开启更慢，但在复杂问题上可能更准确。"
+  },
   "settings_vision": {
     "message": "图片理解"
   },
@@ -513,7 +528,7 @@
     "message": "搜索失败："
   },
   "settings_search_note_self": {
-    "message": "SearXNG 实例，基本上就是自建实例。"
+    "message": "SearXNG 实例需要自行部署。"
   },
   "settings_search_note_tavily": {
     "message": "免费约每月 1000 次搜索，到 tavily.com 获取密钥。"
@@ -833,6 +848,21 @@
   "onboarding_builtin_desc": {
     "message": "没有密钥？在 Chrome 138 及更高版本中，可选择 Chrome 内置 AI 直接体验总结和改写。"
   },
+  "onboarding_builtin_detected_ready_desc": {
+    "message": "你浏览器上的端侧 AI 已就绪——无需 API 密钥即可使用 Weft 的合成功能，模型已在本地存在。"
+  },
+  "onboarding_builtin_detected_download_desc": {
+    "message": "你的浏览器支持端侧 AI。启用后无需 API 密钥即可体验 Weft 的合成功能——首次提问时会自动下载一个较大的模型文件（约 1 GB 以上）。"
+  },
+  "onboarding_builtin_use_builtin": {
+    "message": "使用内置 AI"
+  },
+  "onboarding_builtin_decline": {
+    "message": "我自己配置"
+  },
+  "onboarding_builtin_chosen": {
+    "message": "✓ 已启用 Chrome 内置 AI。你之后可以在设置中修改。"
+  },
   "onboarding_open_settings": {
     "message": "打开设置"
   },
@@ -1087,6 +1117,9 @@
   },
   "wb_export_document_title": {
     "message": "Weft 导出"
+  },
+  "wb_export_snippets_title": {
+    "message": "Session Snippets"
   },
   "wb_generated_output_source": {
     "message": "Weft 生成结果"

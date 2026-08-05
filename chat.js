@@ -682,6 +682,14 @@ document.addEventListener('DOMContentLoaded', async function() {
                 : `${sessionSnippets.length}`;
         }
 
+        // The header Export button ships session snippets, so its availability
+        // tracks the snippet list. Touching the full quick-actions state here
+        // would also flip Clear/send buttons mid-stream; only Export needs it.
+        if (exportBtn) {
+            const interactive = !isStreaming && !smartReadInFlight && !sessionTransitionInFlight;
+            exportBtn.disabled = !interactive || !currentSession || sessionSnippets.length === 0;
+        }
+
         if (visible.length === 0) {
             const empty = document.createElement('div');
             empty.className = 'context-empty';
@@ -1557,7 +1565,9 @@ document.addEventListener('DOMContentLoaded', async function() {
         deleteSessionBtn.disabled = !enabled || !currentSession;
         // Clear stays available as the recovery action for a stalled task.
         clearButton.disabled = false;
-        exportBtn.disabled = !enabled || !lastExportableResult();
+        // Export ships the current session's collected snippets, so it is
+        // available whenever a session with snippets is loaded.
+        exportBtn.disabled = !enabled || !currentSession || sessionSnippets.length === 0;
         showOnPageBtn.disabled = !enabled || annotationInFlight;
         if (enabled) {
             refreshPageActionAvailability();
@@ -2744,20 +2754,6 @@ ${I18N.promptLanguageInstruction()}
         }, 2000);
     }
 
-    function isMeaningfulExportContent(element) {
-        if (!element || !element.isConnected) return false;
-        if (element.textContent.trim()) return true;
-        return Boolean(element.querySelector('svg, img, table, pre, blockquote, ul, ol'));
-    }
-
-    function lastExportableResult() {
-        const candidates = Array.from(chatMessages.querySelectorAll('[data-exportable="true"]'));
-        for (let index = candidates.length - 1; index >= 0; index--) {
-            if (isMeaningfulExportContent(candidates[index])) return candidates[index];
-        }
-        return null;
-    }
-
     function staticExportFragment(contentElement) {
         const clone = contentElement.cloneNode(true);
         clone.querySelectorAll(
@@ -2789,7 +2785,68 @@ table{border-collapse:collapse;width:100%}th,td{border:1px solid #ddd;padding:8p
 pre,.diagram-code-block{background:#f5f5f5;padding:12px;border-radius:6px;overflow-x:auto}code{font-size:13px}
 h1,h2,h3,h4{margin-top:1.2em;margin-bottom:.6em}svg,img{max-width:100%;height:auto}.diagram-container{border:1px solid #e0e0e0;border-radius:10px;padding:16px}
 .takeaway-card{display:block;border:1px solid #e5e5e5;border-radius:10px;padding:12px;margin:10px 0}.takeaway-topic,.takeaway-quote{color:#555}
+.snippets-list .snippet-item{border:1px solid #e5e5e5;border-radius:10px;padding:12px 14px;margin:14px 0}
+.snippets-list .snippet-num{color:#888;font-size:12px;margin-bottom:6px}
+.snippets-list .snippet-item pre{margin:6px 0;white-space:pre-wrap;word-wrap:break-word}
+.snippets-list .snippet-source{font-size:13px;color:#555;margin-top:6px}
+.snippets-list .snippet-source a{color:#1976d2;text-decoration:none;word-wrap:break-word}
+.snippets-list .snippet-tags{margin-top:6px}.snippets-list .snippet-tags .tag{display:inline-block;background:#eef3f8;color:#335a7a;border-radius:4px;padding:1px 8px;margin-right:4px;font-size:12px}
+.snippets-list .snippet-comment{margin-top:6px;color:#555;font-size:13px}
+.snippets-list+.meta,.meta{color:#666;font-size:13px;margin-top:-6px}
 </style></head><body>${contentHtml}</body></html>`;
+    }
+
+    // Build a standalone HTML document listing the raw snippets collected in
+    // a session. Each entry includes the snippet text (or image URL), its
+    // source (title/URL), tags and the user's comment — the same fields
+    // surfaced in the context panel. The header Export button uses this to
+    // export the session's collected material rather than the last AI answer
+    // (which already has its own per-message "Export HTML" button).
+    function buildSessionSnippetsDocument(snippets, sessionName) {
+        const list = Array.isArray(snippets) ? snippets : [];
+        const header = `<h1>${escapeHtml(t('wb_export_snippets_title'))}</h1>` +
+            `<p class="meta">${escapeHtml(sessionName || '')}${list.length ? ` · ${escapeHtml(t('wb_using_snippets').replace('%s', String(list.length)))}` : ''}</p>`;
+
+        if (list.length === 0) {
+            return buildWorkbenchExportDocument(
+                header + `<p>${escapeHtml(t('wb_no_snippets'))}</p>`,
+                t('wb_export_snippets_title')
+            );
+        }
+
+        const items = list.map((snippet, index) => {
+            const isImage = snippet && snippet.type === 'image';
+            const body = isImage
+                ? `<em>${escapeHtml(snippet.imageUrl || t('popup_image'))}</em>`
+                : `<pre>${escapeHtml(snippet.content || (typeof snippet === 'string' ? snippet : ''))}</pre>`;
+
+            const sourceUrl = snippetAnnotationSourceUrl(snippet) || '';
+            const sourceLabel = snippet.sourceTitle || sourceUrl || snippet.sourceUrl || '';
+            const sourceLine = sourceLabel
+                ? `<div class="snippet-source">${escapeHtml(sourceLabel)}${sourceUrl ? ` — <a href="${escapeHtml(sourceUrl)}">${escapeHtml(sourceUrl)}</a>` : ''}</div>`
+                : '';
+
+            const tags = Array.isArray(snippet.tags) && snippet.tags.length
+                ? `<div class="snippet-tags">${snippet.tags.map((tg) => `<span class="tag">#${escapeHtml(localizedTag(tg))}</span>`).join(' ')}</div>`
+                : '';
+
+            const comment = snippet.comment
+                ? `<div class="snippet-comment">💬 ${escapeHtml(snippet.comment)}</div>`
+                : '';
+
+            return `<div class="snippet-item">` +
+                `<div class="snippet-num">#${index + 1}</div>` +
+                body +
+                sourceLine +
+                tags +
+                comment +
+                `</div>`;
+        }).join('');
+
+        return buildWorkbenchExportDocument(
+            header + `<div class="snippets-list">${items}</div>`,
+            t('wb_export_snippets_title')
+        );
     }
 
     function resetWorkbenchConversation() {
@@ -2843,21 +2900,52 @@ h1,h2,h3,h4{margin-top:1.2em;margin-bottom:.6em}svg,img{max-width:100%;height:au
                     new Promise((resolve) => setTimeout(resolve, 800)),
                 ]).catch(() => {});
             }
+            // The reload will re-run restoreConversation(); persist the empty
+            // chat first so the cleared state survives the reload.
+            if (currentSession) {
+                await Store.setChat(currentSession, []).catch(() => {});
+            }
             window.location.reload();
             return;
         }
         resetWorkbenchConversation();
+        // resetWorkbenchConversation() only clears the in-memory state; the
+        // turns are still in storage and restoreConversation() would bring
+        // them back on the next open. Persist the empty conversation so a
+        // cleared chat stays cleared. (Done here rather than inside
+        // resetWorkbenchConversation because that helper also runs during
+        // session switches and Smart Read, where stored chat must be kept.)
+        if (currentSession) {
+            Store.setChat(currentSession, []).catch((e) => {
+                console.warn('[Weft] failed to persist cleared chat', e);
+            });
+        }
     });
 
     // Export
-    exportBtn.addEventListener('click', () => {
-        const content = lastExportableResult();
-        if (!content) {
+    exportBtn.addEventListener('click', async () => {
+        // The header Export button exports the current session's collected
+        // snippets (text/source/tags/comment). Each AI answer already has its
+        // own per-message Export button, so we don't duplicate that here.
+        if (!currentSession) {
             Citations.notify(t('wb_nothing_to_export'));
             return;
         }
-        const htmlDoc = buildWorkbenchExportDocument(staticExportFragment(content));
-        downloadHtmlFile(htmlDoc, `weft-export-${new Date().toISOString().slice(0, 10)}.html`);
+        let snippets = sessionSnippets;
+        try {
+            // Always export from the authoritative store copy so out-of-band
+            // edits (context menu, popup) are reflected even if the in-memory
+            // list hasn't refreshed yet.
+            snippets = await Store.getSession(currentSession);
+        } catch (e) {
+            console.warn('[Weft] failed to load snippets for export', e);
+        }
+        if (!snippets || snippets.length === 0) {
+            Citations.notify(t('wb_nothing_to_export'));
+            return;
+        }
+        const htmlDoc = buildSessionSnippetsDocument(snippets, currentSession);
+        downloadHtmlFile(htmlDoc, `weft-snippets-${currentSession || 'session'}-${new Date().toISOString().slice(0, 10)}.html`);
     });
 
     function applyExternalSessionChange(nextSession) {

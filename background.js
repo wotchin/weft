@@ -128,9 +128,17 @@ chrome.runtime.onInstalled.addListener((details) => {
     // Bring persisted data up to the current schema (idempotent).
     Store.migrate().catch((e) => console.warn('[Weft] migrate failed', e));
 
-    // First-run onboarding (also seeds a demo session).
-    if (details && details.reason === 'install') {
+    // First-run onboarding (also seeds a demo session). On install only,
+    // also pick a sane default provider: prefer Chrome built-in AI when the
+    // Prompt API is available (Chrome 138+), so a brand-new user can try the
+    // extension with zero configuration. Older builds fall back to the
+    // generic OpenAI-compatible custom provider so the user is prompted to
+    // paste a key in onboarding rather than silently using an OpenAI preset
+    // with an empty key (which would 401 on first run and look broken).
+    const firstRun = details && details.reason === 'install';
+    if (firstRun) {
         chrome.tabs.create({ url: chrome.runtime.getURL('onboarding.html') }).catch(() => {});
+        void Store.pickFirstRunProvider().catch((e) => console.warn('[Weft] default provider probe failed', e));
     }
 
     // 初始化右键菜单（静态项和会话项一起原子重建）

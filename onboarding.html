@@ -59,6 +59,7 @@
         .primary:hover { background: var(--weft-accent-hover); transform:translateY(-1px); }
         .ghost { background: #fff; color: #555; border-color: #ddd; }
         .ghost:hover { border-color: var(--weft-accent); color: var(--weft-accent-hover); }
+        .muted { color: var(--weft-muted); font-size: 13px; margin-top: 14px; }
         .kbd { display:inline-block; background:#f0f0f0; border:1px solid #ccc; border-radius:4px; padding:1px 6px; font-size:12px; font-family:monospace; }
     </style>
 </head>
@@ -79,9 +80,32 @@
 
         <div class="step" data-step="1">
             <h2 data-i18n="onboarding_connect_title">Connect a model</h2>
-            <p data-i18n="onboarding_connect_desc">Weft is bring-your-own-key. Pick a provider (OpenAI, Anthropic, Gemini, DeepSeek, Moonshot or local Ollama) and paste your key in Settings.</p>
-            <p data-i18n="onboarding_builtin_desc">No key handy? Choose Chrome Built-in AI to try summarize/rewrite with no key on Chrome 138+.</p>
-            <p style="margin-top:12px;"><button class="ghost" id="openSettings" data-i18n="onboarding_open_settings">Open Settings</button></p>
+
+            <!-- Shown only when chrome.runtime.onInstalled detected a usable
+                 LanguageModel API (Chrome 138+). User opts in/out of the
+                 on-device model download. -->
+            <div id="builtinConsent" hidden>
+                <!-- Two variants of the description; onboarding.js toggles
+                     based on LanguageModel.availability() at probe time:
+                       - readyDesc    : model already downloaded (status 'available')
+                       - downloadDesc : first chat triggers ~1GB+ download
+                     Default to downloadDesc when status is unknown (safer). -->
+                <p id="builtinDetectedReadyDesc" hidden data-i18n="onboarding_builtin_detected_ready_desc">Your browser has on-device AI ready to go — no API key needed for Weft's synthesis features. The model is already on this device.</p>
+                <p id="builtinDetectedDownloadDesc" data-i18n="onboarding_builtin_detected_download_desc">Your browser supports on-device AI. Enabling it lets you try Weft's synthesis features with no API key — a large model file (~1 GB or more) downloads automatically the first time you ask a question.</p>
+                <div class="btns" style="margin-top: 16px;">
+                    <button class="primary" id="useBuiltinBtn" data-i18n="onboarding_builtin_use_builtin">Use built-in AI</button>
+                    <button class="ghost" id="declineBuiltinBtn" data-i18n="onboarding_builtin_decline">I'll set up my own</button>
+                </div>
+                <p id="builtinChosen" class="muted" hidden data-i18n="onboarding_builtin_chosen">✓ Using Chrome built-in AI. You can change this later in Settings.</p>
+            </div>
+
+            <!-- Shown when either no built-in AI was detected, or the user
+                 declined the consent prompt. -->
+            <div id="manualConnect">
+                <p data-i18n="onboarding_connect_desc">Weft is bring-your-own-key. Pick a provider (OpenAI, Anthropic, Gemini, DeepSeek, Moonshot or local Ollama) and paste your key in Settings.</p>
+                <p data-i18n="onboarding_builtin_desc">No key handy? Choose Chrome Built-in AI to try summarize/rewrite with no key on Chrome 138+.</p>
+                <p style="margin-top:12px;"><button class="ghost" id="openSettings" data-i18n="onboarding_open_settings">Open Settings</button></p>
+            </div>
         </div>
 
         <div class="step" data-step="2">

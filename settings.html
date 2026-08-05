@@ -364,6 +364,15 @@
                 <div class="hint" data-i18n="settings_temperature_hint">0 = deterministic, higher = more creative (0-2)</div>
             </div>
             <div class="form-group">
+                <label for="reasoningMode" data-i18n="settings_reasoning">Reasoning (Thinking Mode)</label>
+                <select id="reasoningMode">
+                    <option value="auto" data-i18n="settings_reasoning_auto">Auto (off for known reasoning models)</option>
+                    <option value="off" data-i18n="settings_reasoning_off">Always off (faster, recommended)</option>
+                    <option value="on" data-i18n="settings_reasoning_on">Always on (slower, may exceed budget)</option>
+                </select>
+                <div class="hint" data-i18n="settings_reasoning_hint">Reasoning models (DeepSeek V4, Kimi K3) think before answering. Turning it off avoids spending your whole token budget on chain-of-thought; turning it on is slower but can improve hard problems.</div>
+            </div>
+            <div class="form-group">
                 <label for="visionMode" data-i18n="settings_vision">Vision (Image Understanding)</label>
                 <select id="visionMode">
                     <option value="auto" data-i18n="settings_vision_auto">Auto-detect (based on model name)</option>

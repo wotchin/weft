@@ -11,6 +11,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     const modelNameInput = document.getElementById('modelName');
     const maxTokensInput = document.getElementById('maxTokens');
     const temperatureInput = document.getElementById('temperature');
+    const reasoningModeSelect = document.getElementById('reasoningMode');
     const visionModeSelect = document.getElementById('visionMode');
     const ragEnabledInput = document.getElementById('ragEnabled');
     const ragTokenBudgetInput = document.getElementById('ragTokenBudget');
@@ -104,6 +105,10 @@ document.addEventListener('DOMContentLoaded', async () => {
     rebuildLanguageOptions(uiLanguage || 'auto');
     rebuildProviderOptions();
 
+    function normalizeReasoning(v) {
+        return v === 'on' || v === 'off' ? v : 'auto';
+    }
+
     // Normalize legacy vision values to the new vocabulary
     function normalizeVision(v) {
         if (v === 'enabled') return 'on';
@@ -160,6 +165,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     modelNameInput.value = cfg.model || '';
     maxTokensInput.value = cfg.maxTokens || 2000;
     temperatureInput.value = cfg.temperature != null ? cfg.temperature : 0.7;
+    reasoningModeSelect.value = normalizeReasoning(cfg.reasoning);
     visionModeSelect.value = normalizeVision(cfg.visionMode);
     ragEnabledInput.checked = !!ragEnabled;
     ragTokenBudgetInput.value = ragTokenBudget || 12000;
@@ -191,6 +197,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             model: modelNameInput.value.trim() || p.defaultModel,
             maxTokens: parseInt(maxTokensInput.value, 10) || 2000,
             temperature: isNaN(temperature) ? 0.7 : temperature,
+            reasoning: normalizeReasoning(reasoningModeSelect.value),
             visionMode: visionModeSelect.value || 'auto',
         };
     }
@@ -315,6 +322,10 @@ document.addEventListener('DOMContentLoaded', async () => {
             if (result.ok) {
                 showStatus('settings_connection_success', 'success');
             } else {
+                // Surface raw provider metadata (finish_reason, usage, etc.)
+                // to the console so the user can paste it back without us
+                // having to write a separate diagnostic UI.
+                console.warn('[Weft] Connection test failed. Raw result:', result);
                 showStatus('settings_connection_failed_detail', 'error', {
                     detail: () => localizeLlmError(result),
                 });

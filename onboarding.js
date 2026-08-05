@@ -57,5 +57,80 @@
         chrome.tabs.create({ url: chrome.runtime.getURL('settings.html') });
     });
 
+    // ── First-run provider consent (step 1) ────────────────────────────
+    // background.js has already probed LanguageModel.availability() and
+    // written either 'builtin' (Chrome 138+ on-device AI available) or
+    // 'custom' (fallback). This block reconciles the step-1 UI with that
+    // choice and lets the user opt in/out of the ~1.5 GB model download.
+    const builtinConsent = document.getElementById('builtinConsent');
+    const manualConnect = document.getElementById('manualConnect');
+    const useBuiltinBtn = document.getElementById('useBuiltinBtn');
+    const declineBuiltinBtn = document.getElementById('declineBuiltinBtn');
+    const builtinChosen = document.getElementById('builtinChosen');
+
+    let detectedProvider = 'custom';
+    let builtinModelStatus = '';
+    try {
+        const cfg = await Store.getLlmConfig();
+        detectedProvider = cfg.provider || 'custom';
+        builtinModelStatus = cfg.builtinModelStatus || '';
+    } catch (e) {
+        console.warn('[Weft] could not read llm config in onboarding', e);
+    }
+
+    // Show the consent card only when the probe selected 'builtin'. The
+    // other branches (custom fallback, or prior-install user with their
+    // own provider already selected) get the standard manual-setup copy.
+    if (detectedProvider === 'builtin') {
+        builtinConsent.hidden = false;
+        manualConnect.hidden = true;
+        // Switch the description based on whether the on-device model is
+        // already downloaded (LanguageModel.availability() === 'available')
+        // or whether the first chat will trigger a multi-GB download
+        // (=== 'downloadable'). Falls back to the download variant when
+        // the status is missing or unrecognized — being transparent about
+        // a possible large download is the safer default.
+        const readyDesc = document.getElementById('builtinDetectedReadyDesc');
+        const downloadDesc = document.getElementById('builtinDetectedDownloadDesc');
+        if (builtinModelStatus === 'available') {
+            if (readyDesc) readyDesc.hidden = false;
+            if (downloadDesc) downloadDesc.hidden = true;
+        } else {
+            if (readyDesc) readyDesc.hidden = true;
+            if (downloadDesc) downloadDesc.hidden = false;
+        }
+    } else {
+        builtinConsent.hidden = true;
+        manualConnect.hidden = false;
+    }
+
+    // Confirm built-in AI: leave the config as-is (already 'builtin'),
+    // collapse the prompt, and show a one-line confirmation so the user
+    // sees the decision was applied.
+    useBuiltinBtn.addEventListener('click', () => {
+        useBuiltinBtn.hidden = true;
+        declineBuiltinBtn.hidden = true;
+        builtinChosen.hidden = false;
+    });
+
+    // Decline: switch to the generic OpenAI-compatible custom provider with
+    // blank fields and send the user to Settings to pick a real endpoint +
+    // key. Better than silently leaving builtin-as-default after a decline.
+    declineBuiltinBtn.addEventListener('click', async () => {
+        try {
+            await Store.setLlmConfig({
+                provider: 'custom',
+                apiKey: '',
+                baseUrl: '',
+                model: '',
+            });
+        } catch (e) {
+            console.warn('[Weft] failed to reset provider to custom', e);
+        }
+        builtinConsent.hidden = true;
+        manualConnect.hidden = false;
+        chrome.tabs.create({ url: chrome.runtime.getURL('settings.html') });
+    });
+
     render();
 })();
