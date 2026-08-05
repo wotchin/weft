@@ -47,6 +47,19 @@
         .asset-branching { -webkit-mask-image: url('assets/others/branching.svg'); mask-image: url('assets/others/branching.svg'); }
         .flow-item .t { font-weight: 600; font-size: 13px; margin-top: 6px; }
         .flow-item .d { font-size: 12px; color: #777; margin-top: 4px; }
+        /* Demo video: only on the first (flow) step. Sits below the
+          Collect/Synthesize/Trace cards so users see the conceptual
+          flow first, then watch it in action. Loads lazily — browsers
+          fetch metadata (for the poster/duration) but only stream the
+          clip once playback starts. */
+        .demo-wrap { margin: 18px 0 8px; text-align: left; }
+        .demo-wrap .demo-label { font-size: 12px; color: var(--weft-muted); margin-bottom: 6px; font-weight: 500; }
+        .demo-wrap video {
+            width: 100%; border-radius: 10px; border: 1px solid var(--weft-line);
+            background: #000; display: block; max-height: 320px; object-fit: contain;
+        }
+        .demo-wrap .demo-fallback { font-size: 12px; color: var(--weft-muted); margin-top: 6px; }
+        .demo-wrap .demo-fallback a { color: var(--weft-accent); }
         .dots { display: flex; gap: 8px; justify-content: center; margin: 24px 0 20px; }
         .dot { width: 8px; height: 8px; border-radius: 50%; background: #d0d7e2; }
         .dot.active { background: var(--weft-accent); }
@@ -76,6 +89,20 @@
                 <div class="flow-item"><div class="ico"><img src="assets/icon.svg" alt=""></div><div class="t" data-i18n="onboarding_trace_title">Trace</div><div class="d" data-i18n="onboarding_trace_desc">Every claim links back to its exact source passage.</div></div>
             </div>
             <p data-i18n="onboarding_demo_ready">A demo session has been added so you can try the scenarios right away.</p>
+            <!-- Demo video: plays the same clip linked in README so users get
+                 a fast preview of collecting, synthesizing and tracing before
+                 configuring any model. -->
+            <div class="demo-wrap">
+                <div class="demo-label" data-i18n="onboarding_demo_video_title">Quick demo</div>
+                <video src="assets/3.0.2-beta-demo.mp4" controls preload="metadata"
+                       data-i18n-aria-label="onboarding_demo_video_title"
+                       aria-label="Quick demo"></video>
+                <!-- The fallback stays as static markup; the localized
+                     prefix and the link text are applied via separate
+                     data-i18n attributes so lib/i18n.js (which uses
+                     textContent for [data-i18n]) never has to inject HTML. -->
+                <div class="demo-fallback"><span data-i18n="onboarding_demo_video_fallback_prefix">Can't play?</span> <a href="assets/3.0.2-beta-demo.mp4" data-i18n="onboarding_demo_video_download_link">download the video</a>.</div>
+            </div>
         </div>
 
         <div class="step" data-step="1">

@@ -839,6 +839,15 @@
   "onboarding_demo_ready": {
     "message": "已添加演示会话，你可以立即体验各个场景。"
   },
+  "onboarding_demo_video_title": {
+    "message": "快速演示"
+  },
+  "onboarding_demo_video_fallback_prefix": {
+    "message": "无法播放？"
+  },
+  "onboarding_demo_video_download_link": {
+    "message": "直接下载该视频"
+  },
   "onboarding_connect_title": {
     "message": "连接模型"
   },

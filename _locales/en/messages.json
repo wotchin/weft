@@ -839,6 +839,15 @@
   "onboarding_demo_ready": {
     "message": "A demo session has been added so you can try the scenarios right away."
   },
+  "onboarding_demo_video_title": {
+    "message": "Quick demo"
+  },
+  "onboarding_demo_video_fallback_prefix": {
+    "message": "Can't play?"
+  },
+  "onboarding_demo_video_download_link": {
+    "message": "download the video"
+  },
   "onboarding_connect_title": {
     "message": "Connect a model"
   },

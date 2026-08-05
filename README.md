@@ -94,6 +94,17 @@ flowchart LR
 4. **Deep Search** — start from a Session question, review & approve the search plan, then prepend web excerpts.
 5. **Trace** — click any citation to open its source passage or external link.
 
+### 🎬 Quick demo
+
+<p align="center">
+  <video src="assets/3.0.2-beta-demo.mp4" controls preload="metadata" width="720" alt="Weft 3.0.2 beta demo">
+    Your browser does not support the video tag. You can download the demo directly:
+    <a href="assets/3.0.2-beta-demo.mp4">3.0.2-beta-demo.mp4</a>.
+  </video>
+</p>
+
+> The installer also embeds this clip on the welcome page so new users can watch the core flow before configuring anything.
+
 ## 🚀 Install
 
 ### Option A — Store (recommended when available)
@@ -167,9 +178,6 @@ No. Snippets and your key stay in `chrome.storage.local` / IndexedDB. The only t
 
 **Can I use this without an API key?**
 Yes — pick **Ollama** (local LLM) or **Chrome built-in AI** (on-device) in Settings. Nothing leaves your machine.
-
-**Why Manifest V3?**
-It's the current Chrome extension standard. Weft's service worker (`background.js`) is MV3-native.
 
 **Does it work in Firefox / Edge?**
 Currently Chrome/Chromium-only. We track MV3 cross-browser compatibility and will add Edge/Firefox when their side-panel APIs stabilize.

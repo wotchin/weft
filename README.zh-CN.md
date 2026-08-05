@@ -57,7 +57,16 @@ flowchart LR
 4. 证据不足时对问题跑 Deep Search，审完搜索方案后补充网页片段。
 5. 回答中的任何引用标记都可点击跳转到来源。
 
-## 🚀 安装
+### 🎬 快速演示
+
+<p align="center">
+  <video src="assets/3.0.2-beta-demo.mp4" controls preload="metadata" width="720" alt="Weft 3.0.2 beta 演示">
+    你的浏览器不支持 video 标签。可直接下载演示：
+    <a href="assets/3.0.2-beta-demo.mp4">3.0.2-beta-demo.mp4</a>。
+  </video>
+</p>
+
+> 安装时引导页（onboarding）也会嵌入这段视频，让新用户在不配置任何东西前先看到核心流程。
 
 ### 方式 A — Chrome 应用商店（上线后）
 
