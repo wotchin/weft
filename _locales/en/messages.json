@@ -894,34 +894,43 @@
     "message": "Get started"
   },
   "onboarding_demo_session": {
-    "message": "Demo · Electric vehicles"
+    "message": "Demo · Weft"
   },
-  "onboarding_demo_sales_content": {
-    "message": "Global EV sales passed 14 million units in 2023, roughly 18% of all new cars sold worldwide."
+  "onboarding_demo_source_url": {
+    "message": "https://github.com/wotchin/weft"
   },
-  "onboarding_demo_sales_source": {
-    "message": "Global EV Outlook"
+  "onboarding_demo_source_title": {
+    "message": "Weft — AI-powered Chrome extension for traceable data collection and synthesis"
   },
-  "onboarding_demo_tag_stats": {
-    "message": "stats"
+  "onboarding_demo_snippet_1_content": {
+    "message": "Every synthesized fact carries a citation marker back to the exact snippet and source page. [S#] points to a passage you saved; [W#] points to a verified web-search excerpt. Click any marker to jump straight to the source."
   },
-  "onboarding_demo_china_content": {
-    "message": "China accounted for about 60% of global EV sales in 2023, driven by aggressive pricing and dense charging infrastructure."
+  "onboarding_demo_snippet_1_comment": {
+    "message": "Traceable by design: Weft ensures every synthesized claim is traceable to its exact source passage, with citation markers [S#] and [W#] that link back to the original snippet or web excerpt."
   },
-  "onboarding_demo_china_source": {
-    "message": "China EV Market Note"
+  "onboarding_demo_snippet_2_content": {
+    "message": "Every synthesized claim is traceable back to its exact source passage."
   },
-  "onboarding_demo_tag_market": {
-    "message": "market"
+  "onboarding_demo_snippet_2_comment": {
+    "message": "Traceable by design: Weft ensures every synthesized claim is traceable to its exact source passage, with citation markers [S#] and [W#] that link back to the original snippet or web excerpt."
   },
-  "onboarding_demo_caution_content": {
-    "message": "Some analysts caution that EV growth may slow where charging access lags and subsidies are being phased out."
+  "onboarding_demo_snippet_3_content": {
+    "message": "A Session is your curated research scope. Ask questions across what you intentionally saved, then extend it via Deep Search to find primary sources, counterpoints, and updates. Weft never silently promotes the active tab into scope."
   },
-  "onboarding_demo_caution_source": {
-    "message": "A More Cautious View"
+  "onboarding_demo_snippet_3_comment": {
+    "message": "Session-first research with human-in-the-loop Deep Search: Weft uses user-curated Sessions as the research scope, and Deep Search proposes an evidence-gap plan that the user reviews before running, ensuring external evidence supplements rather than replaces saved snippets."
   },
-  "onboarding_demo_tag_counterpoint": {
-    "message": "counterpoint"
+  "onboarding_demo_snippet_4_content": {
+    "message": "Weft proposes an evidence-gap search plan from your question — you review or edit the queries before they run. External excerpts are appended as [W#], alongside your [S#] Session evidence, never replacing it."
+  },
+  "onboarding_demo_snippet_4_comment": {
+    "message": "Session-first research with human-in-the-loop Deep Search: Weft uses user-curated Sessions as the research scope, and Deep Search proposes an evidence-gap plan that the user reviews before running, ensuring external evidence supplements rather than replaces saved snippets."
+  },
+  "onboarding_demo_snippet_5_content": {
+    "message": "Every quoted passage is checked against the rendered source before it is saved, so hallucinated evidence is silently dropped. On link-heavy pages, tell Weft what matters first and it shortlists only the visible, relevant links."
+  },
+  "onboarding_demo_snippet_5_comment": {
+    "message": "Source-verified extraction in Smart Read: Smart Read checks every quoted passage against the rendered source before saving, dropping hallucinated evidence, and on link-heavy pages it shortlists only visible, relevant links."
   },
   "popup_kicker": {
     "message": "Research workspace"

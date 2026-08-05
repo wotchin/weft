@@ -894,34 +894,43 @@
     "message": "开始使用"
   },
   "onboarding_demo_session": {
-    "message": "演示 · 电动汽车"
+    "message": "演示 · Weft"
   },
-  "onboarding_demo_sales_content": {
-    "message": "2023 年全球电动汽车销量超过 1,400 万辆，约占全球新车销量的 18%。"
+  "onboarding_demo_source_url": {
+    "message": "https://github.com/wotchin/weft"
   },
-  "onboarding_demo_sales_source": {
-    "message": "全球电动车展望"
+  "onboarding_demo_source_title": {
+    "message": "Weft — AI 驱动的 Chrome 插件：可溯源的数据采集与综合"
   },
-  "onboarding_demo_tag_stats": {
-    "message": "数据"
+  "onboarding_demo_snippet_1_content": {
+    "message": "每条综合结论都带有引用标记，可回溯到确切的片段与来源页面。[S#] 指向你保存的原文片段；[W#] 指向经过核验的网页检索片段。点击任意标记即可跳转到来源。"
   },
-  "onboarding_demo_china_content": {
-    "message": "2023 年中国约占全球电动汽车销量的 60%，这得益于积极的定价和密集的充电基础设施。"
+  "onboarding_demo_snippet_1_comment": {
+    "message": "Design for traceability（设计即溯源）：Weft 保证每条综合结论都可回溯到确切的原文片段，通过 [S#] 与 [W#] 标记链接回原始片段或网页依据。"
   },
-  "onboarding_demo_china_source": {
-    "message": "中国电动汽车市场简报"
+  "onboarding_demo_snippet_2_content": {
+    "message": "每条综合结论都可回溯到准确的原文片段。"
   },
-  "onboarding_demo_tag_market": {
-    "message": "市场"
+  "onboarding_demo_snippet_2_comment": {
+    "message": "Design for traceability（设计即溯源）：Weft 保证每条综合结论都可回溯到确切的原文片段，通过 [S#] 与 [W#] 标记链接回原始片段或网页依据。"
   },
-  "onboarding_demo_caution_content": {
-    "message": "一些分析师警告，在充电设施不足且补贴逐步退出的市场，电动汽车增长可能放缓。"
+  "onboarding_demo_snippet_3_content": {
+    "message": "Session 是你精心策划的研究范围。在你的已存片段上提问，再通过 Deep Search 补充原始来源、反方观点与最新进展。Weft 绝不会把当前标签页静默地当作研究主题。"
   },
-  "onboarding_demo_caution_source": {
-    "message": "更谨慎的观点"
+  "onboarding_demo_snippet_3_comment": {
+    "message": "Session-first 研究与人审 Deep Search：Weft 以用户策划的 Session 为回答边界；Deep Search 先生成「证据缺口」方案供用户在执行前审阅，确保外部证据是补充而非取代已存片段。"
   },
-  "onboarding_demo_tag_counterpoint": {
-    "message": "反方观点"
+  "onboarding_demo_snippet_4_content": {
+    "message": "Weft 根据你的问题提出一份「证据缺口」搜索方案——你可以审阅或修改检索词后再执行。检索结果以 [W#] 加入，与你的 [S#] Session 证据并列，永不取代。"
+  },
+  "onboarding_demo_snippet_4_comment": {
+    "message": "Session-first 研究与人审 Deep Search：Weft 以用户策划的 Session 为回答边界；Deep Search 先生成「证据缺口」方案供用户在执行前审阅，确保外部证据是补充而非取代已存片段。"
+  },
+  "onboarding_demo_snippet_5_content": {
+    "message": "每条引用摘录在保存前都会反查渲染后的源文，因此幻觉证据会被静默丢弃。在链接密集的页面上，先告诉 Weft 你关心什么，它会仅挑出可见且相关的链接。"
+  },
+  "onboarding_demo_snippet_5_comment": {
+    "message": "Smart Read 的来源校验抽取：Smart Read 在保存每条引用摘录前都会反查渲染后的源文，丢弃幻觉证据；在链接密集的页面上，它只挑出可见且相关的链接。"
   },
   "popup_kicker": {
     "message": "研究工作区"

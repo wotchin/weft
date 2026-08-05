@@ -6,26 +6,50 @@
     I18N.apply();
 
     // Seed a demo session so the scenarios are explorable without collecting first.
+    // The seed content is intentionally about Weft itself: every new snippet
+    // doubles as a feature vignette (traceability, Sessions, Deep Search,
+    // Smart Read), so the demo also reads like documentation.
     try {
         const now = Date.now();
+        const sharedSource = {
+            sourceUrl: t('onboarding_demo_source_url'),
+            sourceTitle: t('onboarding_demo_source_title'),
+        };
         const demo = [
             {
                 id: 'demo-1', type: 'text',
-                content: t('onboarding_demo_sales_content'),
-                sourceUrl: 'https://example.com/ev-report', sourceTitle: t('onboarding_demo_sales_source'),
-                timestamp: now, tags: ['stats'],
+                content: t('onboarding_demo_snippet_1_content'),
+                ...sharedSource,
+                timestamp: now, tags: ['key-point', 'smart-read'],
+                comment: t('onboarding_demo_snippet_1_comment'),
             },
             {
                 id: 'demo-2', type: 'text',
-                content: t('onboarding_demo_china_content'),
-                sourceUrl: 'https://example.com/china-ev', sourceTitle: t('onboarding_demo_china_source'),
-                timestamp: now + 1, tags: ['market'],
+                content: t('onboarding_demo_snippet_2_content'),
+                ...sharedSource,
+                timestamp: now + 1, tags: ['key-point', 'smart-read'],
+                comment: t('onboarding_demo_snippet_2_comment'),
             },
             {
                 id: 'demo-3', type: 'text',
-                content: t('onboarding_demo_caution_content'),
-                sourceUrl: 'https://example.com/ev-skeptic', sourceTitle: t('onboarding_demo_caution_source'),
-                timestamp: now + 2, tags: ['counterpoint'],
+                content: t('onboarding_demo_snippet_3_content'),
+                ...sharedSource,
+                timestamp: now + 2, tags: ['key-point', 'smart-read'],
+                comment: t('onboarding_demo_snippet_3_comment'),
+            },
+            {
+                id: 'demo-4', type: 'text',
+                content: t('onboarding_demo_snippet_4_content'),
+                ...sharedSource,
+                timestamp: now + 3, tags: ['key-point', 'smart-read'],
+                comment: t('onboarding_demo_snippet_4_comment'),
+            },
+            {
+                id: 'demo-5', type: 'text',
+                content: t('onboarding_demo_snippet_5_content'),
+                ...sharedSource,
+                timestamp: now + 4, tags: ['key-point', 'smart-read'],
+                comment: t('onboarding_demo_snippet_5_comment'),
             },
         ];
         await Store.createSessionIfMissing(t('onboarding_demo_session'), demo, { activate: true });
