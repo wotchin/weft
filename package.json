@@ -8,7 +8,8 @@
   "scripts": {
     "lint": "eslint .",
     "format": "prettier --write \"**/*.{js,json,css,html,md}\"",
-    "validate": "node scripts/validate-manifest.mjs && node scripts/package-files.mjs --check",
+    "vendor:pdfjs": "node scripts/vendor-pdfjs.mjs",
+    "validate": "node scripts/validate-manifest.mjs && node scripts/validate-pdfjs.mjs && node scripts/package-files.mjs --check",
     "test": "node test/unit.mjs && node scripts/check-i18n.mjs",
     "test:i18n": "node scripts/check-i18n.mjs",
     "pack": "node scripts/pack.mjs",
@@ -16,6 +17,7 @@
   },
   "devDependencies": {
     "eslint": "^9.0.0",
+    "pdfjs-dist": "6.2.108",
     "prettier": "^3.0.0"
   }
 }

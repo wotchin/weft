@@ -150,7 +150,11 @@ const ctx = makeContext();
 
 await load(
     ctx,
-    ['lib/providers.js', 'lib/store.js', 'lib/llm-client.js', 'lib/smart-read.js', 'lib/page-extractor.js', 'markdown.js', 'lib/citations.js'],
+    [
+        'lib/providers.js', 'lib/store.js', 'lib/llm-client.js',
+        'lib/source-utils.js', 'lib/smart-read.js', 'lib/pdf-extractor.js',
+        'lib/page-extractor.js', 'markdown.js', 'lib/citations.js',
+    ],
     `(async () => {
         globalThis.__run = async (report) => {
             const store = __store;
@@ -266,6 +270,53 @@ await load(
             );
             report('smart read: restore never mixes a different analysis key',
                 wrongKeyRestore.takeaways.length === 0);
+
+            const pdfPage = {
+                title: 'Annual filing',
+                url: 'https://example.com/report.pdf?download=0',
+                pageType: 'article',
+                documentType: 'pdf',
+                pageCount: 12,
+                blocks: [{
+                    id: 'pdf-p7-b1', tag: 'p', pageNumber: 7,
+                    text: 'PDF evidence reports revenue growth of twelve percent year over year.',
+                }],
+            };
+            const checkedPdf = SmartRead.validateArticleAnalysis({
+                sessionTitle: 'Annual filing', topic: 'Financial performance',
+                takeaways: [{
+                    title: 'Revenue expanded', summary: 'Growth remained positive.',
+                    evidence: [{
+                        blockId: 'pdf-p7-b1',
+                        quote: 'revenue growth of twelve percent',
+                        kind: 'data',
+                    }],
+                }],
+            }, pdfPage);
+            const pdfSnippets = SmartRead.buildArticleSnippets(checkedPdf, pdfPage, {
+                runId: 'pdf-run', smartReadKey: 'pdf-key', timestamp: 456,
+            });
+            const restoredPdf = SmartRead.restoreAnalysisFromSnippets(
+                pdfSnippets, 'article', { smartReadKey: 'pdf-key' }
+            );
+            report('smart read PDF: verified evidence retains page metadata',
+                checkedPdf.takeaways[0].evidence[0].pageNumber === 7 &&
+                pdfSnippets[0].sourceDocumentType === 'pdf' &&
+                pdfSnippets[0].sourcePageNumber === 7 &&
+                pdfSnippets[0].sourcePageCount === 12 &&
+                pdfSnippets[0].tags.includes('pdf') &&
+                restoredPdf.takeaways[0].evidence[0].pageNumber === 7);
+            report('source routing: PDF sources replace fragments with an exact page',
+                SourceUtils.annotationSourceUrl({
+                    ...pdfSnippets[0], sourceUrl: 'https://example.com/report.pdf?download=0#page=99',
+                }) === 'https://example.com/report.pdf?download=0#page=7' &&
+                SourceUtils.isLikelyPdfUrl('https://example.com/REPORT.PDF?download=0') &&
+                SourceUtils.isLikelyPdfUrl('https://example.com/export?id=1&format=pdf') &&
+                SourceUtils.isLikelyPdfUrl('https://example.com/export', 'Filing.pdf (12 pages)') &&
+                !SourceUtils.isPdfSnippet({
+                    sourceUrl: 'https://example.com/article', sourcePageNumber: 3,
+                }) &&
+                !SourceUtils.isLikelyPdfUrl('https://example.com/pdf.html'));
 
             const indexPage = {
                 title: 'News home', url: 'https://example.com/', blocks: [],
@@ -417,12 +468,20 @@ await load(
             const snips = [
                 { id: 'a', type: 'text', content: 'Alpha', sourceTitle: 'Src A', sourceUrl: 'https://a' },
                 { id: 'b', type: 'text', content: 'Beta',  sourceTitle: 'Src B', sourceUrl: 'https://b' },
+                {
+                    id: 'c', type: 'text', content: 'Gamma', sourceTitle: 'Filing',
+                    sourceUrl: 'https://example.com/filing.pdf?download=1',
+                    sourceDocumentType: 'pdf', sourcePageNumber: 9,
+                },
             ];
             const { contextText, indexMap } = Citations.buildContext(snips);
             report('citations: context numbered [S1]/[S2]',
                 /\\[S1\\]/.test(contextText) && /\\[S2\\]/.test(contextText));
             report('citations: indexMap maps to snippet ids',
                 indexMap.S1.id === 'a' && indexMap.S2.id === 'b');
+            report('citations: PDF context and index map retain the exact page',
+                contextText.includes('Filing (PDF page 9)') &&
+                indexMap.S3.url === 'https://example.com/filing.pdf?download=1#page=9');
             const dec = Citations.decorate('one [S1] two [S2][S9].', indexMap);
             report('citations: known marker becomes a chip',
                 /weft-cite/.test(dec) && /data-snippet-id="a"/.test(dec));
@@ -460,6 +519,399 @@ await load(
 );
 
 await ctx.__run((name, cond, extra) => ok(name, cond, extra));
+
+// PDF extraction stays offline and deterministic here: a fake PDF.js document
+// exercises the adapter while byte validation, limits, cleanup, and page
+// metadata still run through the production implementation.
+const pdfContext = makeContext();
+pdfContext.chrome.runtime = {
+    getURL: (path) => `chrome-extension://weft-test/${path}`,
+};
+load(pdfContext, ['lib/source-utils.js', 'lib/pdf-extractor.js'],
+    'globalThis.__pdfApi = PDFExtractor;');
+
+const pdfBytes = new TextEncoder().encode('%PDF-1.7\n% fake unit-test document');
+function fakeHeaders(values = {}) {
+    const normalized = Object.fromEntries(
+        Object.entries(values).map(([key, value]) => [key.toLowerCase(), String(value)])
+    );
+    return { get: (name) => normalized[String(name).toLowerCase()] || '' };
+}
+function bufferedPdfResponse(bytes = pdfBytes, headers = {}) {
+    const view = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
+    return {
+        ok: true,
+        status: 200,
+        headers: fakeHeaders(headers),
+        body: null,
+        async arrayBuffer() {
+            return view.buffer.slice(view.byteOffset, view.byteOffset + view.byteLength);
+        },
+    };
+}
+function fakeTextItem(str, y, hasEOL = false) {
+    return { str, hasEOL, height: 10, transform: [1, 0, 0, 10, 0, y] };
+}
+
+let pdfLoadingTaskDestroyed = 0;
+let pdfPagesCleaned = 0;
+let capturedPdfJsOptions = null;
+const fakePdfjs = {
+    getDocument(options) {
+        capturedPdfJsOptions = options;
+        return {
+            promise: Promise.resolve({
+                numPages: 3,
+                async getMetadata() { return { info: { Title: 'Quarterly Results' } }; },
+                async getPage(pageNumber) {
+                    const items = pageNumber === 1
+                        ? [fakeTextItem('Revenue', 100), fakeTextItem('grew 12 percent.', 100, true)]
+                        : pageNumber === 3
+                            ? [fakeTextItem('Outlook remains positive for the next fiscal year.', 90, true)]
+                            : [];
+                    return {
+                        async getTextContent() { return { items }; },
+                        cleanup() { pdfPagesCleaned++; },
+                    };
+                },
+            }),
+            async destroy() { pdfLoadingTaskDestroyed++; },
+        };
+    },
+};
+const pdfProgress = [];
+const extractedPdf = await pdfContext.__pdfApi.extractFromUrl(
+    'https://example.com/download?id=42#page=2',
+    {
+        fetchImpl: async () => bufferedPdfResponse(),
+        pdfjs: fakePdfjs,
+        minTextChars: 10,
+        onProgress: (event) => pdfProgress.push(event),
+        sourceTitle: 'download.pdf',
+    }
+);
+ok('PDF extractor: extensionless PDF produces stable page-aware blocks',
+    extractedPdf.documentType === 'pdf' && extractedPdf.pageCount === 3 &&
+    extractedPdf.url === 'https://example.com/download?id=42' &&
+    extractedPdf.blocks.length === 2 &&
+    extractedPdf.blocks[0].id === 'pdf-p1-b1' && extractedPdf.blocks[0].pageNumber === 1 &&
+    extractedPdf.blocks[1].id === 'pdf-p3-b1' && extractedPdf.blocks[1].pageNumber === 3 &&
+    extractedPdf.blocks[0].text === 'Revenue grew 12 percent.');
+ok('PDF extractor: document metadata wins and local worker resources are configured',
+    extractedPdf.title === 'Quarterly Results' &&
+    capturedPdfJsOptions?.docBaseUrl === 'https://example.com/download?id=42' &&
+    ArrayBuffer.isView(capturedPdfJsOptions?.data) &&
+    capturedPdfJsOptions?.data?.BYTES_PER_ELEMENT === 1 &&
+    capturedPdfJsOptions?.cMapUrl.endsWith('/lib/vendor/pdfjs/cmaps/') &&
+    capturedPdfJsOptions?.standardFontDataUrl.endsWith('/lib/vendor/pdfjs/standard_fonts/') &&
+    capturedPdfJsOptions?.useWasm === false && capturedPdfJsOptions?.useWorkerFetch === false);
+ok('PDF extractor: every page is cleaned and the loading task is destroyed',
+    pdfPagesCleaned === 3 && pdfLoadingTaskDestroyed === 1 &&
+    pdfProgress.filter((event) => event.phase === 'parse').length === 3);
+
+let dedicatedPortTerminated = 0;
+let dedicatedPdfWorkerDestroyed = 0;
+let dedicatedWorkerWasPassed = false;
+const dedicatedPort = {
+    postMessage() {},
+    terminate() { dedicatedPortTerminated++; },
+};
+class FakeDedicatedPdfWorker {
+    constructor({ port }) {
+        this.port = port;
+        this.promise = Promise.resolve();
+    }
+    destroy() { dedicatedPdfWorkerDestroyed++; }
+}
+const dedicatedPdfjs = {
+    PDFWorker: FakeDedicatedPdfWorker,
+    getDocument(options) {
+        dedicatedWorkerWasPassed = options.worker instanceof FakeDedicatedPdfWorker;
+        return fakePdfjs.getDocument(options);
+    },
+};
+await pdfContext.__pdfApi.extractFromUrl('https://example.com/isolated.pdf', {
+    fetchImpl: async () => bufferedPdfResponse(),
+    pdfjs: dedicatedPdfjs,
+    workerFactory: () => dedicatedPort,
+    minTextChars: 10,
+});
+ok('PDF extractor: an explicit module worker prevents PDF.js fake-worker fallback',
+    dedicatedWorkerWasPassed && dedicatedPortTerminated === 1 &&
+    dedicatedPdfWorkerDestroyed === 1);
+
+let signalLoadingStarted;
+const loadingStarted = new Promise((resolve) => { signalLoadingStarted = resolve; });
+let abortedLoadingTaskDestroyed = 0;
+let abortedWorkerTerminated = 0;
+const abortDuringParseController = new AbortController();
+const stalledPdfjs = {
+    PDFWorker: FakeDedicatedPdfWorker,
+    getDocument() {
+        signalLoadingStarted();
+        return {
+            promise: new Promise(() => {}),
+            async destroy() { abortedLoadingTaskDestroyed++; },
+        };
+    },
+};
+const stalledExtraction = pdfContext.__pdfApi.extractFromUrl('https://example.com/stalled.pdf', {
+    fetchImpl: async () => bufferedPdfResponse(),
+    pdfjs: stalledPdfjs,
+    workerFactory: () => ({
+        postMessage() {},
+        terminate() { abortedWorkerTerminated++; },
+    }),
+    signal: abortDuringParseController.signal,
+});
+await loadingStarted;
+abortDuringParseController.abort();
+let abortDuringParseError = null;
+try { await stalledExtraction; } catch (error) { abortDuringParseError = error; }
+ok('PDF extractor: abort breaks a stalled PDF.js promise and releases its worker',
+    abortDuringParseError?.code === 'PDF_ABORTED' &&
+    abortedLoadingTaskDestroyed === 1 && abortedWorkerTerminated === 1);
+
+let declaredBodyReads = 0;
+let declaredLimitError = null;
+try {
+    await pdfContext.__pdfApi.extractFromUrl('https://example.com/large.pdf', {
+        maxBytes: 8,
+        fetchImpl: async () => ({
+            ...bufferedPdfResponse(pdfBytes, { 'content-length': '999' }),
+            async arrayBuffer() { declaredBodyReads++; return pdfBytes.buffer; },
+        }),
+        pdfjs: fakePdfjs,
+    });
+} catch (error) { declaredLimitError = error; }
+ok('PDF extractor: declared oversize PDF is rejected before reading its body',
+    declaredLimitError?.code === 'PDF_TOO_LARGE' && declaredBodyReads === 0);
+
+let streamCancelled = 0;
+let streamedLimitError = null;
+try {
+    let readIndex = 0;
+    await pdfContext.__pdfApi.extractFromUrl('https://example.com/stream.pdf', {
+        maxBytes: 8,
+        fetchImpl: async () => ({
+            ok: true,
+            status: 200,
+            headers: fakeHeaders(),
+            body: {
+                getReader() {
+                    const chunks = [
+                        new TextEncoder().encode('%PDF-'),
+                        new TextEncoder().encode('12345'),
+                    ];
+                    return {
+                        async read() {
+                            return readIndex < chunks.length
+                                ? { done: false, value: chunks[readIndex++] }
+                                : { done: true };
+                        },
+                        async cancel() { streamCancelled++; },
+                    };
+                },
+            },
+        }),
+        pdfjs: fakePdfjs,
+    });
+} catch (error) { streamedLimitError = error; }
+ok('PDF extractor: streaming byte limit cancels the response reader',
+    streamedLimitError?.code === 'PDF_TOO_LARGE' && streamCancelled === 1);
+
+let nonPdfReads = 0;
+let nonPdfCancelled = 0;
+let earlyNonPdfError = null;
+try {
+    const nonPdfChunks = [
+        new TextEncoder().encode('<html>' + 'x'.repeat(1100)),
+        new Uint8Array(1024 * 1024),
+    ];
+    await pdfContext.__pdfApi.extractFromUrl('https://example.com/small-page', {
+        fetchImpl: async () => ({
+            ok: true,
+            status: 200,
+            headers: fakeHeaders(),
+            body: {
+                getReader() {
+                    return {
+                        async read() {
+                            const value = nonPdfChunks[nonPdfReads++];
+                            return value ? { done: false, value } : { done: true };
+                        },
+                        async cancel() { nonPdfCancelled++; },
+                        releaseLock() {},
+                    };
+                },
+            },
+        }),
+        pdfjs: fakePdfjs,
+    });
+} catch (error) { earlyNonPdfError = error; }
+ok('PDF extractor: extensionless non-PDF probes stop after the header window',
+    earlyNonPdfError?.code === 'PDF_NOT_PDF' && nonPdfReads === 1 && nonPdfCancelled === 1);
+
+let htmlResponseError = null;
+try {
+    await pdfContext.__pdfApi.extractFromUrl('https://example.com/login', {
+        fetchImpl: async () => bufferedPdfResponse(new TextEncoder().encode('<html>Sign in</html>')),
+        pdfjs: fakePdfjs,
+    });
+} catch (error) { htmlResponseError = error; }
+ok('PDF extractor: login HTML is never handed to PDF.js',
+    htmlResponseError?.code === 'PDF_NOT_PDF');
+
+const blankPdfjs = {
+    getDocument() {
+        return {
+            promise: Promise.resolve({
+                numPages: 1,
+                async getMetadata() { return { info: {} }; },
+                async getPage() {
+                    return { async getTextContent() { return { items: [] }; }, cleanup() {} };
+                },
+            }),
+            async destroy() {},
+        };
+    },
+};
+let noTextError = null;
+try {
+    await pdfContext.__pdfApi.extractFromUrl('https://example.com/scan.pdf', {
+        fetchImpl: async () => bufferedPdfResponse(),
+        pdfjs: blankPdfjs,
+        minTextChars: 1,
+    });
+} catch (error) { noTextError = error; }
+ok('PDF extractor: scan-only PDF reports a missing text layer',
+    noTextError?.code === 'PDF_NO_TEXT_LAYER');
+
+const passwordPdfjs = {
+    getDocument() {
+        const error = new Error('Password required');
+        error.name = 'PasswordException';
+        return { promise: Promise.reject(error), async destroy() {} };
+    },
+};
+let passwordError = null;
+try {
+    await pdfContext.__pdfApi.extractFromUrl('https://example.com/protected.pdf', {
+        fetchImpl: async () => bufferedPdfResponse(),
+        pdfjs: passwordPdfjs,
+    });
+} catch (error) { passwordError = error; }
+ok('PDF extractor: password-protected PDF has a dedicated error',
+    passwordError?.code === 'PDF_PASSWORD_REQUIRED');
+
+const preAborted = new AbortController();
+preAborted.abort();
+let abortedFetches = 0;
+let abortedPdfError = null;
+try {
+    await pdfContext.__pdfApi.extractFromUrl('https://example.com/cancelled.pdf', {
+        signal: preAborted.signal,
+        fetchImpl: async () => { abortedFetches++; return bufferedPdfResponse(); },
+        pdfjs: fakePdfjs,
+    });
+} catch (error) { abortedPdfError = error; }
+ok('PDF extractor: a pre-aborted run never starts the network request',
+    abortedPdfError?.code === 'PDF_ABORTED' && abortedFetches === 0);
+
+const pdfCitationContext = makeContext();
+const openedPdfSources = [];
+let pdfHighlightMessages = 0;
+let pdfHighlightTimers = 0;
+pdfCitationContext.Store = {
+    async getSessions() {
+        return {
+            Filing: [{
+                id: 'pdf-source', type: 'text', content: 'Audited evidence.',
+                sourceTitle: 'Filing', sourceUrl: 'https://example.com/filing.pdf?download=1#page=99',
+                sourceDocumentType: 'pdf', sourcePageNumber: 6,
+            }],
+        };
+    },
+};
+pdfCitationContext.t = (key) => key;
+pdfCitationContext.chrome.tabs = {
+    async create({ url }) {
+        openedPdfSources.push(url);
+        return { id: 77 };
+    },
+    sendMessage() { pdfHighlightMessages++; },
+};
+pdfCitationContext.setTimeout = () => { pdfHighlightTimers++; return 1; };
+load(pdfCitationContext, ['lib/source-utils.js', 'lib/citations.js'],
+    'globalThis.__citationApi = Citations;');
+await pdfCitationContext.__citationApi.jumpToSource('pdf-source');
+ok('PDF citations: open the exact page without scheduling DOM highlight retries',
+    openedPdfSources[0] === 'https://example.com/filing.pdf?download=1#page=6' &&
+    pdfHighlightMessages === 0 && pdfHighlightTimers === 0);
+
+async function exercisePageExtractorPdfFallback({ title = '', domResult, domError, pdfResult, pdfError }) {
+    const routeContext = makeContext();
+    const tab = { id: 31, url: 'https://example.com/download?id=42', title };
+    let pdfCalls = 0;
+    routeContext.chrome.tabs = { async get() { return tab; } };
+    routeContext.chrome.scripting = {
+        async executeScript() {
+            if (domError) throw domError;
+            return [{ result: domResult }];
+        },
+    };
+    routeContext.PDFExtractor = {
+        isLikelyPdfUrl(_url, tabTitle) { return /\.pdf/iu.test(tabTitle || ''); },
+        async extractFromUrl() {
+            pdfCalls++;
+            if (pdfError) throw pdfError;
+            return pdfResult;
+        },
+    };
+    load(routeContext, ['lib/page-extractor.js'], 'globalThis.__pageApi = PageExtractor;');
+    try {
+        return {
+            result: await routeContext.__pageApi.extractFromTab(tab.id, tab.url),
+            error: null,
+            pdfCalls,
+        };
+    } catch (error) {
+        return { result: null, error, pdfCalls };
+    }
+}
+
+const smallDomFallback = await exercisePageExtractorPdfFallback({
+    domResult: {
+        title: 'Short page', url: 'https://example.com/download?id=42',
+        content: 'A short but valid page.', links: [], documentType: 'web',
+    },
+    pdfError: Object.assign(new Error('probe blocked'), { code: 'PDF_FETCH_FAILED' }),
+});
+ok('page extractor: a failed PDF probe cannot replace an available small webpage',
+    smallDomFallback.result?.content === 'A short but valid page.' &&
+    smallDomFallback.pdfCalls === 1);
+
+const falsePositivePdfTitle = await exercisePageExtractorPdfFallback({
+    title: 'Quarterly.pdf — help page',
+    domResult: {
+        title: 'Help', url: 'https://example.com/download?id=42',
+        content: 'Small help text.', links: [], documentType: 'web',
+    },
+    pdfError: Object.assign(new Error('not retrievable'), { code: 'PDF_FETCH_FAILED' }),
+});
+ok('page extractor: a PDF-looking title still falls back to readable DOM',
+    falsePositivePdfTitle.result?.content === 'Small help text.');
+
+const extensionlessPdfFallback = await exercisePageExtractorPdfFallback({
+    domError: new Error('Cannot access the PDF viewer DOM'),
+    pdfResult: {
+        title: 'Filing', url: 'https://example.com/download?id=42', content: 'PDF text',
+        documentType: 'pdf', pageType: 'article', blocks: [{ id: 'pdf-p1-b1', pageNumber: 1 }],
+    },
+});
+ok('page extractor: an inaccessible extensionless viewer falls back to PDF extraction',
+    extensionlessPdfFallback.result?.documentType === 'pdf' &&
+    extensionlessPdfFallback.pdfCalls === 1);
 
 // Empty non-stream responses retain safe completion metadata so feature-level
 // callers can distinguish an output limit from a refusal without exposing CoT.
@@ -3053,10 +3505,10 @@ ok('page annotations: both extension surfaces use one explicit toggle command',
     chatSource.includes("sendPageAnnotationMessage('toggleSessionOnPage'") &&
     backgroundSource.includes("message.type === 'toggleSessionOnPage'"));
 const workbenchSourceResolver = extractFunction(chatSource, 'snippetAnnotationSourceUrl');
-const citationSource = read('lib/citations.js');
-const citationSourceResolver = extractFunction(citationSource, 'annotationSourceUrl');
+const sourceUtilsSource = read('lib/source-utils.js');
 const sourceRouting = vm.runInNewContext(
     `(() => {
+        ${sourceUtilsSource}
         ${workbenchSourceResolver}
         const legacyIndexSnippet = {
             smartReadPageType: 'index',
@@ -3067,27 +3519,38 @@ const sourceRouting = vm.runInNewContext(
         return {
             workbenchIndex: snippetAnnotationSourceUrl(legacyIndexSnippet),
             workbenchManual: snippetAnnotationSourceUrl(manualSnippet),
+            workbenchPdf: snippetAnnotationSourceUrl({
+                sourceUrl: 'https://example.com/report.pdf?download=1#page=99',
+                sourceDocumentType: 'pdf',
+                sourcePageNumber: 4,
+            }),
         };
-    })()`
+    })()`,
+    { URL }
 );
 const citationRouting = vm.runInNewContext(
     `(() => {
-        ${citationSourceResolver}
-        return annotationSourceUrl({
+        ${sourceUtilsSource}
+        return SourceUtils.annotationSourceUrl({
             smartReadPageType: 'index',
             sourceUrl: 'https://example.com/story?mod=homepage',
             sourcePageUrl: 'https://example.com/',
         });
-    })()`
+    })()`,
+    { URL }
 );
 ok('page annotations: reopening an index Smart Read uses its annotated origin in every source action',
     sourceRouting.workbenchIndex === 'https://example.com/' &&
     citationRouting === 'https://example.com/' &&
     sourceRouting.workbenchManual === 'https://example.com/article');
+ok('PDF sources: workbench actions replace an existing fragment with the exact page',
+    sourceRouting.workbenchPdf === 'https://example.com/report.pdf?download=1#page=4');
 
 const sessionSnippetsForPageFunction = extractFunction(backgroundSource, 'sessionSnippetsForPage');
+const sessionHasPdfForPageFunction = extractFunction(backgroundSource, 'sessionHasPdfForPage');
 const persistedIndexRouting = vm.runInNewContext(
     `(() => {
+        ${sourceUtilsSource}
         const samePage = (left, right) => left === right;
         const sameSmartReadPage = (left, right) => {
             const a = new URL(left);
@@ -3095,21 +3558,50 @@ const persistedIndexRouting = vm.runInNewContext(
             return a.origin === b.origin && a.pathname.replace(/\\\/$/, '') === b.pathname.replace(/\\\/$/, '');
         };
         ${sessionSnippetsForPageFunction}
-        const sessions = { Saved: [{
-            id: 'index-1', type: 'link', content: 'Known story',
-            smartReadPageType: 'index',
-            sourceUrl: 'https://example.com/known',
-            sourcePageUrl: 'https://example.com/',
-        }] };
+        const sessions = { Saved: [
+            {
+                id: 'index-1', type: 'link', content: 'Known story',
+                smartReadPageType: 'index',
+                sourceUrl: 'https://example.com/known',
+                sourcePageUrl: 'https://example.com/',
+            },
+            {
+                id: 'pdf-1', type: 'text', content: 'Evidence from the PDF text layer.',
+                smartReadPageType: 'article', sourceDocumentType: 'pdf',
+                sourcePageNumber: 2, sourceUrl: 'https://example.com/report.pdf',
+            },
+        ] };
         return {
             origin: sessionSnippetsForPage(sessions, 'Saved', 'https://example.com/?mod=reload').length,
             destination: sessionSnippetsForPage(sessions, 'Saved', 'https://example.com/known').length,
+            pdf: sessionSnippetsForPage(sessions, 'Saved', 'https://example.com/report.pdf').length,
         };
     })()`,
     { URL }
 );
 ok('page annotations: persisted index snippets are replayed only on their original page',
     persistedIndexRouting.origin === 1 && persistedIndexRouting.destination === 0);
+ok('page annotations: PDF snippets never enter the DOM-highlighting command',
+    persistedIndexRouting.pdf === 0);
+const pdfAnnotationRouting = vm.runInNewContext(
+    `(() => {
+        ${sourceUtilsSource}
+        const sameSmartReadPage = (left, right) => SourceUtils.sameDocumentUrl(left, right);
+        ${sessionHasPdfForPageFunction}
+        return {
+            obvious: sessionHasPdfForPage({}, 'Missing', 'https://example.com/report.PDF?download=1'),
+            persisted: sessionHasPdfForPage({ Saved: [{
+                sourceUrl: 'https://example.com/download?id=42',
+                sourceDocumentType: 'pdf', sourcePageNumber: 3,
+            }] }, 'Saved', 'https://example.com/download?id=42#page=1'),
+            webpage: sessionHasPdfForPage({ Saved: [] }, 'Saved', 'https://example.com/article'),
+        };
+    })()`,
+    { URL }
+);
+ok('page annotations: native PDF targets are rejected before content-script messaging',
+    pdfAnnotationRouting.obvious === true && pdfAnnotationRouting.persisted === true &&
+    pdfAnnotationRouting.webpage === false);
 ok('page annotations: UI requests have a bounded lifetime and mutation broadcasts do not loop',
     popupSource.includes('setTimeout(() => finish(null), 5000)') &&
     chatSource.includes('setTimeout(() => finish(null), 5000)') &&

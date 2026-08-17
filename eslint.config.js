@@ -62,6 +62,8 @@ export default [
                 DiagramGenerator: 'readonly',
                 Highlighter: 'readonly',
                 PageExtractor: 'readonly',
+                PDFExtractor: 'readonly',
+                SourceUtils: 'readonly',
                 SmartRead: 'readonly',
                 Citations: 'readonly',
                 Render: 'readonly',

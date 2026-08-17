@@ -2,6 +2,7 @@
 importScripts(
     'lib/idb.js',
     'lib/store.js',
+    'lib/source-utils.js',
     'lib/tokenizer.js',
     'lib/providers.js',
     'lib/llm-client.js',
@@ -838,6 +839,8 @@ chrome.storage.onChanged.addListener((changes, areaName) => {
 async function autoHighlightSnippet(tab, snippet) {
     if (!tab || !tab.id) return;
     if (snippet.type !== 'text' || !snippet.content || snippet.content.trim().length < 8) return;
+    if (SourceUtils.isPdfSnippet(snippet)
+        || SourceUtils.isLikelyPdfUrl(snippet.sourceUrl || tab.url, snippet.sourceTitle || tab.title)) return;
 
     try {
         await chrome.tabs.sendMessage(tab.id, {
@@ -857,6 +860,7 @@ function sessionSnippetsForPage(sessions, sessionName, tabUrl) {
     // separately and match that when restoring homepage highlights.
     return sessions[sessionName].filter((snippet) => {
         if (!snippet?.content || !tabUrl) return false;
+        if (SourceUtils.isPdfSnippet(snippet)) return false;
         if (snippet.type === 'text') {
             const pageMatches = snippet.smartReadPageType === 'article'
                 ? sameSmartReadPage(snippet.sourceUrl, tabUrl)
@@ -869,6 +873,13 @@ function sessionSnippetsForPage(sessions, sessionName, tabUrl) {
             && snippet.content.trim().length >= 2
             && Boolean(snippet.sourcePageUrl && sameSmartReadPage(snippet.sourcePageUrl, tabUrl));
     });
+}
+
+function sessionHasPdfForPage(sessions, sessionName, tabUrl) {
+    if (SourceUtils.isLikelyPdfUrl(tabUrl)) return true;
+    if (!sessions || !Array.isArray(sessions[sessionName]) || !tabUrl) return false;
+    return sessions[sessionName].some((snippet) => SourceUtils.isPdfSnippet(snippet)
+        && sameSmartReadPage(snippet.sourceUrl, tabUrl));
 }
 
 function annotationSetKey(sessionName, snippets) {
@@ -888,6 +899,16 @@ function annotationSetKey(sessionName, snippets) {
 /** Send one atomic session-annotation command to the exact source tab. */
 async function sendSessionAnnotationCommand(command, sessionName, tabId, tabUrl) {
     const { sessions } = await chrome.storage.local.get(['sessions']);
+    if (sessionHasPdfForPage(sessions, sessionName, tabUrl)) {
+        return {
+            active: false,
+            state: 'unsupported',
+            highlighted: 0,
+            total: 0,
+            annotationUnsupported: 'pdf',
+            error: 'PDF_ANNOTATION_UNSUPPORTED',
+        };
+    }
     const pageSnippets = sessionSnippetsForPage(sessions, sessionName, tabUrl);
     const setKey = annotationSetKey(sessionName, pageSnippets);
     if (!Number.isInteger(tabId)) return { highlighted: 0, total: pageSnippets.length };

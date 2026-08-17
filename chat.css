@@ -474,6 +474,11 @@ body.mode-panel .header-btn {
     flex-shrink: 0;
 }
 
+.context-page-tag {
+    background: var(--weft-accent-soft);
+    color: var(--weft-accent-hover);
+}
+
 .context-empty {
     font-size: 12px;
     color: #aaa;
@@ -1375,6 +1380,18 @@ body.mode-panel .header-btn {
 .takeaway-quote:hover {
     color: var(--weft-accent-hover);
     border-bottom-color: var(--weft-accent-hover);
+}
+
+.takeaway-pdf-page {
+    display: inline-block;
+    margin-left: 5px;
+    padding: 0 5px;
+    border-radius: 999px;
+    background: var(--weft-accent-soft);
+    color: var(--weft-accent-hover);
+    font-size: 10px;
+    font-style: normal;
+    white-space: nowrap;
 }
 
 .takeaway-quote + .takeaway-quote::before {

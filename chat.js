@@ -149,13 +149,24 @@ document.addEventListener('DOMContentLoaded', async function() {
         DIAGRAM_PAGE_UNAVAILABLE: 'diagram_error_page_unavailable',
         SEARCH_PLAN_EMPTY: 'search_plan_empty',
         API_KEY_MISSING: 'llm_error_auth',
+        PDF_ABORTED: 'llm_error_abort',
+        PDF_FETCH_FAILED: 'smart_read_pdf_fetch_failed',
+        PDF_NOT_PDF: 'smart_read_pdf_invalid_response',
+        PDF_PARSE_FAILED: 'smart_read_pdf_parse_failed',
+        PDF_WORKER_FAILED: 'smart_read_pdf_parse_failed',
+        PDF_PASSWORD_REQUIRED: 'smart_read_pdf_password_required',
+        PDF_NO_TEXT_LAYER: 'smart_read_pdf_no_text',
+        PDF_TOO_LARGE: 'smart_read_pdf_too_large',
+        PDF_TOO_MANY_PAGES: 'smart_read_pdf_too_many_pages',
+        PDF_TOO_MUCH_TEXT: 'smart_read_pdf_too_much_text',
+        PDF_UNSUPPORTED_URL: 'smart_read_pdf_unsupported_url',
     });
 
     const TAG_I18N_KEYS = Object.freeze({
         quote: 'tag_quote', data: 'tag_data', opinion: 'tag_opinion',
         reference: 'tag_reference', 'key-point': 'tag_key_point',
         stats: 'tag_stats', market: 'tag_market', counterpoint: 'tag_counterpoint',
-        generated: 'tag_generated', analysed: 'tag_analysed',
+        generated: 'tag_generated', analysed: 'tag_analysed', pdf: 'tag_pdf',
     });
 
     function localizedTag(tag) {
@@ -456,6 +467,15 @@ document.addEventListener('DOMContentLoaded', async function() {
         }
     }
 
+    function targetHasPdfSnippets(target) {
+        if (!target?.url) return false;
+        if (SourceUtils.isLikelyPdfUrl(target.url)) return true;
+        if (pageContent?.documentType === 'pdf'
+            && PageExtractor.isSameDocumentUrl(pageContent.url, target.url)) return true;
+        return sessionSnippets.some((snippet) => SourceUtils.isPdfSnippet(snippet)
+            && PageExtractor.isSameDocumentUrl(snippet.sourceUrl, target.url));
+    }
+
     function sendPageAnnotationMessage(type, sessionName, target) {
         return new Promise((resolve) => {
             let settled = false;
@@ -499,6 +519,13 @@ document.addEventListener('DOMContentLoaded', async function() {
             showOnPageBtn.disabled = true;
             return;
         }
+        if (targetHasPdfSnippets(target)) {
+            setShowOnPageState(false);
+            showOnPageBtn.disabled = true;
+            showOnPageBtn.title = t('wb_pdf_annotation_unavailable');
+            showOnPageBtn.setAttribute('aria-label', t('wb_pdf_annotation_unavailable'));
+            return;
+        }
         const result = await sendPageAnnotationMessage('getSessionHighlightState', sessionName, target);
         if (generation !== showOnPageStateGeneration || currentSession !== sessionName) return;
         if (result && !result.error) setShowOnPageState(Boolean(result.active));
@@ -512,6 +539,11 @@ document.addEventListener('DOMContentLoaded', async function() {
         const sessionName = currentSession;
         const target = await resolvePageAnnotationTarget();
         if (!target || generation !== showOnPageStateGeneration || currentSession !== sessionName) return;
+        if (targetHasPdfSnippets(target)) {
+            Citations.notify(t('wb_pdf_annotation_unavailable'));
+            await refreshShowOnPageState();
+            return;
+        }
 
         annotationInFlight = true;
         showOnPageBtn.disabled = true;
@@ -656,11 +688,13 @@ document.addEventListener('DOMContentLoaded', async function() {
     }
 
     function snippetAnnotationSourceUrl(snippet) {
-        if (!snippet || typeof snippet !== 'object') return '';
-        if (snippet.smartReadPageType === 'index' && snippet.sourcePageUrl) {
-            return snippet.sourcePageUrl;
-        }
-        return snippet.sourceUrl || '';
+        return SourceUtils.annotationSourceUrl(snippet);
+    }
+
+    function snippetSourceLabel(snippet) {
+        const base = snippet?.sourceTitle || snippetAnnotationSourceUrl(snippet) || snippet?.sourceUrl || '';
+        const page = SourceUtils.pdfPageNumber(snippet?.sourcePageNumber);
+        return page ? `${base} · ${t('pdf_page_label').replace('%s', page)}` : base;
     }
 
     function renderContextPanel() {
@@ -762,6 +796,13 @@ document.addEventListener('DOMContentLoaded', async function() {
                     tag.textContent = localizedTag(tg);
                     item.appendChild(tag);
                 });
+            }
+            const sourcePage = SourceUtils.pdfPageNumber(snippet.sourcePageNumber);
+            if (sourcePage) {
+                const pageTag = document.createElement('span');
+                pageTag.className = 'context-tag context-page-tag';
+                pageTag.textContent = t('pdf_page_label').replace('%s', sourcePage);
+                item.appendChild(pageTag);
             }
 
             // Per-snippet actions: open source, tag, comment, delete.
@@ -1445,7 +1486,7 @@ document.addEventListener('DOMContentLoaded', async function() {
      * These buttons are `<img>/<svg> + <span>`, so assigning textContent would wipe
      * the icon. Pass null to restore the original label.
      */
-    function setBtnLabel(btn, i18nKey) {
+    function setBtnLabel(btn, i18nKey, replacements = {}) {
         const label = btn?.querySelector('span[data-i18n]');
         if (!label) return;
         if (i18nKey == null) {
@@ -1454,7 +1495,11 @@ document.addEventListener('DOMContentLoaded', async function() {
             return;
         }
         label.dataset.runtimeI18n = i18nKey;
-        label.textContent = t(i18nKey);
+        let text = t(i18nKey);
+        for (const [token, value] of Object.entries(replacements)) {
+            text = text.replaceAll(`%${token}`, String(value));
+        }
+        label.textContent = text;
     }
 
     // Render an error as a chat message, appending the actionable hint that
@@ -1541,11 +1586,23 @@ document.addEventListener('DOMContentLoaded', async function() {
             ) {
                 return pageContent;
             }
-            pageContent = await withUiDeadline(
-                PageExtractor.extractFromTab(tab.id, tabUrl),
-                20000,
-                t('wb_page_operation_timeout')
-            );
+            const controller = new AbortController();
+            try {
+                pageContent = await withUiDeadline(
+                    PageExtractor.extractFromTab(tab.id, tabUrl, {
+                        signal: controller.signal,
+                        sourceTitle: tab.title || '',
+                    }),
+                    // Extensionless PDF endpoints are discovered only after a
+                    // DOM attempt, so keep the outer deadline large enough for
+                    // that fallback. Ordinary webpages still finish immediately.
+                    120000,
+                    t('wb_page_operation_timeout'),
+                    () => controller.abort()
+                );
+            } finally {
+                controller.abort();
+            }
             activePageTarget = { tabId: tab.id, url: pageContent.url || tabUrl };
             return pageContent;
         } catch (e) {
@@ -1866,11 +1923,41 @@ Return 3-${maxTakeaways} takeaways with 1-3 evidence passages each. ${recoveryIn
             // Bind the request as soon as its source tab is known so every
             // later page operation remains scoped to that exact document.
             activePageTarget = { tabId: target.tabId, url: target.url };
-            const page = await withUiDeadline(
-                PageExtractor.extractFromTab(target.tabId, target.url),
-                20000,
-                t('wb_page_operation_timeout')
-            );
+            const extractionController = new AbortController();
+            let lastProgressAt = 0;
+            const onPdfProgress = (progress) => {
+                const now = Date.now();
+                const isFinal = progress.phase === 'parse'
+                    && progress.pageNumber === progress.totalPages;
+                if (!isFinal && now - lastProgressAt < 120) return;
+                lastProgressAt = now;
+                if (progress.phase === 'download') {
+                    const detail = progress.total > 0
+                        ? `${Math.min(100, Math.round((progress.loaded / progress.total) * 100))}%`
+                        : `${(progress.loaded / (1024 * 1024)).toFixed(1)} MB`;
+                    setBtnLabel(smartReadBtn, 'smart_read_pdf_downloading', { s: detail });
+                } else if (progress.phase === 'parse') {
+                    setBtnLabel(smartReadBtn, 'smart_read_pdf_parsing', {
+                        s: progress.pageNumber,
+                        n: progress.totalPages,
+                    });
+                }
+            };
+            let page;
+            try {
+                page = await withUiDeadline(
+                    PageExtractor.extractFromTab(target.tabId, target.url, {
+                        signal: extractionController.signal,
+                        sourceTitle: target.sourceTitle,
+                        onProgress: onPdfProgress,
+                    }),
+                    120000,
+                    t('wb_page_operation_timeout'),
+                    () => extractionController.abort()
+                );
+            } finally {
+                extractionController.abort();
+            }
             // Retain the source identity so the later, explicit “Show on Page”
             // action can match the saved snippets to the page that was read.
             activePageTarget = { tabId: target.tabId, url: page.url || target.url };
@@ -1880,7 +1967,11 @@ Return 3-${maxTakeaways} takeaways with 1-3 evidence passages each. ${recoveryIn
                 throw uiError('smart_read_access_gate');
             }
 
-            const hasArticleContent = page.pageType !== 'index' && (page.blocks || []).length >= 2 && (page.content || '').length >= 500;
+            const hasArticleContent = page.pageType !== 'index' && (
+                page.documentType === 'pdf'
+                    ? (page.blocks || []).length >= 1 && (page.content || '').replace(/\s+/gu, '').length >= 50
+                    : (page.blocks || []).length >= 2 && (page.content || '').length >= 500
+            );
             const hasIndexContent = page.pageType === 'index' && (page.links || []).length >= 3;
             if (!hasArticleContent && !hasIndexContent) throw uiError('smart_read_no_content');
 
@@ -2152,9 +2243,12 @@ Return 3-${maxTakeaways} takeaways with 1-3 evidence passages each. ${recoveryIn
             });
         } else {
             (data.takeaways || []).forEach((takeaway, index) => {
-                const quotes = (takeaway.evidence || []).map((evidence) =>
-                    `<span class="takeaway-quote">“${escapeHtml(evidence.quote)}”</span>`
-                ).join(' ');
+                const quotes = (takeaway.evidence || []).map((evidence) => {
+                    const page = Number.isInteger(evidence.pageNumber) && evidence.pageNumber > 0
+                        ? `<span class="takeaway-pdf-page">${escapeHtml(t('pdf_page_label').replace('%s', evidence.pageNumber))}</span>`
+                        : '';
+                    return `<span class="takeaway-quote">“${escapeHtml(evidence.quote)}”${page}</span>`;
+                }).join(' ');
                 html += `<div class="takeaway-card" data-group="${index}">
                     <div class="takeaway-card-header"><span class="takeaway-color-dot" style="background:${Highlighter.getColor(index).border};"></span><strong>${escapeHtml(takeaway.title)}</strong></div>
                     <div class="takeaway-card-summary">${escapeHtml(takeaway.summary)}</div>
@@ -2191,9 +2285,12 @@ Return 3-${maxTakeaways} takeaways with 1-3 evidence passages each. ${recoveryIn
 
         const indicator = document.createElement('div');
         indicator.className = 'context-page-indicator';
+        const detail = page.documentType === 'pdf'
+            ? `${t('pdf_document_label')} · ${t('pdf_page_count').replace('%s', Number(page.pageCount) || 0)} · ${t('wb_word_count').replace('%s', Number(page.wordCount) || 0)}`
+            : t('wb_word_count').replace('%s', Number(page.wordCount) || 0);
         indicator.innerHTML = `
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>
-            <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(page.title || '')} (${escapeHtml(t('wb_word_count').replace('%s', Number(page.wordCount) || 0))})</span>
+            <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(page.title || '')} (${escapeHtml(detail)})</span>
         `;
         contextBody.insertBefore(indicator, contextBody.firstChild);
     }
@@ -2821,7 +2918,7 @@ h1,h2,h3,h4{margin-top:1.2em;margin-bottom:.6em}svg,img{max-width:100%;height:au
                 : `<pre>${escapeHtml(snippet.content || (typeof snippet === 'string' ? snippet : ''))}</pre>`;
 
             const sourceUrl = snippetAnnotationSourceUrl(snippet) || '';
-            const sourceLabel = snippet.sourceTitle || sourceUrl || snippet.sourceUrl || '';
+            const sourceLabel = snippetSourceLabel(snippet);
             const sourceLine = sourceLabel
                 ? `<div class="snippet-source">${escapeHtml(sourceLabel)}${sourceUrl ? ` — <a href="${escapeHtml(sourceUrl)}">${escapeHtml(sourceUrl)}</a>` : ''}</div>`
                 : '';

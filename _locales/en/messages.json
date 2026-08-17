@@ -101,8 +101,14 @@
   "wb_smart_read_hint": {
     "message": "Create a new focused session containing verified evidence from this page"
   },
+  "wb_smart_read_pdf_hint": {
+    "message": "Create a focused session from verified passages in this PDF"
+  },
   "popup_smart_read": {
     "message": "Smart Read This Page"
+  },
+  "popup_smart_read_pdf": {
+    "message": "Smart Read This PDF"
   },
   "smart_read_purpose_title": {
     "message": "What are you looking for?"
@@ -122,6 +128,12 @@
   "smart_read_reading": {
     "message": "Reading page…"
   },
+  "smart_read_pdf_downloading": {
+    "message": "Downloading PDF… %s"
+  },
+  "smart_read_pdf_parsing": {
+    "message": "Reading PDF page %s of %n…"
+  },
   "smart_read_analysing": {
     "message": "Finding evidence…"
   },
@@ -139,6 +151,33 @@
   },
   "smart_read_no_content": {
     "message": "Weft could not find enough readable content. If this is a subscriber article, make sure it is fully loaded and visible first."
+  },
+  "smart_read_pdf_fetch_failed": {
+    "message": "Weft could not retrieve the original PDF. Reload it and try again; POST, one-time, blob, and another extension's private viewer URLs are not supported yet."
+  },
+  "smart_read_pdf_invalid_response": {
+    "message": "The PDF address returned a web page instead of PDF data. Your sign-in or temporary link may have expired."
+  },
+  "smart_read_pdf_parse_failed": {
+    "message": "This PDF is damaged or uses a format that Weft cannot read yet."
+  },
+  "smart_read_pdf_password_required": {
+    "message": "Password-protected PDFs are not supported yet."
+  },
+  "smart_read_pdf_no_text": {
+    "message": "No readable text layer was found in this PDF. Scanned PDFs need OCR, which is not supported yet."
+  },
+  "smart_read_pdf_too_large": {
+    "message": "This PDF is larger than Weft's 25 MB safety limit."
+  },
+  "smart_read_pdf_too_many_pages": {
+    "message": "This PDF has more than Weft's 300-page safety limit."
+  },
+  "smart_read_pdf_too_much_text": {
+    "message": "This PDF contains too much text to process safely in one run."
+  },
+  "smart_read_pdf_unsupported_url": {
+    "message": "Only PDFs opened from HTTP or HTTPS addresses are supported in this version."
   },
   "smart_read_access_gate": {
     "message": "This article is still behind a visible access gate. Sign in or reload until the full text is visible, then run Smart Read again."
@@ -271,6 +310,9 @@
   },
   "wb_show_on_page": {
     "message": "Highlight snippets on this page"
+  },
+  "wb_pdf_annotation_unavailable": {
+    "message": "Chrome's PDF viewer cannot accept Weft highlights. Open a source to jump to its PDF page."
   },
   "wb_remove_from_page": {
     "message": "Remove highlights from this page"
@@ -574,6 +616,9 @@
   },
   "tag_analysed": {
     "message": "analyzed"
+  },
+  "tag_pdf": {
+    "message": "PDF"
   },
   "menu_quick_save_tag": {
     "message": "Quick Save with Tag"
@@ -1171,6 +1216,15 @@
   },
   "wb_word_count": {
     "message": "%s words"
+  },
+  "pdf_document_label": {
+    "message": "PDF"
+  },
+  "pdf_page_count": {
+    "message": "%s pages"
+  },
+  "pdf_page_label": {
+    "message": "page %s"
   },
   "wb_error_abort": {
     "message": "The request was cancelled."

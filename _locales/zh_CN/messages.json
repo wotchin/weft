@@ -101,8 +101,14 @@
   "wb_smart_read_hint": {
     "message": "自动创建新的聚焦会话，并保存页面中经过核验的关键原文"
   },
+  "wb_smart_read_pdf_hint": {
+    "message": "从 PDF 中提取经过核验的关键原文，并创建聚焦会话"
+  },
   "popup_smart_read": {
     "message": "智能阅读当前页面"
+  },
+  "popup_smart_read_pdf": {
+    "message": "智能阅读当前 PDF"
   },
   "smart_read_purpose_title": {
     "message": "你这次想重点了解什么？"
@@ -122,6 +128,12 @@
   "smart_read_reading": {
     "message": "正在读取页面…"
   },
+  "smart_read_pdf_downloading": {
+    "message": "正在下载 PDF… %s"
+  },
+  "smart_read_pdf_parsing": {
+    "message": "正在读取 PDF 第 %s/%n 页…"
+  },
   "smart_read_analysing": {
     "message": "正在查找关键证据…"
   },
@@ -139,6 +151,33 @@
   },
   "smart_read_no_content": {
     "message": "Weft 未找到足够的可读内容。如果这是会员文章，请先确认正文已经完整加载并显示。"
+  },
+  "smart_read_pdf_fetch_failed": {
+    "message": "Weft 无法获取原始 PDF。请重新加载后再试；当前暂不支持 POST、一次性链接、blob 地址或其他扩展的私有预览页。"
+  },
+  "smart_read_pdf_invalid_response": {
+    "message": "PDF 地址返回的是网页而不是 PDF 数据。登录状态或临时链接可能已失效。"
+  },
+  "smart_read_pdf_parse_failed": {
+    "message": "该 PDF 可能已损坏，或使用了 Weft 暂时无法读取的格式。"
+  },
+  "smart_read_pdf_password_required": {
+    "message": "当前暂不支持需要密码的 PDF。"
+  },
+  "smart_read_pdf_no_text": {
+    "message": "该 PDF 中没有检测到可读文字层。扫描版 PDF 需要 OCR，当前暂不支持。"
+  },
+  "smart_read_pdf_too_large": {
+    "message": "该 PDF 超过了 Weft 25 MB 的安全限制。"
+  },
+  "smart_read_pdf_too_many_pages": {
+    "message": "该 PDF 超过了 Weft 300 页的安全限制。"
+  },
+  "smart_read_pdf_too_much_text": {
+    "message": "该 PDF 包含的文字过多，无法在单次任务中安全处理。"
+  },
+  "smart_read_pdf_unsupported_url": {
+    "message": "当前版本仅支持从 HTTP 或 HTTPS 地址打开的 PDF。"
   },
   "smart_read_access_gate": {
     "message": "这篇文章仍被可见的访问限制遮挡。请先登录或重新加载，确认完整正文已经显示后再运行智能阅读。"
@@ -271,6 +310,9 @@
   },
   "wb_show_on_page": {
     "message": "在本页标注片段"
+  },
+  "wb_pdf_annotation_unavailable": {
+    "message": "Chrome 的 PDF 预览器不支持 Weft 标注。打开来源可直接跳转到对应 PDF 页。"
   },
   "wb_remove_from_page": {
     "message": "取消本页标注"
@@ -574,6 +616,9 @@
   },
   "tag_analysed": {
     "message": "已分析"
+  },
+  "tag_pdf": {
+    "message": "PDF"
   },
   "menu_quick_save_tag": {
     "message": "带标签快速保存"
@@ -1171,6 +1216,15 @@
   },
   "wb_word_count": {
     "message": "%s 字"
+  },
+  "pdf_document_label": {
+    "message": "PDF"
+  },
+  "pdf_page_count": {
+    "message": "%s 页"
+  },
+  "pdf_page_label": {
+    "message": "第 %s 页"
   },
   "wb_error_abort": {
     "message": "请求已取消。"

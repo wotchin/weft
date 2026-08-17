@@ -23,6 +23,15 @@ document.addEventListener('DOMContentLoaded', async () => {
     let highlightStateGeneration = 0;
     let annotationInFlight = false;
 
+    function currentSessionHasPdfForActiveTab() {
+        const activeUrl = activePageTab?.url || '';
+        if (SourceUtils.isLikelyPdfUrl(activeUrl, activePageTab?.title || '')) return true;
+        return Boolean(currentSession && activeUrl && (sessions[currentSession] || []).some(
+            (snippet) => SourceUtils.isPdfSnippet(snippet)
+                && SourceUtils.sameDocumentUrl(snippet.sourceUrl, activeUrl)
+        ));
+    }
+
     function createRequestId() {
         if (globalThis.crypto?.randomUUID) return crypto.randomUUID();
         return `smart-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
@@ -74,8 +83,20 @@ document.addEventListener('DOMContentLoaded', async () => {
             showOnPageBtn.disabled = true;
             return;
         }
+        if (currentSessionHasPdfForActiveTab()) {
+            setShowOnPageState(false);
+            showOnPageBtn.disabled = true;
+            showOnPageBtn.title = t('wb_pdf_annotation_unavailable');
+            return;
+        }
         const result = await sendAnnotationMessage('getSessionHighlightState', sessionName);
         if (generation !== highlightStateGeneration || currentSession !== sessionName) return;
+        if (result?.annotationUnsupported === 'pdf') {
+            setShowOnPageState(false);
+            showOnPageBtn.disabled = true;
+            showOnPageBtn.title = t('wb_pdf_annotation_unavailable');
+            return;
+        }
         if (result && !result.error) setShowOnPageState(Boolean(result.active));
         showOnPageBtn.disabled = annotationInFlight;
     }
@@ -152,7 +173,11 @@ document.addEventListener('DOMContentLoaded', async () => {
 
             const meta = document.createElement('div');
             meta.className = 'recent-meta';
-            meta.textContent = [s.sourceTitle || '', formatTime(s.timestamp)].filter(Boolean).join(' · ');
+            const page = SourceUtils.pdfPageNumber(s.sourcePageNumber);
+            const source = page
+                ? `${s.sourceTitle || ''} · ${t('pdf_page_label').replace('%s', page)}`
+                : s.sourceTitle || '';
+            meta.textContent = [source, formatTime(s.timestamp)].filter(Boolean).join(' · ');
             body.appendChild(meta);
 
             item.appendChild(body);
@@ -262,6 +287,11 @@ document.addEventListener('DOMContentLoaded', async () => {
     await load();
 
     const smartReadBtn = document.getElementById('smartRead');
+    if (SourceUtils.isLikelyPdfUrl(activePageTab?.url, activePageTab?.title)) {
+        const label = smartReadBtn.querySelector('span[data-i18n]');
+        if (label) label.textContent = t('popup_smart_read_pdf');
+        smartReadBtn.title = t('wb_smart_read_pdf_hint');
+    }
     if (!activePageTab?.id || !/^https?:/i.test(activePageTab.url || '')) {
         smartReadBtn.disabled = true;
         smartReadBtn.title = t('wb_page_unavailable');

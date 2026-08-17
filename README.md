@@ -55,10 +55,14 @@ or edit the queries before they run. External excerpts are appended as
 `[W#]`, alongside your `[S#]` Session evidence, never replacing it.
 
 ### 📑 Smart Read — source-verified extraction
-Run **Smart Read** on an article to build a new focused Session from key passages.
-Every quoted passage is **checked against the rendered source** before it is saved,
-so hallucinated evidence is silently dropped. On link-heavy pages, tell Weft what
-matters first and it shortlists only the visible, relevant links.
+Run **Smart Read** on an article or a text-layer HTTP(S) PDF to build a new focused
+Session from key passages. Every quoted passage is **checked against the extracted
+source** before it is saved, so hallucinated evidence is silently dropped. PDF
+passages retain their page number and citations reopen that page in Chrome. On
+link-heavy pages, tell Weft what matters first and it shortlists only the visible,
+relevant links. Weft coexists with Chrome's built-in viewer; a replacement viewer
+that changes the tab to another extension's private `chrome-extension://` URL
+cannot be read across Chrome's extension boundary.
 
 ### 🧩 Synthesis scenarios
 One-click scenarios turn raw snippets into specific deliverables:
@@ -88,7 +92,7 @@ flowchart LR
     C --> F
 ```
 
-1. **Read** — `Smart Read` an article to seed a focused Session; toggle **Show on Page** to see saved passages on the source page.
+1. **Read** — `Smart Read` an article or text-layer PDF to seed a focused Session. Web passages can be highlighted in place; PDF passages reopen at their source page because Chrome's native PDF viewer cannot accept Weft DOM highlights.
 2. **Collect** — right-click or use the selection toolbar to save more text / image / link snippets.
 3. **Synthesize** — open the Workbench side panel; ask the Session a question, or pick a scenario.
 4. **Deep Search** — start from a Session question, review & approve the search plan, then prepend web excerpts.
@@ -146,7 +150,7 @@ What you see is what runs in the browser.
 | Rendering | `markdown.js`, `lib/render.js`, `lib/diagram-generator.js` | Markdown + citation + Mermaid rendering |
 | LLM layer | `lib/llm-client.js`, `lib/providers.js` | Multi-provider chatting, JSON mode, streaming |
 | Retrieval | `lib/rag-engine.js`, `lib/rag-indexer.js`, `lib/bm25.js`, `lib/vector-index.js`, `lib/tokenizer.js` | Hybrid BM25 + embedding RAG |
-| Extraction | `lib/page-extractor.js`, `lib/smart-read.js`, `lib/highlighter.js` | Source-verified reading, on-page highlighting |
+| Extraction | `lib/page-extractor.js`, `lib/pdf-extractor.js`, `lib/smart-read.js`, `lib/highlighter.js` | Web/PDF extraction, source verification, on-page highlighting |
 | Search | `lib/search-provider.js` | SearXNG / Tavily / Brave for Deep Search |
 | Persistence | `lib/store.js`, `lib/idb.js` | chrome.storage + IndexedDB sessions, chat, images |
 | i18n | `lib/i18n.js`, `_locales/` | UI + AI-output language |

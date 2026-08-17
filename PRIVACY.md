@@ -1,6 +1,6 @@
 # Weft — Privacy Policy
 
-_Last updated: 2026-08-01_
+_Last updated: 2026-08-16_
 
 Weft is a browser extension that helps you collect snippets from web pages and synthesize them using a Large Language Model (LLM) of your choice. Weft is built around a simple principle: **your data stays on your machine.**
 
@@ -13,7 +13,9 @@ Weft is a browser extension that helps you collect snippets from web pages and s
 
 Weft only reads the content of a web page when **you** ask it to — for example when you select text and save a snippet, use the selection toolbar, or run a page-level action. It does not silently monitor, log, or transmit your browsing.
 
-**Smart Read** is also user-initiated. It reads only the DOM content already rendered in the source tab. For an article, Weft sends selected readable text blocks to your configured LLM so it can propose key passages; for a link-heavy page, it sends visible headline and teaser text only after asking for your reading focus. Weft does not send cookies or login credentials, follow those links in the background, bypass an access gate, or retrieve hidden subscriber content. Before saving, every proposed article quotation is checked against the rendered source text. The resulting session stores the selected passages or links, not a complete copy of the page.
+**Smart Read** is also user-initiated. For a normal web page, it reads only the DOM content already rendered in the source tab. For a text-layer PDF opened from an HTTP(S) address, Weft makes a second request to that exact PDF URL, parses the downloaded file locally with its bundled PDF.js worker, and discards the file after extraction. That request may include browser cookies for the PDF host; cookies and login credentials are never sent to the configured LLM. POST-only, one-time, `blob:`, local-file, password-protected and scanned PDFs are not supported in this version.
+
+For an article or PDF, Weft sends a bounded selection of readable text blocks to your configured LLM so it can propose key passages; for a link-heavy page, it sends visible headline and teaser text only after asking for your reading focus. Weft does not follow those links in the background, bypass an access gate, or retrieve content that the current PDF URL does not return. Before saving, every proposed quotation is checked against the extracted source text. The resulting session stores the selected passages, their PDF page numbers where applicable, or selected links — not a complete copy of the page or PDF.
 
 ## What is sent to third parties
 
@@ -34,7 +36,7 @@ If you select "Chrome Built-in AI," inference runs locally in your browser via C
 - **Tabs** — reads the current page's URL and title to record where a snippet came from, and opens the source page when you click a citation.
 - **Scripting** — highlights a saved passage on its original page.
 - **Side panel** — hosts the Workbench.
-- **Access to websites you visit** — Weft must be able to run on whatever page you choose to collect from. Page content is read only when you actively save a snippet or run an action, never in the background.
+- **Access to websites you visit** — Weft must be able to run on whatever page you choose to collect from. It also uses this access to retrieve an HTTP(S) PDF only after you explicitly run Smart Read on that PDF. Content is never monitored in the background.
 
 ## Data deletion
 
