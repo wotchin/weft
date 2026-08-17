@@ -45,14 +45,25 @@ A **Session** is your curated research scope. Ask questions across what you
 intentionally saved, then extend it via **Deep Search** to find primary sources,
 counterpoints, and updates. Weft never silently promotes the active tab into scope.
 
+Sessions can be exported as readable HTML and imported back into Weft. New exports
+carry a versioned, inert data envelope that preserves portable text, source, PDF and
+Smart Read metadata; external image references are restored as safe links instead of
+being fetched automatically. Older Weft HTML exports are accepted in a safe
+best-effort mode when their visible structure can be recognized.
+
 ### 🤖 Bring Your Own Key (BYOK)
 Works with **OpenAI, Anthropic, Gemini, DeepSeek, Moonshot, Qwen, local Ollama, any OpenAI-compatible endpoint, or Chrome's built-in on-device AI** (no key needed).
 Your key and your snippets stay on your machine — they only ever travel to the endpoint *you* choose.
 
-### 🔍 Deep Search with a human-in-the-loop plan
-Weft proposes an **evidence-gap search plan** from your question — you review
-or edit the queries before they run. External excerpts are appended as
-`[W#]`, alongside your `[S#]` Session evidence, never replacing it.
+### 🔍 Lightweight Session-first research agent
+Deep Search now runs a bounded, provider-neutral JSON action loop. It starts
+with local Session retrieval, can use a dependency-free calculator, and only
+asks for an external search when it finds a material evidence gap. Every
+external query is shown for review or editing before it runs. There is no
+general browser automation, arbitrary clicking, or form submission; without a
+search provider, it remains Session-only and makes no web-search request (model
+calls still follow the LLM configured in Settings). External excerpts
+are cited as `[W#]` alongside `[S#]` Session evidence.
 
 ### 📑 Smart Read — source-verified extraction
 Run **Smart Read** on an article or a text-layer HTTP(S) PDF to build a new focused
@@ -86,7 +97,7 @@ flowchart LR
     A[1. Smart Read<br/>verified extraction] --> B[2. Collect<br/>text · image · link]
     B --> C[3. Synthesize<br/>Report · Rewrite · Verify · Diagram]
     C --> D{Need more<br/>evidence?}
-    D -- yes --> E[4. Deep Search<br/>review & approve plan]
+    D -- yes --> E[4. Deep Search<br/>review each web query]
     E --> C
     D -- no --> F["5. Trace<br/>click [S#]/[W#] to source"]
     C --> F
@@ -95,7 +106,7 @@ flowchart LR
 1. **Read** — `Smart Read` an article or text-layer PDF to seed a focused Session. Web passages can be highlighted in place; PDF passages reopen at their source page because Chrome's native PDF viewer cannot accept Weft DOM highlights.
 2. **Collect** — right-click or use the selection toolbar to save more text / image / link snippets.
 3. **Synthesize** — open the Workbench side panel; ask the Session a question, or pick a scenario.
-4. **Deep Search** — start from a Session question, review & approve the search plan, then prepend web excerpts.
+4. **Deep Search** — start from a Session question; if the Agent needs outside evidence, review or edit each proposed web query before it runs.
 5. **Trace** — click any citation to open its source passage or external link.
 
 ### 🎬 Quick demo
@@ -151,7 +162,8 @@ What you see is what runs in the browser.
 | LLM layer | `lib/llm-client.js`, `lib/providers.js` | Multi-provider chatting, JSON mode, streaming |
 | Retrieval | `lib/rag-engine.js`, `lib/rag-indexer.js`, `lib/bm25.js`, `lib/vector-index.js`, `lib/tokenizer.js` | Hybrid BM25 + embedding RAG |
 | Extraction | `lib/page-extractor.js`, `lib/pdf-extractor.js`, `lib/smart-read.js`, `lib/highlighter.js` | Web/PDF extraction, source verification, on-page highlighting |
-| Search | `lib/search-provider.js` | SearXNG / Tavily / Brave for Deep Search |
+| Agent | `lib/agent-runner.js`, `lib/agent-tools.js` | Bounded JSON actions, local Session retrieval and deterministic calculations |
+| Search | `lib/search-provider.js` | User-approved SearXNG / Tavily / Brave searches |
 | Persistence | `lib/store.js`, `lib/idb.js` | chrome.storage + IndexedDB sessions, chat, images |
 | i18n | `lib/i18n.js`, `_locales/` | UI + AI-output language |
 | Safety | `lib/sanitize.js`, `lib/citations.js` | HTML sanitization, citation contract |

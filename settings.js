@@ -106,7 +106,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     rebuildProviderOptions();
 
     function normalizeReasoning(v) {
-        return v === 'on' || v === 'off' ? v : 'auto';
+        return v === 'on' ? 'on' : 'off';
     }
 
     // Normalize legacy vision values to the new vocabulary

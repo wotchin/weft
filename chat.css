@@ -70,12 +70,22 @@ body.mode-panel .header-btn {
     font-size: 12px;
 }
 
+@media (max-width: 520px) {
+    body.mode-panel .header-left h2 {
+        display: none;
+    }
+    body.mode-panel .header-btn.session-transfer-btn {
+        width: 30px;
+        padding-inline: 0;
+    }
+    body.mode-panel .header-btn.session-transfer-btn > span[data-i18n] {
+        display: none;
+    }
+}
+
 @media (max-width: 400px) {
     body.mode-panel .chat-header {
         padding-inline: 10px;
-    }
-    body.mode-panel .header-left h2 {
-        display: none;
     }
     body.mode-panel .brand-mark {
         width: 26px;
@@ -1142,6 +1152,9 @@ body.mode-panel .header-btn {
     font: inherit;
     font-weight: 500;
     color: #333;
+    line-height: 1.4;
+    resize: vertical;
+    max-height: 120px;
 }
 
 .plan-item-query:hover,
@@ -1193,29 +1206,59 @@ body.mode-panel .header-btn {
     background: #e5e0ff;
 }
 
-.search-plan-progress {
-    padding: 8px 16px 12px;
+.agent-status {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 36px;
+    padding: 7px 16px;
+    border-bottom: 1px solid #e0e0e0;
+    background: #faf9ff;
+    color: #514b6c;
+    font-size: 12px;
 }
 
-.progress-bar {
-    height: 4px;
-    background: #e0e0e0;
-    border-radius: 2px;
-    overflow: hidden;
-    margin-bottom: 4px;
+.agent-status[hidden] {
+    display: none;
 }
 
-.progress-fill {
-    height: 100%;
+.agent-status-dot {
+    width: 7px;
+    height: 7px;
+    flex: 0 0 auto;
+    border-radius: 50%;
     background: var(--weft-accent);
-    border-radius: 2px;
-    transition: width 0.3s;
-    width: 0%;
+    box-shadow: 0 0 0 0 rgba(108, 92, 224, 0.4);
+    animation: agent-status-pulse 1.4s ease-out infinite;
 }
 
-.progress-text {
-    font-size: 11px;
-    color: #888;
+.agent-status-text {
+    min-width: 0;
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.agent-stop-btn {
+    flex: 0 0 auto;
+    padding: 3px 9px;
+    border: 1px solid #d8d2f4;
+    border-radius: 999px;
+    background: #fff;
+    color: #6559a8;
+    cursor: pointer;
+    font: inherit;
+}
+
+.agent-stop-btn:hover {
+    border-color: #8f82e8;
+    color: #4b3da3;
+}
+
+@keyframes agent-status-pulse {
+    70% { box-shadow: 0 0 0 5px rgba(108, 92, 224, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(108, 92, 224, 0); }
 }
 
 /* Takeaway Cards */

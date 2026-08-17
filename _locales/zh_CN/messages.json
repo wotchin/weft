@@ -71,11 +71,62 @@
   "wb_expand": {
     "message": "全屏"
   },
+  "wb_import": {
+    "message": "导入"
+  },
+  "wb_import_hint": {
+    "message": "从 Weft Session HTML 文件导入片段"
+  },
+  "wb_import_default_name": {
+    "message": "导入的 Session"
+  },
+  "wb_import_success": {
+    "message": "已将 %s 个片段导入到“%n”。"
+  },
+  "wb_import_success_legacy": {
+    "message": "已从旧版 Weft HTML 导出文件将 %s 个片段导入到“%n”。旧文件中未保存的元数据无法恢复。"
+  },
+  "wb_import_images_as_links": {
+    "message": "%s 个图片片段已恢复为安全链接，不会被自动下载。"
+  },
+  "wb_import_invalid": {
+    "message": "该文件不是有效的 Weft Session 导出文件，或者其中的数据已经损坏。"
+  },
+  "wb_import_empty": {
+    "message": "导出的 Session 中没有可导入的片段。"
+  },
+  "wb_import_too_large": {
+    "message": "该 Session 导出文件过大，无法安全导入。"
+  },
+  "wb_import_future_version": {
+    "message": "该 Session 使用了更新的导出格式，请升级 Weft 后重试。"
+  },
+  "wb_import_unsupported_version": {
+    "message": "该 Session 使用了当前版本 Weft 已不再支持的导出格式。"
+  },
+  "wb_import_failed": {
+    "message": "Weft 无法导入该 Session；现有 Session 未被修改。"
+  },
+  "wb_import_busy": {
+    "message": "Weft 正在处理其他任务，请在任务完成后重新选择文件导入。"
+  },
+  "wb_import_saved_refresh": {
+    "message": "“%n”已导入，但工作台未能刷新。请重新打开 Weft 以加载新 Session。"
+  },
   "wb_export": {
     "message": "导出"
   },
   "wb_export_hint": {
     "message": "导出当前 Session 收集的 Snippets"
+  },
+  "wb_export_failed": {
+    "message": "Weft 无法导出该 Session，其内容可能超出了安全转移限制。"
+  },
+  "wb_export_from": {
+    "message": "— 来自"
+  },
+  "wb_export_import_cta": {
+    "message": "下载安装 Weft 后即可导入此 Session。"
   },
   "wb_clear": {
     "message": "清空"
@@ -440,17 +491,14 @@
   "settings_reasoning": {
     "message": "推理（思考模式）"
   },
-  "settings_reasoning_auto": {
-    "message": "自动（对已知推理模型关闭）"
-  },
   "settings_reasoning_off": {
-    "message": "始终关闭（更快，推荐）"
+    "message": "关闭（默认，更快）"
   },
   "settings_reasoning_on": {
-    "message": "始终开启（更慢，可能超出预算）"
+    "message": "开启（更慢，可能消耗更多 Token）"
   },
   "settings_reasoning_hint": {
-    "message": "推理模型（DeepSeek V4、Kimi K3）会先思考再回答。关闭可避免将整个 token 预算耗费在思考链上；开启更慢，但在复杂问题上可能更准确。"
+    "message": "除非你明确选择开启，否则 Weft 不会启用思考模式。若模型本身无法完全关闭推理，Weft 会使用其支持的最低推理强度。"
   },
   "settings_vision": {
     "message": "图片理解"
@@ -795,10 +843,10 @@
     "message": "生成"
   },
   "search_plan_title": {
-    "message": "Session 补证计划"
+    "message": "审核联网搜索"
   },
   "action_execute": {
-    "message": "执行"
+    "message": "批准并搜索"
   },
   "sc_report_hint": {
     "message": "将片段整合成带引用的报告"
@@ -1158,13 +1206,13 @@
     "message": "基于“%s” · 将通过 %p 搜索"
   },
   "search_plan_include_query": {
-    "message": "包含这项搜索"
+    "message": "批准这项搜索"
   },
   "search_plan_edit_query": {
     "message": "编辑搜索关键词"
   },
   "search_plan_select_one": {
-    "message": "请至少选择一项搜索后再继续。"
+    "message": "请批准搜索词，或取消本次联网搜索。"
   },
   "search_plan_stale": {
     "message": "Session 或搜索服务已经变化，请重新生成并确认计划。"
@@ -1399,5 +1447,35 @@
   },
   "diagram_type_svg_desc": {
     "message": "以自由形式呈现复杂概念"
+  },
+  "agent_analyzing": {
+    "message": "正在分析 Session 证据…"
+  },
+  "agent_searching_session": {
+    "message": "正在本地检索当前 Session…"
+  },
+  "agent_calculating": {
+    "message": "正在本地核对计算…"
+  },
+  "agent_waiting_approval": {
+    "message": "正在等待您确认外部搜索…"
+  },
+  "agent_searching_web": {
+    "message": "正在执行已确认的搜索…"
+  },
+  "agent_synthesizing": {
+    "message": "正在生成带证据链的回答…"
+  },
+  "agent_stop": {
+    "message": "停止"
+  },
+  "agent_stopped": {
+    "message": "已停止本次研究。"
+  },
+  "agent_local_only": {
+    "message": "尚未配置联网搜索服务，本次将仅使用本地 Session 证据和工具。"
+  },
+  "agent_failed_local_fallback": {
+    "message": "研究规划未能完成，Weft 已改用检索到的 Session 证据直接回答。"
   }
 }

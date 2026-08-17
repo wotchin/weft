@@ -14,7 +14,12 @@
             </div>
             <div class="header-right">
                 <button id="expandBtn" class="header-btn" title="Open in a full window" data-i18n="wb_expand" data-i18n-title="wb_expand_hint" data-i18n-aria-label="wb_expand" aria-label="Expand" style="display:none;">Expand</button>
-                <button id="exportBtn" class="header-btn" title="Export the snippets collected in this session" data-i18n-title="wb_export_hint" data-i18n-aria-label="wb_export" aria-label="Export" disabled>
+                <button id="importSessionBtn" class="header-btn session-transfer-btn" title="Import a Weft Session HTML file" data-i18n-title="wb_import_hint" data-i18n-aria-label="wb_import" aria-label="Import" disabled>
+                    <span class="asset-mask asset-import-snaps" aria-hidden="true"></span>
+                    <span data-i18n="wb_import">Import</span>
+                </button>
+                <input id="sessionImportInput" type="file" accept=".html,.htm,text/html" hidden>
+                <button id="exportBtn" class="header-btn session-transfer-btn" title="Export the snippets collected in this session" data-i18n-title="wb_export_hint" data-i18n-aria-label="wb_export" aria-label="Export" disabled>
                     <span class="asset-mask asset-export-html" aria-hidden="true"></span>
                     <span data-i18n="wb_export">Export</span>
                 </button>
@@ -101,20 +106,22 @@
         <div class="search-plan-panel" id="searchPlanPanel" style="display:none;">
             <div class="search-plan-header">
                 <div class="search-plan-heading">
-                    <span data-i18n="search_plan_title">Session Evidence Plan</span>
+                    <span data-i18n="search_plan_title">Review External Search</span>
                     <span class="search-plan-scope" id="searchPlanScope"></span>
                 </div>
                 <div class="search-plan-actions">
-                    <button id="confirmPlan" class="plan-btn plan-confirm" data-i18n="action_execute">Execute</button>
+                    <button id="confirmPlan" class="plan-btn plan-confirm" data-i18n="action_execute">Approve &amp; Search</button>
                     <button id="cancelPlan" class="plan-btn plan-cancel" data-i18n="action_cancel">Cancel</button>
                 </div>
             </div>
             <div class="search-plan-assessment" id="searchPlanAssessment"></div>
             <div class="search-plan-body" id="searchPlanBody"></div>
-            <div class="search-plan-progress" id="searchProgress" style="display:none;">
-                <div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
-                <span class="progress-text" id="progressText"></span>
-            </div>
+        </div>
+
+        <div class="agent-status" id="agentStatus" hidden aria-live="polite">
+            <span class="agent-status-dot" aria-hidden="true"></span>
+            <span class="agent-status-text" id="agentStatusText" data-i18n="agent_analyzing">Reviewing Session evidence…</span>
+            <button class="agent-stop-btn" id="cancelAgent" type="button" data-i18n="agent_stop">Stop</button>
         </div>
 
         <!-- Prompt template selector -->
@@ -174,8 +181,11 @@
     <script src="lib/providers.js"></script>
     <script src="lib/llm-client.js"></script>
     <script src="lib/search-provider.js"></script>
+    <script src="lib/agent-tools.js"></script>
+    <script src="lib/agent-runner.js"></script>
     <script src="lib/sanitize.js"></script>
     <script src="lib/source-utils.js"></script>
+    <script src="lib/session-transfer.js"></script>
     <script src="markdown.js"></script>
     <script src="lib/citations.js"></script>
     <script src="lib/render.js"></script>

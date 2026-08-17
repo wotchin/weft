@@ -20,7 +20,7 @@ For an article or PDF, Weft sends a bounded selection of readable text blocks to
 ## What is sent to third parties
 
 - **Your chosen LLM provider.** When you run a synthesis action (report, rewrite, diagram, verify, summarize, Smart Read, etc.), the relevant snippet or page text and your prompt are sent to the LLM endpoint you configured, so it can generate a response. This is subject to that provider's own privacy policy.
-- **Optional Deep Search.** Weft first uses your configured LLM to compare your question with a bounded set of relevant Session evidence and propose an evidence-gap search plan. The exact queries are shown for you to select and edit. Only after you confirm are those query strings sent to the search provider you selected: a public SearXNG instance, your own SearXNG instance, or a keyed API (Tavily, Brave Search). The search provider does not receive the Session, comments, snippets or current webpage. Weft does not scrape Google, Bing, or other search engines.
+- **Optional Deep Search.** Session retrieval and deterministic calculations run locally. The research question and a bounded set of retrieved Session evidence are then sent to the LLM provider you configured for planning and answer synthesis. If the planner proposes an external search, the complete query is shown for you to approve or edit. Only an approved query string is sent to the search provider you selected: a public SearXNG instance, your own SearXNG instance, or a keyed API (Tavily, Brave Search). The search provider does not receive the Session, comments, snippets or current webpage. Weft does not scrape Google, Bing, or other search engines.
 
 Weft does not use analytics, telemetry, advertising, or any third-party tracking. We do not sell or share your data.
 

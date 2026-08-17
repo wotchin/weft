@@ -137,10 +137,13 @@ if (!contentAssistSource.includes("message.type === 'uiLanguageChanged'") || !co
 if (!settingsSource.includes('refreshDynamicCopy()') || !settingsSource.includes('await I18N.init()')) {
     errors.push('settings: language changes must refresh dynamic options and statuses');
 }
-const searchPlanStart = chatSource.indexOf('async function generateSearchPlan');
-const searchPlanEnd = chatSource.indexOf('function renderSearchPlan', searchPlanStart);
-if (searchPlanStart < 0 || !chatSource.slice(searchPlanStart, searchPlanEnd).includes('I18N.promptLanguageInstruction()')) {
-    errors.push('search plan: model-visible explanations must follow the selected language');
+const researchAgentStart = chatSource.indexOf('async function runDeepResearchAgent');
+const researchAgentEnd = chatSource.indexOf('// "Deep Search" is a bounded', researchAgentStart);
+if (
+    researchAgentStart < 0
+    || !chatSource.slice(researchAgentStart, researchAgentEnd).includes('I18N.promptLanguageInstruction()')
+) {
+    errors.push('research agent: model-visible decisions must follow the selected language');
 }
 
 // Behavioral contract: an explicit Weft language must override an English

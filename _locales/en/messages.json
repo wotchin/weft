@@ -71,11 +71,62 @@
   "wb_expand": {
     "message": "Expand"
   },
+  "wb_import": {
+    "message": "Import"
+  },
+  "wb_import_hint": {
+    "message": "Import snippets from a Weft Session HTML file"
+  },
+  "wb_import_default_name": {
+    "message": "Imported Session"
+  },
+  "wb_import_success": {
+    "message": "Imported %s snippets into “%n”."
+  },
+  "wb_import_success_legacy": {
+    "message": "Imported %s snippets into “%n” from an older Weft HTML export. Metadata unavailable in the old file could not be restored."
+  },
+  "wb_import_images_as_links": {
+    "message": "%s image snippets were restored as safe links instead of being downloaded automatically."
+  },
+  "wb_import_invalid": {
+    "message": "This file is not a valid Weft Session export, or its embedded data is damaged."
+  },
+  "wb_import_empty": {
+    "message": "The exported Session contains no snippets to import."
+  },
+  "wb_import_too_large": {
+    "message": "This Session export is too large to import safely."
+  },
+  "wb_import_future_version": {
+    "message": "This Session uses a newer export format. Update Weft and try again."
+  },
+  "wb_import_unsupported_version": {
+    "message": "This Session uses an export format that this version of Weft no longer supports."
+  },
+  "wb_import_failed": {
+    "message": "Weft could not import this Session. Your existing Sessions were not changed."
+  },
+  "wb_import_busy": {
+    "message": "Weft is still working on another task. Try importing the file again when it finishes."
+  },
+  "wb_import_saved_refresh": {
+    "message": "“%n” was imported, but the Workbench could not refresh it. Reopen Weft to load the new Session."
+  },
   "wb_export": {
     "message": "Export"
   },
   "wb_export_hint": {
     "message": "Export the snippets collected in this session"
+  },
+  "wb_export_failed": {
+    "message": "Weft could not export this Session. Its content may exceed the safe transfer limits."
+  },
+  "wb_export_from": {
+    "message": "— from"
+  },
+  "wb_export_import_cta": {
+    "message": "Install Weft to import this Session."
   },
   "wb_clear": {
     "message": "Clear"
@@ -440,17 +491,14 @@
   "settings_reasoning": {
     "message": "Reasoning (Thinking Mode)"
   },
-  "settings_reasoning_auto": {
-    "message": "Auto (off for known reasoning models)"
-  },
   "settings_reasoning_off": {
-    "message": "Always off (faster, recommended)"
+    "message": "Off (default, faster)"
   },
   "settings_reasoning_on": {
-    "message": "Always on (slower, may exceed budget)"
+    "message": "On (slower, may use more tokens)"
   },
   "settings_reasoning_hint": {
-    "message": "Reasoning models (DeepSeek V4, Kimi K3) think before answering. Turning it off avoids spending your whole token budget on chain-of-thought; turning it on is slower but can improve hard problems."
+    "message": "Weft never enables thinking unless you choose On. If a model cannot fully disable reasoning, Weft uses its lowest supported effort."
   },
   "settings_vision": {
     "message": "Vision (Image Understanding)"
@@ -795,10 +843,10 @@
     "message": "Generate"
   },
   "search_plan_title": {
-    "message": "Session Evidence Plan"
+    "message": "Review External Search"
   },
   "action_execute": {
-    "message": "Execute"
+    "message": "Approve & Search"
   },
   "sc_report_hint": {
     "message": "Synthesize your snippets into a cited report"
@@ -1158,13 +1206,13 @@
     "message": "Based on “%s” · searches via %p"
   },
   "search_plan_include_query": {
-    "message": "Include this search"
+    "message": "Approve this search"
   },
   "search_plan_edit_query": {
     "message": "Edit search query"
   },
   "search_plan_select_one": {
-    "message": "Select at least one search to continue."
+    "message": "Approve the query or cancel external search."
   },
   "search_plan_stale": {
     "message": "The Session or search provider changed. Review and generate a fresh plan."
@@ -1399,5 +1447,35 @@
   },
   "diagram_type_svg_desc": {
     "message": "Free-form visual for complex concepts"
+  },
+  "agent_analyzing": {
+    "message": "Reviewing Session evidence…"
+  },
+  "agent_searching_session": {
+    "message": "Searching this Session locally…"
+  },
+  "agent_calculating": {
+    "message": "Checking a calculation locally…"
+  },
+  "agent_waiting_approval": {
+    "message": "Waiting for your approval before external search…"
+  },
+  "agent_searching_web": {
+    "message": "Searching the approved query…"
+  },
+  "agent_synthesizing": {
+    "message": "Building the evidence-backed answer…"
+  },
+  "agent_stop": {
+    "message": "Stop"
+  },
+  "agent_stopped": {
+    "message": "Research stopped."
+  },
+  "agent_local_only": {
+    "message": "No web-search provider is configured, so this run will use local Session evidence and tools only."
+  },
+  "agent_failed_local_fallback": {
+    "message": "The research planner could not finish, so Weft answered from the retrieved Session evidence."
   }
 }

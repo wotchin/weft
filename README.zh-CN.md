@@ -29,8 +29,9 @@
 
 - **每条引用都能点回原文。** AI 生成的每句话都带 `[S1]`、`[W2]` 这样的标记：`S` 指向你保存的原文片段，`W` 指向 Deep Search 抓回的网页片段，点击跳转到来源。
 - **Session 是回答边界。** Weft 只在当前 Session 的片段范围内回答，不会把整张网页当作研究主题。证据不够时再通过 Deep Search 主动补。
+- **Session 可迁移。** 工作台可把当前 Session 导出为便于阅读的 HTML，也可将其重新导入 Weft。新导出文件内含独立版本号和惰性结构化数据，可恢复文本、来源、PDF 与 Smart Read 元数据；外部图片引用会转成安全链接，不会在导入后被自动下载。旧版 Weft HTML 在可识别时会以安全的尽力模式导入。
 - **Smart Read** 可从文章或带文字层的 HTTP(S) PDF 抽取要点建立新 Session；每条摘要在保存前都会反查提取后的源文，找不到出处的丢弃，PDF 片段还会保留页码。Weft 与 Chrome 原生预览器并存；若其他 PDF 扩展把标签页改成其私有的 `chrome-extension://` 地址，受 Chrome 跨扩展隔离限制，Weft 无法读取。
-- **Deep Search** 先生成「证据缺口」搜索方案供你审阅、修改，再执行检索；结果以 `[W#]` 并列加入 Session，不覆盖原证据。
+- **Deep Search** 是一个受限的 Session-first 研究 Agent：先在本地检索 Session，必要时调用无依赖计算工具；只在发现实质证据缺口时才提议外部搜索，且每条查询都要先经你审阅或修改。它不提供任意点击、表单提交等通用浏览器自动化；未配置搜索服务时不会发起网页搜索，模型调用仍遵循 Settings 中配置的 LLM。
 - **九种综合场景**：报告、重写、事实核查、摘要、对比、信息抽取、表格、翻译、Mermaid 图表，一键产出。
 - **自带密钥（BYOK）或免密。** 兼容 OpenAI / Anthropic / Gemini / DeepSeek / Moonshot / Qwen / Ollama / OpenAI 兼容端点 / Chrome 内置 AI。
 - **数据全部留在本机。** 片段、聊天历史、密钥存于 `chrome.storage.local` / IndexedDB，无账号、无遥测、无第三方追踪。本地模型可完全离线。详见 [`PRIVACY.md`](PRIVACY.md)。
@@ -54,7 +55,7 @@ flowchart LR
 1. 对长文或带文字层的 PDF 运行 **Smart Read** 建立聚焦 Session；网页片段可用 **Show on Page** 标注，PDF 片段则会跳转到对应页码（Chrome 原生 PDF 预览器不支持 Weft DOM 标注）。
 2. 在其他标签页选中文本、图片、链接，右键存入同一 Session。
 3. 打开侧边栏 Workbench，向当前 Session 提问或选择综合场景。
-4. 证据不足时对问题跑 Deep Search，审完搜索方案后补充网页片段。
+4. 证据不足时对问题运行 Deep Search；Agent 如需外部证据，会先让你逐条审核或修改联网查询。
 5. 回答中的任何引用标记都可点击跳转到来源。
 
 ### 🎬 快速演示
@@ -106,7 +107,8 @@ flowchart LR
 | LLM | `lib/llm-client.js`、`lib/providers.js` | 多服务商、JSON 模式、流式 |
 | 检索 | `lib/rag-engine.js`、`lib/rag-indexer.js`、`lib/bm25.js`、`lib/vector-index.js`、`lib/tokenizer.js` | 混合 BM25 + 向量 RAG |
 | 抽取 | `lib/page-extractor.js`、`lib/pdf-extractor.js`、`lib/smart-read.js`、`lib/highlighter.js` | 网页/PDF 抽取、来源校验、页面高亮 |
-| 搜索 | `lib/search-provider.js` | Deep Search：SearXNG / Tavily / Brave |
+| Agent | `lib/agent-runner.js`, `lib/agent-tools.js` | 受限 JSON action、本地 Session 检索与确定性计算 |
+| 搜索 | `lib/search-provider.js` | 经用户确认的 SearXNG / Tavily / Brave 搜索 |
 | 存储 | `lib/store.js`、`lib/idb.js` | chrome.storage + IndexedDB |
 | i18n | `lib/i18n.js`、`_locales/` | 界面与回答语言 |
 | 安全 | `lib/sanitize.js`、`lib/citations.js` | HTML 消毒、引用契约 |

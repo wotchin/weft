@@ -148,6 +148,312 @@ function extractEventCallback(source, target, eventName) {
 // ── Tests ───────────────────────────────────────────────────────────────
 const ctx = makeContext();
 
+// Session HTML is a portable data boundary: readable by people, but imported
+// only from a bounded, versioned and inert JSON envelope.
+const sessionTransferSource = read('lib/session-transfer.js');
+const SessionTransferTest = vm.runInNewContext(
+    `${sessionTransferSource}\n;SessionTransfer`,
+    { URL, console }
+);
+const transferSnippets = [
+    {
+        id: 'untrusted-shared-id',
+        type: 'text',
+        content: 'Alpha </script><script>evil()</script>\u2028中文 ①Ａ',
+        comment: '<img src=x onerror=evil()>',
+        sourceUrl: 'javascript:alert(1)',
+        sourceTitle: 'Unsafe URL becomes plain metadata',
+        timestamp: 1700000000000,
+        tags: ['evidence', 'evidence'],
+        smartReadKey: 'must-not-transfer',
+        smartReadRequestId: 'must-not-transfer',
+        smartReadRunId: 'must-not-transfer',
+    },
+    {
+        id: 'untrusted-shared-id',
+        type: 'link',
+        content: 'Primary source',
+        linkUrl: 'https://example.com/source?q=one',
+        sourceUrl: 'https://example.com/article',
+        sourceTitle: 'Article',
+        timestamp: 1700000000001,
+        tags: ['reference'],
+    },
+    {
+        id: 'pdf-original-id',
+        type: 'text',
+        content: 'Exact PDF evidence',
+        comment: 'Finding: summary',
+        sourceUrl: 'https://example.com/report.pdf',
+        sourceTitle: 'Report',
+        sourceDocumentType: 'pdf',
+        sourcePageNumber: 7,
+        sourcePageCount: 20,
+        sourceBlockId: 'pdf-page-7',
+        smartReadPageType: 'article',
+        smartReadTopic: 'Portable research',
+        smartReadSessionTitle: 'Portable Session',
+        smartReadTakeawayIndex: 2,
+        smartReadTakeawayTitle: 'Finding',
+        smartReadSummary: 'Summary',
+        smartReadEvidenceKind: 'data',
+        smartReadCoverageLimited: true,
+        tags: ['data', 'smart-read', 'pdf'],
+    },
+    {
+        id: 'image-original-id',
+        type: 'image',
+        content: 'A remote chart',
+        imageUrl: 'https://images.example.com/chart.png',
+        sourceUrl: 'https://example.com/chart-story',
+        sourceTitle: 'Chart story',
+        hasCachedImage: true,
+        cachedDataUrl: 'data:image/png;base64,not-portable',
+        tags: ['chart'],
+    },
+];
+const transferPayload = SessionTransferTest.createPayload(
+    'Portable / Session',
+    transferSnippets,
+    { version: '3.0.2', versionName: '3.0.2-beta', exportedAt: 1700000000000 }
+);
+const transferElement = SessionTransferTest.embeddedPayloadHtml(transferPayload);
+const transferDocument = `<!doctype html><html><body>${transferElement}</body></html>`;
+const parsedTransfer = SessionTransferTest.parseHtml(transferDocument, { fileName: 'portable.html' });
+const preparedTransfer = SessionTransferTest.prepareImport(parsedTransfer, {
+    idFactory: () => 'fresh-import-id',
+});
+const transferIds = preparedTransfer.snippets.map((snippet) => snippet.id);
+ok('session transfer: v1 round-trip preserves portable text, PDF and Smart Read metadata',
+    parsedTransfer.formatVersion === 1 && parsedTransfer.exporter.versionName === '3.0.2-beta' &&
+    preparedTransfer.snippets[0].content === transferSnippets[0].content &&
+    preparedTransfer.snippets[0].comment === transferSnippets[0].comment &&
+    preparedTransfer.snippets[0].sourceUrl === undefined &&
+    preparedTransfer.snippets[1].linkUrl === 'https://example.com/source?q=one' &&
+    preparedTransfer.snippets[2].sourcePageNumber === 7 &&
+    preparedTransfer.snippets[2].sourceBlockId === 'pdf-page-7' &&
+    preparedTransfer.snippets[2].smartReadTakeawayIndex === 2 &&
+    preparedTransfer.snippets[2].smartReadCoverageLimited === true);
+ok('session transfer: runtime ids, cache bytes and Smart Read cache keys never cross the file boundary',
+    transferPayload.session.snippets.every((snippet) =>
+        !Object.hasOwn(snippet, 'id') && !Object.hasOwn(snippet, 'cachedDataUrl') &&
+        !Object.hasOwn(snippet, 'hasCachedImage') && !Object.hasOwn(snippet, 'smartReadKey') &&
+        !Object.hasOwn(snippet, 'smartReadRequestId') && !Object.hasOwn(snippet, 'smartReadRunId')) &&
+    new Set(transferIds).size === transferIds.length &&
+    transferIds.every((id) => id !== 'untrusted-shared-id' && id !== 'pdf-original-id'));
+ok('session transfer: embedded JSON cannot break out of its one inert script element',
+    (transferElement.match(/<script\b/gu) || []).length === 1 &&
+    (transferElement.match(/<\/script>/gu) || []).length === 1 &&
+    transferElement.includes('\\u003c/script\\u003e\\u003cscript\\u003e') &&
+    !transferElement.includes('<img src=x onerror=evil()>'));
+ok('session transfer: imported images become non-fetching link references',
+    preparedTransfer.convertedImages === 1 &&
+    preparedTransfer.snippets[3].type === 'link' &&
+    preparedTransfer.snippets[3].linkUrl === 'https://images.example.com/chart.png' &&
+    !Object.hasOwn(preparedTransfer.snippets[3], 'imageUrl') &&
+    preparedTransfer.snippets[3].tags.includes('image-reference'));
+
+function transferErrorCode(callback) {
+    try { callback(); return ''; } catch (error) { return error?.code || 'UNKNOWN'; }
+}
+
+const boundaryTags = [
+    '#topic', 'duplicate', 'duplicate', 't'.repeat(80),
+    ...Array.from({ length: 28 }, (_, index) => `tag-${index}`),
+];
+const boundaryContent = 'x'.repeat(1_000_000);
+const boundaryPayload = SessionTransferTest.createPayload('Boundary', [{
+    type: 'text', content: boundaryContent, tags: boundaryTags,
+}]);
+ok('session transfer: field and tag limits preserve exact in-range user data',
+    boundaryPayload.session.snippets[0].content === boundaryContent &&
+    boundaryPayload.session.snippets[0].tags.length === 32 &&
+    JSON.stringify(boundaryPayload.session.snippets[0].tags) === JSON.stringify(boundaryTags));
+ok('session transfer: export rejects overlong content, tag counts and individual tags',
+    transferErrorCode(() => SessionTransferTest.createPayload('Too long', [{
+        type: 'text', content: 'x'.repeat(1_000_001), tags: [],
+    }])) === 'TOO_LARGE' &&
+    transferErrorCode(() => SessionTransferTest.createPayload('Too many tags', [{
+        type: 'text', content: 'x', tags: Array.from({ length: 33 }, () => 'tag'),
+    }])) === 'TOO_LARGE' &&
+    transferErrorCode(() => SessionTransferTest.createPayload('Long tag', [{
+        type: 'text', content: 'x', tags: ['t'.repeat(81)],
+    }])) === 'TOO_LARGE');
+
+function canonicalPayloadWithSnippetPatch(patch) {
+    const payload = JSON.parse(JSON.stringify(transferPayload));
+    Object.assign(payload.session.snippets[0], patch);
+    return SessionTransferTest.embeddedPayloadHtml(payload);
+}
+ok('session transfer: canonical imports enforce the same content and tag limits',
+    transferErrorCode(() => SessionTransferTest.parseHtml(canonicalPayloadWithSnippetPatch({
+        content: 'x'.repeat(1_000_001),
+    }))) === 'TOO_LARGE' &&
+    transferErrorCode(() => SessionTransferTest.parseHtml(canonicalPayloadWithSnippetPatch({
+        tags: Array.from({ length: 33 }, () => 'tag'),
+    }))) === 'TOO_LARGE' &&
+    transferErrorCode(() => SessionTransferTest.parseHtml(canonicalPayloadWithSnippetPatch({
+        tags: ['t'.repeat(81)],
+    }))) === 'TOO_LARGE');
+
+const stablePayloadOpener = '<script id="weft-session-data" type="application/json">';
+const earlyV1PayloadElement = transferElement.replace(
+    stablePayloadOpener,
+    '<script id="weft-session-data" type="application/json" data-weft-session-format="1">'
+);
+ok('session transfer: the canonical payload opener stays stable while early v1 files remain readable',
+    transferElement.startsWith(stablePayloadOpener) &&
+    !transferElement.slice(0, transferElement.indexOf('>') + 1).includes('data-weft-session-format') &&
+    SessionTransferTest.parseHtml(earlyV1PayloadElement).formatVersion === 1);
+const pathologicalLegacyMarkupCode = transferErrorCode(() =>
+    SessionTransferTest.parseHtml('<script '.repeat(40_000)));
+ok('session transfer: pathological legacy markup is bounded and rejected',
+    pathologicalLegacyMarkupCode === 'INVALID_PAYLOAD' ||
+    pathologicalLegacyMarkupCode === 'NOT_WEFT_EXPORT');
+
+const higherAppPayload = JSON.parse(JSON.stringify(transferPayload));
+higherAppPayload.exporter.version = '99.0.0';
+higherAppPayload.exporter.versionName = '99.0.0-future-app';
+const higherAppParsed = SessionTransferTest.parseHtml(
+    SessionTransferTest.embeddedPayloadHtml(higherAppPayload)
+);
+const futureFormatPayload = JSON.parse(JSON.stringify(transferPayload));
+futureFormatPayload.formatVersion = 2;
+const featurePayload = JSON.parse(JSON.stringify(transferPayload));
+featurePayload.requiredFeatures = ['signed-image-bundles'];
+const invalidSnippetPayload = JSON.parse(JSON.stringify(transferPayload));
+invalidSnippetPayload.session.snippets.push({
+    type: 'link', content: 'Unsafe link', linkUrl: 'javascript:alert(1)',
+});
+const tooManyPayload = JSON.parse(JSON.stringify(transferPayload));
+tooManyPayload.session.snippets = Array.from(
+    { length: SessionTransferTest.MAX_SNIPPETS + 1 },
+    () => ({ type: 'text', content: 'x' })
+);
+ok('session transfer: app versions are informational but future format/features are rejected',
+    higherAppParsed.exporter.versionName === '99.0.0-future-app' &&
+    transferErrorCode(() => SessionTransferTest.parseHtml(
+        SessionTransferTest.embeddedPayloadHtml(futureFormatPayload))) === 'FUTURE_VERSION' &&
+    transferErrorCode(() => SessionTransferTest.parseHtml(
+        SessionTransferTest.embeddedPayloadHtml(featurePayload))) === 'UNSUPPORTED_FEATURES');
+ok('session transfer: one invalid or oversized snippet list rejects the whole import',
+    transferErrorCode(() => SessionTransferTest.parseHtml(
+        SessionTransferTest.embeddedPayloadHtml(invalidSnippetPayload))) === 'INVALID_SNIPPET' &&
+    transferErrorCode(() => SessionTransferTest.parseHtml(
+        SessionTransferTest.embeddedPayloadHtml(tooManyPayload))) === 'TOO_MANY_SNIPPETS');
+ok('session transfer: a damaged new-format marker never downgrades to legacy parsing',
+    transferErrorCode(() => SessionTransferTest.parseHtml(
+        '<div class="snippets-list"><div class="snippet-item"><pre>visible</pre></div></div>' +
+        '<script id="weft-session-data" type="application/json">{"broken":')) === 'INVALID_PAYLOAD');
+
+const unquotedFuturePayload = SessionTransferTest.embeddedPayloadHtml(futureFormatPayload)
+    .replace('id="weft-session-data"', 'id=weft-session-data');
+ok('session transfer: an unquoted payload marker is rejected instead of downgraded',
+    transferErrorCode(() => SessionTransferTest.parseHtml(
+        '<div class="snippets-list"><div class="snippet-item"><pre>legacy decoy</pre></div></div>' +
+        unquotedFuturePayload)) === 'INVALID_PAYLOAD');
+
+const legacyTransferHtml = `<!doctype html><html><body>
+<h1>Session Snippets</h1><p class="meta">Legacy &amp; Notes · Using 3 snippets</p>
+<div class="snippets-list">
+  <div class="snippet-item"><div class="snippet-num">#1</div>
+    <pre>Alpha &amp; beta &lt;safe&gt;</pre>
+    <div class="snippet-source">Old article — <a href="https://example.com/old">https://example.com/old</a></div>
+    <div class="snippet-tags"><span class="tag">#evidence</span></div>
+    <div class="snippet-comment">💬 old note</div>
+  </div>
+  <div class="snippet-item"><div class="snippet-num">#2</div>
+    <em>https://images.example.com/old.png</em>
+    <div class="snippet-source">Old chart — <a href="javascript:alert(1)">unsafe</a></div>
+  </div>
+  <div class="snippet-item"><div class="snippet-num">#3</div>
+    <pre>https://example.com/legacy-target</pre>
+    <div class="snippet-source">Old index — <a href="https://example.com/index">https://example.com/index</a></div>
+  </div>
+</div></body></html>`;
+const parsedLegacyTransfer = SessionTransferTest.parseHtml(legacyTransferHtml, {
+    fileName: 'weft-snippets-renamed.html',
+});
+ok('session transfer: legacy Weft HTML safely restores the visible fields it actually contains',
+    parsedLegacyTransfer.legacy === true && parsedLegacyTransfer.formatVersion === 0 &&
+    parsedLegacyTransfer.session.name === 'Legacy & Notes' &&
+    parsedLegacyTransfer.session.snippets.length === 3 &&
+    parsedLegacyTransfer.session.snippets[0].content === 'Alpha & beta <safe>' &&
+    parsedLegacyTransfer.session.snippets[0].sourceUrl === 'https://example.com/old' &&
+    parsedLegacyTransfer.session.snippets[0].comment === 'old note' &&
+    parsedLegacyTransfer.session.snippets[1].type === 'link' &&
+    parsedLegacyTransfer.session.snippets[1].sourceUrl === undefined &&
+    parsedLegacyTransfer.session.snippets[2].type === 'link' &&
+    parsedLegacyTransfer.session.snippets[2].linkUrl === 'https://example.com/legacy-target');
+ok('session transfer: legacy image references are counted for the no-fetch import notice',
+    parsedLegacyTransfer.convertedImages === 1 &&
+    parsedLegacyTransfer.session.snippets[1].tags.includes('image-reference'));
+ok('session transfer: random HTML and unsafe export filenames are handled defensively',
+    transferErrorCode(() => SessionTransferTest.parseHtml('<html><h1>Not Weft</h1></html>')) === 'NOT_WEFT_EXPORT' &&
+    SessionTransferTest.safeFilenamePart('A:B/C*D?') === 'A-B-C-D-');
+
+const importStorage = {
+    sessions: {
+        Research: [{ id: 'existing-1', type: 'text', content: 'keep me' }],
+        'Research (2)': [{ id: 'existing-2', type: 'text', content: 'keep me too' }],
+    },
+    currentSession: 'Research',
+    chat: { Research: [{ role: 'user', content: 'existing chat' }] },
+};
+const importContext = makeContext(importStorage);
+const importSet = importContext.chrome.storage.local.set;
+const importWrites = [];
+importContext.chrome.storage.local.set = async (value) => {
+    importWrites.push(Object.keys(value).sort().join(','));
+    await importSet(value);
+};
+importContext.__snippets = preparedTransfer.snippets;
+const importedCommit = await load(
+    importContext,
+    ['lib/store.js'],
+    `Store.createSessionWithSnippets('Research', __snippets, {
+        deduplicate: false, fallbackName: 'Imported Session'
+    })`
+);
+ok('session import: the Store atomically creates a collision-safe active Session without touching chat',
+    importedCommit.sessionName === 'Research (3)' &&
+    importWrites.join('|') === 'currentSession,sessions' &&
+    importStorage.currentSession === 'Research (3)' &&
+    importStorage.sessions.Research[0].content === 'keep me' &&
+    importStorage.sessions['Research (2)'][0].content === 'keep me too' &&
+    importStorage.sessions['Research (3)'].length === preparedTransfer.snippets.length &&
+    !Object.hasOwn(importStorage.chat, 'Research (3)') &&
+    importStorage.chat.Research[0].content === 'existing chat');
+
+const failedImportStorage = {
+    sessions: { Existing: [{ id: 'keep', type: 'text', content: 'unchanged' }] },
+    currentSession: 'Existing',
+    chat: { Existing: [{ role: 'user', content: 'keep chat' }] },
+};
+const failedImportSnapshot = JSON.stringify(failedImportStorage);
+const failedImportContext = makeContext(failedImportStorage);
+let failedImportWrites = 0;
+failedImportContext.chrome.storage.local.set = async () => {
+    failedImportWrites++;
+    throw new Error('simulated storage failure');
+};
+failedImportContext.__snippets = preparedTransfer.snippets;
+let failedImportRejected = false;
+try {
+    await load(
+        failedImportContext,
+        ['lib/store.js'],
+        `Store.createSessionWithSnippets('Imported', __snippets, {
+            deduplicate: false, fallbackName: 'Imported Session'
+        })`
+    );
+} catch {
+    failedImportRejected = true;
+}
+ok('session import: a failed Store commit leaves Sessions, active Session and chat unchanged',
+    failedImportRejected && failedImportWrites === 1 &&
+    JSON.stringify(failedImportStorage) === failedImportSnapshot);
+
 await load(
     ctx,
     [
@@ -182,6 +488,8 @@ await load(
             report('migrate: schemaVersion set', store.schemaVersion === Store.SCHEMA_VERSION);
             report('migrate: llmConfig built', store.llmConfig && store.llmConfig.apiKey === 'sk-legacy');
             report('migrate: model mapped', store.llmConfig.model === 'm1');
+            report('migrate: legacy flat config defaults reasoning to strict off',
+                store.llmConfig.reasoning === 'off');
             report('migrate: legacy keys dropped', !('apiKey' in store) && !('modelName' in store));
             const cfg = await Store.getLlmConfig();
             report('getLlmConfig: merged with defaults', cfg.provider === 'openai' && cfg.maxTokens === 1234);
@@ -567,18 +875,43 @@ await load(
                 indexMap.S3.url === 'https://example.com/filing.pdf?download=1#page=9');
             const dec = Citations.decorate('one [S1] two [S2][S9].', indexMap);
             report('citations: known marker becomes a chip',
-                /weft-cite/.test(dec) && /data-snippet-id="a"/.test(dec));
+                /weft-cite/.test(dec) && /data-cite="S1"/.test(dec) &&
+                /data-cite-scope="weft-cite-/.test(dec));
+            report('citations: chips never expose source ids or URLs in DOM attributes',
+                !/data-snippet-id|data-source-url|https:\\/\\/a/.test(dec));
             report('citations: unknown marker left as text', /\\[S9\\]/.test(dec));
             report('citations: markers are not double-decorated',
-                (dec.match(/weft-cite/g) || []).length === 2);
+                (dec.match(/<sup class="weft-cite"/g) || []).length === 2);
             const webMap = {
                 W1: { kind: 'web', title: 'Web source', url: 'https://example.com/evidence', content: 'Excerpt' },
                 W2: { kind: 'web', title: 'Unsafe', url: 'javascript:alert(1)', content: 'Ignore' },
             };
             const webDec = Citations.decorate('external [W1] unsafe [W2]', webMap);
             report('citations: web evidence becomes a safe external-source chip',
-                webDec.includes('data-source-url="https://example.com/evidence"') &&
+                webDec.includes('data-cite="W1"') &&
+                !webDec.includes('data-source-url') &&
                 /\[W2\]/.test(webDec) && !/javascript:/.test(webDec));
+            const portableManifest = Citations.normalizeManifest({
+                S1: { id: 'a', title: 'Source', content: 'Evidence' },
+                W1: { url: 'https://example.com/evidence', title: 'Web' },
+                W2: { url: 'javascript:alert(1)' },
+                X1: { id: 'not-allowed' },
+            });
+            report('citations: persisted manifests keep only bounded safe S/W metadata',
+                portableManifest.S1.id === 'a' &&
+                portableManifest.W1.url === 'https://example.com/evidence' &&
+                !Object.hasOwn(portableManifest, 'W2') &&
+                !Object.hasOwn(portableManifest, 'X1'));
+            const crowdedManifest = Object.fromEntries([
+                ...Array.from({ length: 70 }, (_, index) => [
+                    'S' + (index + 1), { id: 'snippet-' + (index + 1) },
+                ]),
+                ['W1', { url: 'https://example.com/new-evidence' }],
+            ]);
+            const crowdedDecorated = Citations.decorate('tail [S70], external [W1]', crowdedManifest);
+            report('citations: manifest limits retain the markers actually used by an answer',
+                crowdedDecorated.includes('data-cite="S70"') &&
+                crowdedDecorated.includes('data-cite="W1"'));
 
             // markdown
             const md = renderMarkdown('# Title\\n\\n- a\\n- b\\n\\n**bold**');
@@ -602,6 +935,295 @@ await load(
 );
 
 await ctx.__run((name, cond, extra) => ok(name, cond, extra));
+
+// Lightweight research-agent primitives: no framework, native tool calling,
+// or browser-global dependency is required for the state machine itself.
+const agentContext = makeContext();
+await load(
+    agentContext,
+    ['lib/agent-tools.js', 'lib/agent-runner.js'],
+    `(async () => {
+        globalThis.__runAgentTests = async (report) => {
+            let sessionCalls = 0;
+            let externalCalls = 0;
+            let forwardedSignal = null;
+            const toolkit = AgentTools.create({
+                async searchSession(query, topK, context) {
+                    sessionCalls++;
+                    forwardedSignal = context?.signal || null;
+                    return {
+                        summary: 'local matches',
+                        evidence: Array.from({ length: topK + 2 }, (_, index) => ({
+                            marker: 'S' + (index + 1),
+                            content: query + '-' + index,
+                        })),
+                    };
+                },
+                async webSearch(query, maxResults) {
+                    externalCalls++;
+                    return [{ title: query, url: 'https://example.com', snippet: String(maxResults) }];
+                },
+            }, { characterBudget: 3000 });
+
+            const local = await toolkit.execute('session_search', { query: 'chips', topK: 3 });
+            report('agent tools: local Session search is bounded and dependency-injected',
+                local.ok && local.evidence.length === 3 && sessionCalls === 1 &&
+                local.untrusted === true);
+            const toolController = new AbortController();
+            await toolkit.execute(
+                'session_search',
+                { query: 'signal', topK: 1 },
+                { signal: toolController.signal }
+            );
+            report('agent tools: runner cancellation reaches injected local adapters',
+                forwardedSignal === toolController.signal);
+
+            const calculation = await toolkit.execute('calculate', {
+                operation: 'percent_change', from: 80, to: 100,
+            });
+            report('agent tools: deterministic calculation works without eval',
+                calculation.ok && calculation.data.result === 25 &&
+                calculation.data.unit === 'percent');
+
+            const denied = await toolkit.execute('web_search', { query: 'outside' });
+            report('agent tools: external search cannot run without explicit approval',
+                !denied.ok && denied.data.error.code === 'APPROVAL_REQUIRED' && externalCalls === 0);
+
+            let unsafeRejected = false;
+            try {
+                toolkit.validate('web_search', { query: 'outside', unexpected: true });
+            } catch (error) {
+                unsafeRejected = error.code === 'UNKNOWN_ARGUMENT';
+            }
+            report('agent tools: validation rejects extra fields before approval or execution',
+                unsafeRejected && externalCalls === 0);
+
+            const approved = await toolkit.execute(
+                'web_search',
+                { query: 'outside', maxResults: 2 },
+                { approved: true }
+            );
+            report('agent tools: an approved external adapter returns a capped observation',
+                approved.ok && approved.evidence.length === 1 && externalCalls === 1);
+
+            let calculateRuns = 0;
+            const runnerTools = {
+                calculate: {
+                    description: 'deterministic math',
+                    external: false,
+                    validate(args) {
+                        try { return { ok: true, args: toolkit.validate('calculate', args) }; }
+                        catch (error) { return { ok: false, error: error.message }; }
+                    },
+                    async execute(args) {
+                        calculateRuns++;
+                        return toolkit.execute('calculate', args);
+                    },
+                },
+            };
+            const actions = [
+                { kind: 'act', tool: 'calculate', arguments: { operation: 'divide', a: 9, b: 3 }, publicReason: 'Check.' },
+                { kind: 'act', tool: 'calculate', arguments: { b: 3, a: 9, operation: 'divide' }, publicReason: 'Check again.' },
+                { kind: 'final', answer: 'Use the result.', publicReason: 'Enough evidence.' },
+            ];
+            const events = [];
+            const cachedRun = await AgentRunner.run({
+                messages: [{ role: 'user', content: 'question' }],
+                tools: runnerTools,
+                decide: async () => actions.shift(),
+                onEvent: (event) => events.push(event),
+            });
+            report('agent runner: duplicate canonical calls are cached and the run terminates',
+                cachedRun.status === 'completed' && calculateRuns === 1 &&
+                cachedRun.stats.cacheHits === 1 && events.some((event) => event.type === 'cache_hit'));
+
+            let approvedToolRuns = 0;
+            const externalRun = await AgentRunner.run({
+                messages: [{ role: 'user', content: 'question' }],
+                tools: {
+                    web_search: {
+                        description: 'external', external: true,
+                        validate: (args) => ({ ok: true, args }),
+                        execute: async () => { approvedToolRuns++; return { results: [] }; },
+                    },
+                },
+                decide: (() => {
+                    const queue = [
+                        { kind: 'act', tool: 'web_search', arguments: { query: 'q' } },
+                        { kind: 'final', answer: 'Continue locally.' },
+                    ];
+                    return async () => queue.shift();
+                })(),
+                approve: async () => false,
+            });
+            report('agent runner: denied external work becomes an observation and never executes',
+                externalRun.status === 'completed' && approvedToolRuns === 0 &&
+                externalRun.stats.externalBatches === 0);
+
+            let editedExecution = '';
+            let editedObservation = '';
+            const editedRun = await AgentRunner.run({
+                messages: [{ role: 'user', content: 'question' }],
+                tools: {
+                    web_search: {
+                        description: 'external', external: true,
+                        validate: (args) => typeof args.query === 'string'
+                            ? { ok: true, args: { query: args.query } }
+                            : { ok: false, error: 'query required' },
+                        execute: async (args) => {
+                            editedExecution = args.query;
+                            return { query: args.query, results: [] };
+                        },
+                    },
+                },
+                decide: (() => {
+                    const queue = [
+                        { kind: 'act', tool: 'web_search', arguments: { query: 'proposed' } },
+                        { kind: 'final', answer: 'Done.' },
+                    ];
+                    return async () => queue.shift();
+                })(),
+                approve: async () => ({
+                    approved: true,
+                    args: { query: 'user edited' },
+                }),
+                onEvent: (event) => {
+                    if (event.type === 'tool_result') editedObservation = event.observation.content;
+                },
+            });
+            report('agent runner: approved edits become the executed, observed and cached arguments',
+                editedRun.status === 'completed' && editedExecution === 'user edited' &&
+                editedObservation.includes('user edited'));
+
+            const budgetedRun = await AgentRunner.run({
+                messages: [],
+                tools: {
+                    echo: {
+                        validate: (args) => ({ ok: true, args }),
+                        execute: async (args) => ({ id: args.id, text: 'x'.repeat(5000) }),
+                    },
+                },
+                decide: (() => {
+                    const queue = [
+                        { kind: 'act', tool: 'echo', arguments: { id: 1 } },
+                        { kind: 'act', tool: 'echo', arguments: { id: 2 } },
+                        { kind: 'final', answer: 'Done.' },
+                    ];
+                    return async () => queue.shift();
+                })(),
+                maxObservationChars: 1000,
+                maxTotalObservationChars: 1200,
+            });
+            report('agent runner: observations have both per-call and whole-run context budgets',
+                budgetedRun.status === 'completed' && budgetedRun.stats.observationChars <= 1200);
+
+            let cachedBudgetExecutions = 0;
+            const cachedBudgetObservations = [];
+            const cachedBudgetRun = await AgentRunner.run({
+                messages: [],
+                tools: {
+                    echo: {
+                        validate: (args) => ({ ok: true, args }),
+                        execute: async () => {
+                            cachedBudgetExecutions++;
+                            return { text: 'c'.repeat(900) };
+                        },
+                    },
+                },
+                decide: (() => {
+                    const queue = [
+                        { kind: 'act', tool: 'echo', arguments: { id: 'same' } },
+                        { kind: 'act', tool: 'echo', arguments: { id: 'same' } },
+                        { kind: 'act', tool: 'echo', arguments: { id: 'same' } },
+                        { kind: 'final', answer: 'Done.' },
+                    ];
+                    return async () => queue.shift();
+                })(),
+                maxObservationChars: 1000,
+                maxTotalObservationChars: 1200,
+                onEvent: (event) => {
+                    if (event.type === 'tool_result') {
+                        cachedBudgetObservations.push(event.observation);
+                    }
+                },
+            });
+            const cachedBudgetChars = cachedBudgetObservations.reduce(
+                (total, observation) => total + observation.content.length,
+                0
+            );
+            report('agent runner: cached observations are re-budgeted and counted in the whole-run cap',
+                cachedBudgetRun.status === 'completed' && cachedBudgetExecutions === 1 &&
+                cachedBudgetRun.stats.cacheHits === 2 && cachedBudgetObservations.length === 3 &&
+                cachedBudgetChars === cachedBudgetRun.stats.observationChars &&
+                cachedBudgetChars <= 1200 && cachedBudgetObservations.slice(1)
+                    .every((observation) => observation.cached === true));
+
+            let decisionCalls = 0;
+            const repairedRun = await AgentRunner.run({
+                messages: [], tools: {},
+                decide: async (_messages, context) => {
+                    decisionCalls++;
+                    return context.repair
+                        ? { kind: 'final', answer: 'Recovered.' }
+                        : { kind: 'final', answer: 'bad', hiddenReasoning: 'must be rejected' };
+                },
+            });
+            report('agent runner: malformed actions get one bounded repair without exposing CoT',
+                repairedRun.status === 'completed' && repairedRun.answer === 'Recovered.' &&
+                repairedRun.stats.repairs === 1 && decisionCalls === 2);
+        };
+    })();`
+);
+await agentContext.__runAgentTests((name, cond, extra) => ok(name, cond, extra));
+
+const strictOffStoreData = {};
+const strictOffStoreContext = makeContext(strictOffStoreData);
+load(strictOffStoreContext, ['lib/store.js'], 'globalThis.__storeApi = Store;');
+const defaultReasoningConfig = await strictOffStoreContext.__storeApi.getLlmConfig();
+const missingReasoningSet = await strictOffStoreContext.__storeApi.setLlmConfig({
+    provider: 'qwen', model: 'qwen3.7-flash',
+});
+const legacyAutoSet = await strictOffStoreContext.__storeApi.setLlmConfig({
+    provider: 'deepseek', model: 'deepseek-v4-flash', reasoning: 'auto',
+});
+ok('store: default and setLlmConfig reasoning are strict off unless explicitly on',
+    defaultReasoningConfig.reasoning === 'off' &&
+    missingReasoningSet.reasoning === 'off' &&
+    legacyAutoSet.reasoning === 'off' &&
+    strictOffStoreData.llmConfig?.reasoning === 'off');
+
+const v5ReasoningCases = [
+    { name: 'auto', present: true, value: 'auto', expected: 'off' },
+    { name: 'missing', present: false, expected: 'off' },
+    { name: 'invalid', present: true, value: 'enabled', expected: 'off' },
+    { name: 'explicit-on', present: true, value: 'on', expected: 'on' },
+];
+const v5ReasoningResults = [];
+for (const testCase of v5ReasoningCases) {
+    const llmConfig = {
+        provider: 'deepseek', model: 'deepseek-v4-flash', apiKey: 'legacy-key',
+    };
+    if (testCase.present) llmConfig.reasoning = testCase.value;
+    const storage = { schemaVersion: 5, llmConfig };
+    const migrationContext = makeContext(storage);
+    load(migrationContext, ['lib/store.js'], 'globalThis.__storeApi = Store;');
+    await migrationContext.__storeApi.migrate();
+    const config = await migrationContext.__storeApi.getLlmConfig();
+    v5ReasoningResults.push({
+        ...testCase,
+        stored: storage.llmConfig?.reasoning,
+        returned: config.reasoning,
+        schemaVersion: storage.schemaVersion,
+        currentSchemaVersion: migrationContext.__storeApi.SCHEMA_VERSION,
+    });
+}
+ok('store: schema v5 auto, missing and invalid reasoning migrate persistently to off',
+    v5ReasoningResults.filter((result) => result.expected === 'off').every((result) =>
+        result.stored === 'off' && result.returned === 'off' &&
+        result.schemaVersion === result.currentSchemaVersion));
+ok('store: schema v5 explicit reasoning on survives migration',
+    v5ReasoningResults.find((result) => result.name === 'explicit-on')?.stored === 'on' &&
+    v5ReasoningResults.find((result) => result.name === 'explicit-on')?.returned === 'on');
 
 // PDF extraction stays offline and deterministic here: a fake PDF.js document
 // exercises the adapter while byte validation, limits, cleanup, and page
@@ -1143,14 +1765,12 @@ try {
 ok('llm: unsupported function-call finishes are never treated as final text',
     functionCallError?.kind === 'bad_request' && functionCallError.retryable === false);
 
-// DeepSeek V4 and Kimi K3 are reasoning models that default to thinking=enabled.
-// Without an explicit `thinking: {type: 'disabled'}` in the body their whole
-// max_tokens budget is spent on chain-of-thought and they return empty content.
-// The client must inject the override for known reasoning models.
-const reasoningAutoContext = makeContext();
-let reasoningAutoBody = null;
-reasoningAutoContext.fetch = async (_url, options) => {
-    reasoningAutoBody = JSON.parse(options.body);
+// Provider APIs use different reasoning controls. Capture the actual request
+// body so the strict opt-in policy is verified at the wire boundary.
+const reasoningPolicyContext = makeContext();
+let reasoningPolicyBody = null;
+reasoningPolicyContext.fetch = async (_url, options) => {
+    reasoningPolicyBody = JSON.parse(options.body);
     return {
         ok: true, status: 200,
         async json() {
@@ -1158,54 +1778,84 @@ reasoningAutoContext.fetch = async (_url, options) => {
         },
     };
 };
-load(reasoningAutoContext, ['lib/providers.js', 'lib/store.js', 'lib/llm-client.js'],
+load(reasoningPolicyContext, ['lib/providers.js', 'lib/store.js', 'lib/llm-client.js'],
     'globalThis.__llmApi = LLMClient;');
-await reasoningAutoContext.__llmApi.chat([{ role: 'user', content: 'hi' }], {
-    stream: false,
-    config: { provider: 'deepseek', apiKey: 'k', baseUrl: 'https://api.deepseek.com', model: 'deepseek-v4-flash' },
-});
-ok('llm: DeepSeek V4 reasoning models get thinking=disabled by default',
-    reasoningAutoBody?.thinking?.type === 'disabled');
+async function captureReasoningBody(provider, model, reasoning) {
+    reasoningPolicyBody = null;
+    const config = { provider, model, apiKey: 'k', baseUrl: 'https://example.test/v1' };
+    if (reasoning !== undefined) config.reasoning = reasoning;
+    await reasoningPolicyContext.__llmApi.chat([{ role: 'user', content: 'hi' }], {
+        stream: false, config,
+    });
+    return reasoningPolicyBody;
+}
 
-const reasoningOnContext = makeContext();
-let reasoningOnBody = null;
-reasoningOnContext.fetch = async (_url, options) => {
-    reasoningOnBody = JSON.parse(options.body);
-    return {
-        ok: true, status: 200,
-        async json() {
-            return { choices: [{ message: { content: 'ok' }, finish_reason: 'stop' }], usage: {} };
-        },
-    };
-};
-load(reasoningOnContext, ['lib/providers.js', 'lib/store.js', 'lib/llm-client.js'],
-    'globalThis.__llmApi = LLMClient;');
-await reasoningOnContext.__llmApi.chat([{ role: 'user', content: 'hi' }], {
-    stream: false,
-    config: { provider: 'deepseek', apiKey: 'k', baseUrl: 'https://api.deepseek.com', model: 'deepseek-v4-pro', reasoning: 'on' },
-});
-ok('llm: reasoning=on sends thinking=enabled even on reasoning models',
-    reasoningOnBody?.thinking?.type === 'enabled');
+const toggleThinkingModels = [
+    ['deepseek', 'deepseek-v4-flash'],
+    ['moonshot', 'kimi-k2.5'],
+    ['moonshot', 'kimi-k2.6'],
+];
+const implicitOffModes = [undefined, 'auto', 'off', 'enabled', true];
+const toggleThinkingOffBodies = [];
+for (const [provider, model] of toggleThinkingModels) {
+    for (const mode of implicitOffModes) {
+        toggleThinkingOffBodies.push(await captureReasoningBody(provider, model, mode));
+    }
+}
+const toggleThinkingOnBodies = [];
+for (const [provider, model] of toggleThinkingModels) {
+    toggleThinkingOnBodies.push(await captureReasoningBody(provider, model, 'on'));
+}
+ok('llm: DeepSeek V4 and toggleable Kimi K2 stay disabled for every non-on mode',
+    toggleThinkingOffBodies.every((body) => body?.thinking?.type === 'disabled'));
+ok('llm: DeepSeek V4 and toggleable Kimi K2 enable thinking only for explicit on',
+    toggleThinkingOnBodies.every((body) => body?.thinking?.type === 'enabled'));
 
-const reasoningUnknownContext = makeContext();
-let reasoningUnknownBody = null;
-reasoningUnknownContext.fetch = async (_url, options) => {
-    reasoningUnknownBody = JSON.parse(options.body);
-    return {
-        ok: true, status: 200,
-        async json() {
-            return { choices: [{ message: { content: 'ok' }, finish_reason: 'stop' }], usage: {} };
-        },
-    };
-};
-load(reasoningUnknownContext, ['lib/providers.js', 'lib/store.js', 'lib/llm-client.js'],
-    'globalThis.__llmApi = LLMClient;');
-await reasoningUnknownContext.__llmApi.chat([{ role: 'user', content: 'hi' }], {
-    stream: false,
-    config: { provider: 'openai', apiKey: 'k', baseUrl: 'https://api.openai.com/v1', model: 'gpt-4o-mini' },
-});
-ok('llm: non-reasoning providers never receive a thinking field',
-    !('thinking' in (reasoningUnknownBody || {})));
+const kimiK3OffBody = await captureReasoningBody('moonshot', 'kimi-k3');
+const kimiK3OnBody = await captureReasoningBody('moonshot', 'kimi-k3', 'on');
+ok('llm: always-thinking Kimi K3 uses low by default and high only for explicit on',
+    kimiK3OffBody?.reasoning_effort === 'low' &&
+    kimiK3OnBody?.reasoning_effort === 'high' &&
+    !('thinking' in kimiK3OffBody) && !('thinking' in kimiK3OnBody));
+const kimiK2ThinkingBody = await captureReasoningBody('moonshot', 'kimi-k2-thinking');
+ok('llm: fixed-thinking Kimi K2 never receives an invalid disabled toggle',
+    !('thinking' in kimiK2ThinkingBody));
+
+const qwenOffBody = await captureReasoningBody('qwen', 'qwen3.7-flash');
+const qwenOnBody = await captureReasoningBody('qwen', 'qwen3.7-flash', 'on');
+ok('llm: hybrid Qwen 3 uses a strict opt-in enable_thinking boolean',
+    qwenOffBody?.enable_thinking === false && qwenOnBody?.enable_thinking === true);
+const fixedThinkingQwenBodies = [];
+for (const model of ['qwen3-thinking', 'qwen3.7-max-preview', 'qwen3.8-max-preview']) {
+    fixedThinkingQwenBodies.push(await captureReasoningBody('qwen', model));
+}
+ok('llm: fixed-thinking and max-preview Qwen models never receive enable_thinking=false',
+    fixedThinkingQwenBodies.every((body) => !('enable_thinking' in (body || {}))));
+
+const gemini25FlashBody = await captureReasoningBody('gemini', 'gemini-2.5-flash');
+const gemini3Body = await captureReasoningBody('gemini', 'gemini-3.6-flash');
+ok('llm: Gemini 2.5 Flash defaults reasoning_effort to none',
+    gemini25FlashBody?.reasoning_effort === 'none');
+ok('llm: Gemini 3 defaults to its lowest supported minimal reasoning effort',
+    gemini3Body?.reasoning_effort === 'minimal');
+
+const openAi56Body = await captureReasoningBody('openai', 'gpt-5.6-luna');
+const openAi4oBody = await captureReasoningBody('openai', 'gpt-4o');
+const openAi4oOnBody = await captureReasoningBody('openai', 'gpt-4o', 'on');
+const reasoningWireFields = ['thinking', 'enable_thinking', 'reasoning_effort'];
+ok('llm: OpenAI GPT-5.6 defaults reasoning_effort to none',
+    openAi56Body?.reasoning_effort === 'none');
+ok('llm: GPT-4o never receives unsupported reasoning controls',
+    [openAi4oBody, openAi4oOnBody].every((body) =>
+        reasoningWireFields.every((field) => !(field in (body || {})))));
+
+const ollamaOffBody = await captureReasoningBody('ollama', 'llama3.1');
+const ollamaGptOssBody = await captureReasoningBody('ollama', 'gpt-oss:20b');
+const ollamaNamespacedGptOssBody = await captureReasoningBody('ollama', 'library/gpt-oss:20b');
+ok('llm: Ollama defaults ordinary models to none and GPT-OSS to supported low effort',
+    ollamaOffBody?.reasoning_effort === 'none' &&
+    ollamaGptOssBody?.reasoning_effort === 'low' &&
+    ollamaNamespacedGptOssBody?.reasoning_effort === 'low');
 
 // A provider that never responds must be aborted by the shared LLM timeout,
 // so every UI caller eventually leaves its busy state.
@@ -2727,6 +3377,27 @@ ok('content assist: delayed restore remains below the Workbench message deadline
 
 const chatSource = read('chat.js');
 const chatHtmlSource = read('chat.html');
+const chatCssSource = read('chat.css');
+const settingsSource = read('settings.js');
+const settingsHtmlSource = read('settings.html');
+const reasoningSelectStart = settingsHtmlSource.indexOf('<select id="reasoningMode">');
+const reasoningSelectEnd = settingsHtmlSource.indexOf('</select>', reasoningSelectStart);
+const reasoningSelectHtml = settingsHtmlSource.slice(reasoningSelectStart, reasoningSelectEnd);
+const reasoningOptionValues = Array.from(
+    reasoningSelectHtml.matchAll(/<option value="([^"]+)"/gu),
+    (match) => match[1]
+);
+const normalizeReasoningForTest = vm.runInNewContext(
+    `(${extractFunction(settingsSource, 'normalizeReasoning')})`
+);
+ok('settings: reasoning selector has only off and on with no legacy auto option',
+    reasoningSelectStart >= 0 && reasoningOptionValues.length === 2 &&
+    reasoningOptionValues[0] === 'off' && reasoningOptionValues[1] === 'on' &&
+    !reasoningSelectHtml.includes('value="auto"'));
+ok('settings: only the exact on value survives reasoning normalization',
+    normalizeReasoningForTest('on') === 'on' &&
+    ['off', 'auto', 'enabled', '', null, undefined, true].every((value) =>
+        normalizeReasoningForTest(value) === 'off'));
 
 const handleSendFunction = extractFunction(chatSource, 'handleSend');
 const normalSendLifecycle = await vm.runInNewContext(
@@ -2828,6 +3499,19 @@ const boundedSearchFieldFunction = extractFunction(chatSource, 'boundedSearchFie
 const canonicalSearchResultUrlFunction = extractFunction(chatSource, 'canonicalSearchResultUrl');
 const buildSearchEvidenceBundleFunction = extractFunction(chatSource, 'buildSearchEvidenceBundle');
 const boundedContextSectionFunction = extractFunction(chatSource, 'boundedContextSection');
+const ragEngineSource = read('lib/rag-engine.js');
+const boundedSourceTextFunction = extractFunction(ragEngineSource, 'boundedSourceText');
+const llmUrlLabelFunction = extractFunction(ragEngineSource, 'llmUrlLabel');
+const llmSourceLabelFunction = extractFunction(ragEngineSource, 'llmSourceLabel');
+const llmSourceLabels = vm.runInNewContext(
+    `(() => {
+        ${boundedSourceTextFunction}
+        ${llmUrlLabelFunction}
+        ${llmSourceLabelFunction}
+        return { llmUrlLabel, llmSourceLabel };
+    })()`,
+    { URL }
+);
 const boundedDeepSearchContext = vm.runInNewContext(
     `(() => {
         ${boundedSearchFieldFunction}
@@ -2853,12 +3537,21 @@ const boundedDeepSearchContext = vm.runInNewContext(
             url: 'javascript:alert(1)',
             snippet: 'unsafe result',
         });
+        groups[3].results.unshift({
+            title: 'Sensitive query result',
+            url: 'https://example.test/private/path?token=LEAK-ME#PRIVATE-FRAGMENT',
+            snippet: 'query URL must be reduced before reaching the model',
+        }, {
+            title: 'Credential URL result',
+            url: 'https://alice:password@example.test/credential-path#AUTH-FRAGMENT',
+            snippet: 'userinfo URL must never reach the model',
+        });
         const bundle = buildSearchEvidenceBundle(groups);
         const search = bundle.text;
         const snippets = boundedContextSection('knowledge '.repeat(4000), 18000);
         return { search, snippets, bundle };
     })()`,
-    { URL }
+    { URL, RAGEngine: llmSourceLabels }
 );
 ok('workbench deep search: verbose provider snippets have per-result and total budgets',
     boundedDeepSearchContext.search.length <= 32000 &&
@@ -2872,10 +3565,68 @@ ok('workbench deep search: web evidence is deduplicated, safely linked, and numb
     Object.keys(boundedDeepSearchContext.bundle.indexMap).length > 0 &&
     Object.keys(boundedDeepSearchContext.bundle.indexMap).every((key) => /^W\d+$/.test(key)) &&
     !boundedDeepSearchContext.bundle.text.includes('javascript:') &&
-    (boundedDeepSearchContext.bundle.text.match(/example\.test\/0\/0/g) || []).length === 1);
+    Object.values(boundedDeepSearchContext.bundle.indexMap)
+        .every((entry) => /^https?:\/\//u.test(entry.url)) &&
+    Object.values(boundedDeepSearchContext.bundle.indexMap)
+        .filter((entry) => entry.url === 'https://example.test/0/0').length === 1);
+ok('workbench deep search: model-facing web URLs omit query, userinfo and fragment data',
+    boundedDeepSearchContext.bundle.text.includes('query URL must be reduced before reaching the model') &&
+    !boundedDeepSearchContext.bundle.text.includes('LEAK-ME') &&
+    !boundedDeepSearchContext.bundle.text.includes('PRIVATE-FRAGMENT') &&
+    !boundedDeepSearchContext.bundle.text.includes('alice:password@') &&
+    !boundedDeepSearchContext.bundle.text.includes('AUTH-FRAGMENT'));
 ok('workbench deep search: session context is bounded with an explicit omission marker',
     boundedDeepSearchContext.snippets.length <= 18000 &&
     boundedDeepSearchContext.snippets.includes('Additional context omitted'));
+const buildFixedSessionResearchEvidenceFunction = extractFunction(
+    chatSource,
+    'buildFixedSessionResearchEvidence'
+);
+const fixedSessionResearchEvidence = vm.runInNewContext(
+    `(() => {
+        ${boundedContextSectionFunction}
+        ${buildFixedSessionResearchEvidenceFunction}
+        const RAGEngine = __ragEngine;
+        const Citations = {
+            buildContext(snippets) {
+                return {
+                    indexMap: Object.fromEntries(snippets.map((snippet, index) => [
+                        'S' + (index + 1),
+                        { id: snippet.id, content: snippet.content },
+                    ])),
+                };
+            },
+        };
+        const snippets = Array.from({ length: 32 }, (_, index) => ({
+            id: 'hit-' + (index + 1),
+            type: 'text',
+            content: 'VISIBLE-SUMMARY-' + (index + 1) + ' ' + 'detail '.repeat(260),
+            sourceTitle: index === 31 ? '' : 'Source ' + (index + 1),
+            sourceUrl: index === 31
+                ? 'https://reader:secret@example.test/session-tail?token=SESSION-LEAK#SESSION-FRAGMENT'
+                : 'https://example.test/source/' + (index + 1),
+        }));
+        return buildFixedSessionResearchEvidence(snippets, {
+            maxChars: 32000,
+            totalCount: 100,
+        });
+    })()`,
+    { __ragEngine: llmSourceLabels }
+);
+ok('workbench agent: final fixed evidence preserves every one of 32 retrieved hits',
+    fixedSessionResearchEvidence.text.length <= 32000 &&
+    fixedSessionResearchEvidence.snippets.length === 32 &&
+    Object.keys(fixedSessionResearchEvidence.indexMap).length === 32 &&
+    !fixedSessionResearchEvidence.text.includes('reader:secret@') &&
+    !fixedSessionResearchEvidence.text.includes('SESSION-LEAK') &&
+    !fixedSessionResearchEvidence.text.includes('SESSION-FRAGMENT') &&
+    Array.from({ length: 32 }, (_, index) => {
+        const marker = '[S' + (index + 1) + ']';
+        const summary = 'VISIBLE-SUMMARY-' + (index + 1);
+        return fixedSessionResearchEvidence.text.includes(marker) &&
+            fixedSessionResearchEvidence.text.includes(summary) &&
+            fixedSessionResearchEvidence.indexMap['S' + (index + 1)]?.id === 'hit-' + (index + 1);
+    }).every(Boolean));
 const deepSearchAnswerStart = chatSource.indexOf('async function sendWithSearchResults');
 const deepSearchAnswerEnd = chatSource.indexOf('function downloadHtmlFile', deepSearchAnswerStart);
 const deepSearchAnswerSource = chatSource.slice(deepSearchAnswerStart, deepSearchAnswerEnd);
@@ -2884,16 +3635,187 @@ ok('workbench deep search: final synthesis uses relevant context and enables one
     deepSearchAnswerSource.includes('buildSearchEvidenceBundle(searchResults)') &&
     deepSearchAnswerSource.includes('activeIndexMap = { ...sessionEvidence.indexMap, ...webEvidence.indexMap }') &&
     deepSearchAnswerSource.includes('buildImageContentParts(sessionEvidence.snippets)') &&
-    deepSearchAnswerSource.includes('recoverTruncation: true') &&
+    deepSearchAnswerSource.includes('content: intro') &&
+    deepSearchAnswerSource.includes('content: evidencePrompt') &&
+    !deepSearchAnswerSource.includes('content: intro + sessionEvidence') &&
+    deepSearchAnswerSource.includes('recoverTruncation: options.recoverTruncation !== false') &&
     !deepSearchAnswerSource.includes('minimumMaxTokens'));
+ok('workbench deep search: provider-only evidence is never stored as the visible user turn',
+    deepSearchAnswerSource.includes('withTurnTranscript(') &&
+    deepSearchAnswerSource.includes('persistResult: false') &&
+    deepSearchAnswerSource.includes('priorTranscriptTurns') &&
+    deepSearchAnswerSource.includes("{ role: 'user', content: userQuery }") &&
+    deepSearchAnswerSource.includes('await persistConversationIfCurrent(conversationHistory)'));
+const withTurnTranscriptFunction = extractFunction(chatSource, 'withTurnTranscript');
+const visibleTurnContentFunction = extractFunction(chatSource, 'visibleTurnContent');
+const persistConversationFunction = extractFunction(chatSource, 'persistConversationIfCurrent');
+const persistedTranscriptTurns = await vm.runInNewContext(
+    `(async () => {
+        ${withTurnTranscriptFunction}
+        ${visibleTurnContentFunction}
+        ${persistConversationFunction}
+        let saved = null;
+        const currentSession = 'Research';
+        const sessionSnippets = [{ id: 'one' }];
+        const scenarioLabel = () => 'scenario';
+        const t = (key) => key;
+        const Citations = { normalizeManifest: () => ({}) };
+        const Store = { async setChat(_session, turns) { saved = turns; } };
+        const console = { warn() {} };
+        const multimodal = withTurnTranscript({
+            role: 'user', content: [{ type: 'image_url', image_url: { url: 'private' } }],
+        }, 'visible image question');
+        const evidence = withTurnTranscript({
+            role: 'user', content: 'INTERNAL EVIDENCE DUMP',
+        }, 'visible research question');
+        await persistConversationIfCurrent([multimodal, evidence]);
+        return { saved, enumerable: Object.keys(evidence).includes('weftTranscript') };
+    })()`
+);
+ok('workbench transcript: multimodal and evidence-only provider turns persist only visible questions',
+    persistedTranscriptTurns.saved?.[0]?.content === 'visible image question' &&
+    persistedTranscriptTurns.saved?.[1]?.content === 'visible research question' &&
+    persistedTranscriptTurns.enumerable === false);
+const sendWithSearchResultsFunction = extractFunction(chatSource, 'sendWithSearchResults');
+const compactedDeepSearchTranscript = await vm.runInNewContext(
+    `(async () => {
+        ${withTurnTranscriptFunction}
+        ${visibleTurnContentFunction}
+        ${persistConversationFunction}
+        ${sendWithSearchResultsFunction}
+        const scenarioTurn = { role: 'user', content: 'PRIVATE INTERNAL SCENARIO PROMPT' };
+        Object.defineProperty(scenarioTurn, 'weftScenarioId', {
+            value: 'report', enumerable: false,
+        });
+        let conversationHistory = [
+            { role: 'system', content: 'old system' },
+            scenarioTurn,
+            { role: 'assistant', content: 'prior answer' },
+        ];
+        let saved = null;
+        let providerMessages = null;
+        let activeIndexMap = null;
+        let isStreaming = true;
+        const currentSession = 'Research';
+        const sessionSnippets = [{ id: 'one' }, { id: 'two' }];
+        const sendButton = { disabled: true };
+        const setQuickActionsEnabled = () => {};
+        const scenarioLabel = () => 'Report';
+        const t = (key) => key === 'wb_using_snippets' ? 'Using %s snippets' : key;
+        const Store = { async setChat(_session, turns) { saved = turns; } };
+        const Citations = {
+            CONTRACT: '',
+            normalizeManifest(value) { return value && typeof value === 'object' ? value : {}; },
+        };
+        const I18N = { promptLanguageInstruction: () => '' };
+        const console = { error() {}, warn() {} };
+        const appendMessage = () => ({});
+        const appendError = () => {};
+        const showTypingIndicator = () => {};
+        const removeTypingIndicator = () => {};
+        const throwIfAgentAborted = () => {};
+        const isVisionSupported = async () => false;
+        const buildSessionResearchEvidence = async () => { throw new Error('unexpected'); };
+        const buildSearchEvidenceBundle = () => ({ text: '', indexMap: {} });
+        const boundedContextSection = (value) => String(value || '');
+        const boundedSearchField = (value) => String(value || '');
+        const buildImageContentParts = async () => null;
+        const withTurnCitations = (turn) => turn;
+        const processStream = async (messages) => {
+            providerMessages = messages.map((message) => ({ ...message }));
+            messages.push({ role: 'assistant', content: 'new answer' });
+        };
+        const buildSystemMessage = async () => ({ role: 'system', content: 'fresh system' });
+        await sendWithSearchResults('VISIBLE DEEP SEARCH QUESTION', [], {
+            busyAlreadyHeld: true,
+            sessionEvidence: {
+                text: 'PRIVATE INTERNAL SESSION EVIDENCE',
+                snippets: [], indexMap: {}, method: 'AGENT',
+            },
+        });
+        return { saved, conversationHistory, providerMessages };
+    })()`
+);
+const compactedDeepSearchText = JSON.stringify({
+    saved: compactedDeepSearchTranscript.saved,
+    history: compactedDeepSearchTranscript.conversationHistory,
+});
+ok('workbench deep search: scenario prompts stay private during transcript compaction and persistence',
+    compactedDeepSearchTranscript.providerMessages.some((message) =>
+        String(message.content || '').includes('PRIVATE INTERNAL SESSION EVIDENCE')) &&
+    !compactedDeepSearchText.includes('PRIVATE INTERNAL SCENARIO PROMPT') &&
+    !compactedDeepSearchText.includes('PRIVATE INTERNAL SESSION EVIDENCE') &&
+    compactedDeepSearchText.includes('Report · Using 2 snippets') &&
+    compactedDeepSearchText.includes('VISIBLE DEEP SEARCH QUESTION'));
 const deepSearchFeatureStart = chatSource.indexOf('// ======== Deep Search');
 const deepSearchFeatureSource = chatSource.slice(deepSearchFeatureStart, deepSearchAnswerEnd);
 ok('workbench deep search: planning is Session-first and never reads the active page',
     deepSearchFeatureSource.includes('buildSessionResearchEvidence(userQuery') &&
-    deepSearchFeatureSource.includes('SESSION RESEARCH MAP') &&
+    deepSearchFeatureSource.includes('AgentTools.create(') &&
+    deepSearchFeatureSource.includes('AgentRunner.run({') &&
+    deepSearchFeatureSource.includes('requestAgentWebSearchApproval(action, scope)') &&
     deepSearchFeatureSource.includes('RAGIndexer.computeSessionRevision') &&
+    deepSearchFeatureSource.includes("Citations.notify(t('agent_local_only'))") &&
+    !deepSearchFeatureSource.includes('deep_search_provider_required') &&
+    !deepSearchFeatureSource.includes("chrome.runtime.openOptionsPage") &&
     !deepSearchFeatureSource.includes('extractCurrentPage(') &&
     !deepSearchFeatureSource.includes('CURRENT PAGE CONTENT'));
+ok('workbench agent: one immutable Session snapshot feeds retrieval and final citations',
+    deepSearchFeatureSource.includes('const runSnippets = sessionSnippets.slice()') &&
+    deepSearchFeatureSource.includes('snippets: runSnippets') &&
+    deepSearchFeatureSource.includes('retrievedSnippets.set(') &&
+    deepSearchFeatureSource.includes('sessionEvidence: finalSessionEvidence') &&
+    deepSearchFeatureSource.includes('Store.getSession(runSession)'));
+ok('workbench agent: Stop reaches local retrieval and the approved external request',
+    deepSearchFeatureSource.includes('{ ragTokenBudget, signal }') &&
+    deepSearchFeatureSource.includes('SearchProvider.search(query, maxResults, { signal: operationSignal })') &&
+    deepSearchFeatureSource.includes('throwIfAgentAborted(signal)'));
+const confirmAgentPlanCallback = extractEventCallback(chatSource, 'confirmPlanBtn', 'click');
+const cancelAgentPlanCallback = extractEventCallback(chatSource, 'cancelPlanBtn', 'click');
+const agentApprovalLifecycle = await vm.runInNewContext(
+    `(async () => {
+        let pendingSearchPlan = {
+            agentApproval: true, query: 'research question',
+            plan: [{ query: 'original query' }],
+        };
+        let resolution = null;
+        let isStreaming = true;
+        const searchPlanPanel = { style: { display: 'block' } };
+        const collectApprovedSearchPlan = () => [{ query: 'user edited query' }];
+        const finishPendingAgentApproval = (value) => { resolution = value; };
+        const Citations = { notify() {} };
+        const t = (key) => key;
+        await (${confirmAgentPlanCallback})();
+        const confirmed = {
+            resolution, hidden: searchPlanPanel.style.display === 'none',
+            cleared: pendingSearchPlan === null,
+        };
+
+        pendingSearchPlan = {
+            agentApproval: true, query: 'research question',
+            plan: [{ query: 'second query' }],
+        };
+        resolution = null;
+        searchPlanPanel.style.display = 'block';
+        const userInput = { value: '' };
+        (${cancelAgentPlanCallback})();
+        return {
+            confirmed,
+            declined: resolution,
+            declinedHidden: searchPlanPanel.style.display === 'none',
+            declinedCleared: pendingSearchPlan === null,
+            input: userInput.value,
+        };
+    })()`
+);
+ok('workbench agent: external search approval remains editable while the agent is busy',
+    agentApprovalLifecycle.confirmed.resolution?.approved === true &&
+    agentApprovalLifecycle.confirmed.resolution?.query === 'user edited query' &&
+    agentApprovalLifecycle.confirmed.hidden && agentApprovalLifecycle.confirmed.cleared);
+ok('workbench agent: declining one external tool returns control without losing the question',
+    agentApprovalLifecycle.declined?.approved === false &&
+    agentApprovalLifecycle.declinedHidden && agentApprovalLifecycle.declinedCleared &&
+    agentApprovalLifecycle.input === '');
 ok('workbench product surface: page-wide Ask UI and its private send path are removed',
     !chatHtmlSource.includes('askPageBtn') &&
     !chatSource.includes('sendWithPageContext') &&
@@ -2903,6 +3825,8 @@ ok('workbench product surface: page-wide Ask UI and its private send path are re
 const messageLifecycleFunctions = [
     'isNearChatBottom',
     'scrollChatToBottom',
+    'withTurnCitations',
+    'visibleTurnContent',
     'processStream',
     'persistConversationIfCurrent',
     'setMessageActionsEnabled',
@@ -2985,8 +3909,13 @@ const assistantMessageLifecycle = await vm.runInNewContext(
         const chatMessages = new FakeElement('section');
         let activeIndexMap = null;
         let currentSession = 'Session';
+        let persistedTurns = [];
         const Store = {
             async addSnippet() {},
+            async setChat(_session, turns) { persistedTurns = turns; },
+        };
+        const Citations = {
+            normalizeManifest(value) { return value && typeof value === 'object' ? value : {}; },
         };
         const t = (key) => key;
         const staticExportFragment = () => '<p>safe</p>';
@@ -3043,6 +3972,7 @@ const assistantMessageLifecycle = await vm.runInNewContext(
             return { count: buttons.length, disabled: buttons.map((button) => button.disabled) };
         };
 
+        activeIndexMap = { S1: { id: 'snippet-1', title: 'Source' } };
         const completed = appendMessage('', 'assistant', true);
         const completedInitial = {
             exportable: completed.dataset.exportable,
@@ -3054,6 +3984,9 @@ const assistantMessageLifecycle = await vm.runInNewContext(
             exportable: completed.dataset.exportable,
             actions: actionState(completed),
             history: completedHistory,
+            citations: completedHistory[0]?.weftCitations,
+            enumerableKeys: Object.keys(completedHistory[0] || {}),
+            persisted: persistedTurns,
         };
 
         streamMode = 'failure';
@@ -3148,7 +4081,10 @@ ok('workbench assistant: successful completion alone enables export and actions'
         assistantMessageLifecycle.completedInitial.actions.count &&
     assistantMessageLifecycle.completedFinal.actions.disabled.every((disabled) => !disabled) &&
     assistantMessageLifecycle.completedFinal.history.length === 1 &&
-    assistantMessageLifecycle.completedFinal.history[0].content === 'partial response');
+    assistantMessageLifecycle.completedFinal.history[0].content === 'partial response' &&
+    assistantMessageLifecycle.completedFinal.citations?.S1?.id === 'snippet-1' &&
+    assistantMessageLifecycle.completedFinal.persisted[0]?.citations?.S1?.id === 'snippet-1' &&
+    !assistantMessageLifecycle.completedFinal.enumerableKeys.includes('weftCitations'));
 ok('workbench assistant: failed partial stream remains visible but non-exportable and inert',
     assistantMessageLifecycle.partialFinal.error === 'stream failed' &&
     assistantMessageLifecycle.partialFinal.retained &&
@@ -3180,6 +4116,52 @@ ok('workbench deep search: an explicit model budget is never raised beyond its c
     assistantMessageLifecycle.budgetCall?.maxTokens === 2048);
 ok('workbench assistant: error bubbles render no copy, save or export actions',
     assistantMessageLifecycle.errorActionCount === 0);
+
+const restoreConversationFunction = extractFunction(chatSource, 'restoreConversation');
+const withTurnCitationsFunction = extractFunction(chatSource, 'withTurnCitations');
+const restoredCitationTurn = await vm.runInNewContext(
+    `(async () => {
+        let conversationHistory = [];
+        let activeIndexMap = null;
+        let pendingSearchPlan = { stale: true };
+        let renderedMap = null;
+        const chatMessages = { replaceChildren() {} };
+        const Store = {
+            async getChat() {
+                return [{
+                    role: 'assistant', content: 'Evidence [S1]',
+                    citations: { S1: { id: 'persisted-snippet', title: 'Persisted' } },
+                }];
+            },
+        };
+        const Citations = {
+            normalizeManifest(value) { return value && typeof value === 'object' ? value : {}; },
+        };
+        const contentDiv = { innerHTML: '' };
+        const appendMessage = () => contentDiv;
+        const Render = {
+            markdown(_content, options) { renderedMap = options?.indexMap || null; return '<p>safe</p>'; },
+        };
+        const buildSystemMessage = async () => ({ role: 'system', content: 'fresh policy' });
+        const removeTypingIndicator = () => {};
+        const scrollChatToBottom = () => {};
+        ${withTurnCitationsFunction}
+        ${restoreConversationFunction}
+        await restoreConversation('Research');
+        return {
+            renderedId: renderedMap?.S1?.id,
+            historyId: conversationHistory[1]?.weftCitations?.S1?.id,
+            enumerableKeys: Object.keys(conversationHistory[1] || {}),
+            pendingSearchPlan,
+        };
+    })()`,
+    { console }
+);
+ok('workbench citations: reload restores each answer with its own clickable manifest',
+    restoredCitationTurn.renderedId === 'persisted-snippet' &&
+    restoredCitationTurn.historyId === 'persisted-snippet' &&
+    !restoredCitationTurn.enumerableKeys.includes('weftCitations') &&
+    restoredCitationTurn.pendingSearchPlan === null);
 
 // Workbench Clear / Export regressions. The browser UI has no DOM dependency
 // in this test suite, so execute the shipped helper and listener bodies against
@@ -3222,6 +4204,12 @@ const promptModalResult = await vm.runInNewContext(
         let modalPromptInFlight = false;
         const t = (key) => key;
         const consumePendingSmartRead = async () => {};
+        let refreshReplays = 0;
+        let everyReplaySawReleasedModal = true;
+        const replayDeferredSnippetsRefresh = () => {
+            refreshReplays++;
+            everyReplaySawReleasedModal = everyReplaySawReleasedModal && !modalPromptInFlight;
+        };
         ${promptTextFunction}
         const pending = promptText('Clear conversation?', '', {
             confirmOnly: true,
@@ -3236,9 +4224,15 @@ const promptModalResult = await vm.runInNewContext(
             shown: !modal.classList.contains('hidden'),
         };
         okButton.listeners.click();
+        const confirmedResult = await pending;
+        const cancelled = promptText('Cancel this prompt', 'draft');
+        cancelButton.listeners.click();
         return {
             before,
-            result: await pending,
+            result: confirmedResult,
+            cancelledResult: await cancelled,
+            refreshReplays,
+            everyReplaySawReleasedModal,
             hiddenAfter: modal.classList.contains('hidden'),
             inputRestored: !input.hidden,
             listenerRemoved: !okButton.listeners.click && !cancelButton.listeners.click,
@@ -3253,6 +4247,10 @@ ok('workbench clear: confirm-only modal hides the input and resolves true',
     promptModalResult.before.description === 'Saved snippets stay intact.' &&
     promptModalResult.result === true && promptModalResult.hiddenAfter &&
     promptModalResult.inputRestored && promptModalResult.listenerRemoved);
+ok('workbench prompt: cleanup replays deferred snippet refresh after releasing the modal lock',
+    promptModalResult.cancelledResult === null &&
+    promptModalResult.refreshReplays === 2 &&
+    promptModalResult.everyReplaySawReleasedModal);
 
 const clearCallback = extractEventCallback(chatSource, 'clearButton', 'click');
 async function runClearCallback({
@@ -3559,6 +4557,75 @@ ok('workbench export: static fragment removes inline event attributes',
     !exportedEventElement.removedAttributes.includes('class') &&
     exportClone.removedAttributes.includes('onmouseenter'));
 
+const sessionDocumentFunctions = [
+    'escapeHtml',
+    'buildWorkbenchExportDocument',
+    'runtimeVersionInfo',
+    'sessionExportAttribution',
+    'buildSessionSnippetsDocument',
+].map((name) => extractFunction(chatSource, name)).join('\n');
+const sessionDocumentHtml = vm.runInNewContext(
+    `(() => {
+        const document = {
+            createElement() {
+                return {
+                    innerHTML: '',
+                    set textContent(value) {
+                        this.innerHTML = String(value ?? '')
+                            .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+                    },
+                };
+            },
+        };
+        const chrome = { runtime: { getManifest: () => ({
+            version: '3.0.2', version_name: '3.0.2-beta',
+        }) } };
+        const I18N = { resolvedCode: () => 'en' };
+        const labels = {
+            wb_export_snippets_title: 'Session Snippets',
+            wb_using_snippets: 'Using %s snippets', wb_no_snippets: 'No snippets',
+            wb_export_from: '— from',
+            wb_export_import_cta: 'Install Weft to import this Session.',
+            popup_image: 'Image',
+        };
+        const t = (key) => labels[key] || key;
+        const localizedTag = (tag) => tag;
+        const snippetAnnotationSourceUrl = (snippet) => snippet.sourceUrl || '';
+        const snippetSourceLabel = (snippet) => snippet.sourceTitle || '';
+        const SessionTransfer = __transfer;
+        ${sessionDocumentFunctions}
+        return buildSessionSnippetsDocument(__snippets, 'Portable Session');
+    })()`,
+    {
+        __transfer: SessionTransferTest,
+        __snippets: [
+            {
+                type: 'text', content: 'Visible </script><script>evil()</script>',
+                sourceTitle: 'Unsafe source', sourceUrl: 'javascript:alert(1)',
+                comment: '<img onerror=evil()>', tags: ['evidence'], timestamp: 1,
+            },
+            {
+                type: 'link', content: 'Safe source', sourceTitle: 'Safe source',
+                sourceUrl: 'https://example.com/source', linkUrl: 'https://example.com/source',
+                tags: ['reference'], timestamp: 2,
+            },
+        ],
+    }
+);
+const exportedSessionPayload = SessionTransferTest.parseHtml(sessionDocumentHtml);
+ok('workbench export: Session HTML carries the manifest version, import CTA and v1 payload',
+    sessionDocumentHtml.includes('https://github.com/wotchin/weft') &&
+    sessionDocumentHtml.includes('v3.0.2-beta') &&
+    sessionDocumentHtml.includes('Install Weft to import this Session.') &&
+    exportedSessionPayload.formatVersion === 1 &&
+    exportedSessionPayload.exporter.versionName === '3.0.2-beta' &&
+    exportedSessionPayload.session.name === 'Portable Session');
+ok('workbench export: visible links are protocol-safe and embedded text stays inert',
+    !sessionDocumentHtml.includes('href="javascript:') &&
+    sessionDocumentHtml.includes('href="https://example.com/source" target="_blank" rel="noopener noreferrer"') &&
+    (sessionDocumentHtml.match(/<script\b/gu) || []).length === 1 &&
+    !sessionDocumentHtml.includes('</script><script>evil()'));
+
 const downloadHtmlFunction = extractFunction(chatSource, 'downloadHtmlFile');
 const downloadState = {
     appended: false, clicked: false, removed: false, revoked: [], timers: [], blob: null,
@@ -3594,36 +4661,46 @@ ok('workbench export: download starts before its object URL is revoked',
     downloadState.appended && downloadState.clicked && !downloadState.removed &&
     downloadState.revoked.length === 0 && downloadState.timers.length === 1 &&
     downloadState.timers[0].delay >= 1000 &&
-    downloadState.blob?.options?.type === 'text/html');
+    downloadState.blob?.options?.type === 'text/html;charset=utf-8');
 downloadState.timers[0].callback();
 ok('workbench export: delayed cleanup revokes the URL and removes the anchor',
     downloadState.removed && downloadState.revoked.join(',') === 'blob:weft-test');
 
 const exportCallback = extractEventCallback(chatSource, 'exportBtn', 'click');
-async function runExportCallback({ session, snippets }) {
+async function runExportCallback({ session, snippets, failBuild = false }) {
     return vm.runInNewContext(
         `(async () => {
-            const currentSession = __session;
+            let currentSession = __session;
             const sessionSnippets = __snippets;
             const Store = {
-                getSession(name) { __state.requestedSession = name; return Promise.resolve(__snippets); }
+                async getSession(name) {
+                    __state.requestedSession = name;
+                    await Promise.resolve();
+                    currentSession = 'Changed While Exporting';
+                    return __snippets;
+                }
             };
             const buildSessionSnippetsDocument = (snippets, name) => {
                 __state.documentInput = { snippets, name };
+                if (__failBuild) throw new Error('serialization failed');
                 return '<!doctype html>snippets-' + name;
             };
             const downloadHtmlFile = (...args) => { __state.downloadArgs = args; };
+            const SessionTransfer = { safeFilenamePart: (value) => value };
             const t = (key) => key;
             const Citations = { notify(message) { __state.notifications.push(message); } };
             const alert = () => { __state.nativeAlertCount++; };
             const confirm = () => { __state.nativeConfirmCount++; return true; };
+            const console = { warn() {}, error() {} };
             const handler = (${exportCallback});
             await handler();
+            __state.currentSessionAfterAwait = currentSession;
             return __state;
         })()`,
         {
             __session: session,
             __snippets: snippets,
+            __failBuild: failBuild,
             __state: {
                 requestedSession: null, documentInput: null, downloadArgs: null,
                 notifications: [], nativeAlertCount: 0, nativeConfirmCount: 0,
@@ -3637,14 +4714,26 @@ const exportedSnippets = [
 const exportedResultState = await runExportCallback({ session: 'MySession', snippets: exportedSnippets });
 const emptyExportState = await runExportCallback({ session: 'MySession', snippets: [] });
 const noSessionState = await runExportCallback({ session: null, snippets: exportedSnippets });
+const failedExportState = await runExportCallback({
+    session: 'MySession', snippets: exportedSnippets, failBuild: true,
+});
 ok('workbench export: header action exports the current session snippets',
     exportedResultState.requestedSession === 'MySession' &&
+    exportedResultState.currentSessionAfterAwait === 'Changed While Exporting' &&
     Array.isArray(exportedResultState.documentInput?.snippets) &&
     exportedResultState.documentInput?.snippets.length === 1 &&
     exportedResultState.documentInput?.name === 'MySession' &&
     exportedResultState.downloadArgs?.[0] === '<!doctype html>snippets-MySession' &&
     /weft-snippets-MySession-\d{4}-\d{2}-\d{2}\.html/.test(exportedResultState.downloadArgs?.[1] || '') &&
     exportedResultState.notifications.length === 0);
+ok('workbench export: the Session is snapshotted before await and serialization failures stay in-app',
+    exportCallback.indexOf('const exportSession = currentSession') >= 0 &&
+    exportCallback.indexOf('const exportSession = currentSession') < exportCallback.indexOf('await Store.getSession') &&
+    failedExportState.requestedSession === 'MySession' &&
+    failedExportState.documentInput?.name === 'MySession' &&
+    !failedExportState.downloadArgs &&
+    failedExportState.notifications.join(',') === 'wb_export_failed' &&
+    failedExportState.nativeAlertCount === 0 && failedExportState.nativeConfirmCount === 0);
 ok('workbench export: empty session uses an in-app notice, never a native alert',
     !emptyExportState.downloadArgs && emptyExportState.notifications.length === 1 &&
     emptyExportState.notifications[0] === 'wb_nothing_to_export');
@@ -3654,9 +4743,167 @@ ok('workbench export: no current session also surfaces an in-app notice',
     [exportedResultState, emptyExportState, noSessionState].every((state) =>
         state.nativeAlertCount === 0 && state.nativeConfirmCount === 0));
 
+const importPickerCallback = extractEventCallback(chatSource, 'importSessionBtn', 'click');
+const importPickerState = vm.runInNewContext(
+    `(() => {
+        const importSessionBtn = { disabled: false };
+        const sessionImportInput = {
+            value: 'previous-file.html', clicks: 0,
+            click() { this.clicks++; },
+        };
+        const handler = (${importPickerCallback});
+        handler();
+        return { value: sessionImportInput.value, clicks: sessionImportInput.clicks };
+    })()`
+);
+ok('workbench import: picker is reusable for the same HTML file',
+    importPickerState.value === '' && importPickerState.clicks === 1);
+
+const importChangeCallback = extractEventCallback(chatSource, 'sessionImportInput', 'change');
+async function runImportCallback(mode) {
+    return vm.runInNewContext(
+        `(async () => {
+            const __error = __mode === 'future'
+                ? Object.assign(new Error('future'), {
+                    name: 'SessionTransferError', code: 'FUTURE_VERSION',
+                })
+                : null;
+            const file = __mode === 'cancel' ? null : {
+                name: 'portable.html',
+                size: __mode === 'large' ? 201 : 100,
+                async text() { __state.fileReads++; return '<html>portable</html>'; },
+            };
+            const sessionImportInput = { files: file ? [file] : [], value: 'selected' };
+            const SessionTransfer = {
+                MAX_HTML_BYTES: 200,
+                parseHtml(html, options) {
+                    __state.parseArgs = [html, options];
+                    if (__error) throw __error;
+                    return { session: { name: 'Research', snippets: [{ content: 'x' }] } };
+                },
+                prepareImport() {
+                    return {
+                        sessionName: 'Research',
+                        snippets: [{ id: 'fresh', type: 'text', content: 'x' }],
+                        legacy: false, convertedImages: 0,
+                    };
+                },
+            };
+            let currentSession = 'Existing';
+            const beginSessionTransition = () => {
+                __state.begin++;
+                return __mode !== 'busy';
+            };
+            const endSessionTransition = () => { __state.end++; };
+            const Store = {
+                async createSessionWithSnippets(name, snippets, options) {
+                    __state.storeArgs = { name, snippets, options };
+                    return { sessionName: 'Research (2)', snippets };
+                },
+            };
+            const hideSessionAnnotations = async (name) => { __state.hidden = name; };
+            const resetWorkbenchConversation = () => { __state.reset++; };
+            const loadSessions = async (name) => {
+                __state.loadAttempts++;
+                __state.loaded = name;
+                if (__mode === 'refresh-fail') throw new Error('refresh failed');
+            };
+            const importSuccessMessage = (result) => 'success:' + result.sessionName;
+            const ERROR_CODE_I18N_KEYS = { FUTURE_VERSION: 'wb_import_future_version' };
+            const localizedErrorMessage = (error) => 'localized:' + error.code;
+            const t = (key) => key;
+            const Citations = { notify(message) { __state.notifications.push(message); } };
+            const console = { warn() {}, error() {} };
+            const handler = (${importChangeCallback});
+            await handler();
+            __state.inputValue = sessionImportInput.value;
+            return __state;
+        })()`,
+        {
+            __mode: mode,
+            __state: {
+                fileReads: 0, begin: 0, end: 0, reset: 0,
+                loadAttempts: 0, notifications: [], storeArgs: null, loaded: null, hidden: null,
+            },
+        }
+    );
+}
+const importedUiState = await runImportCallback('success');
+const futureImportUiState = await runImportCallback('future');
+const largeImportUiState = await runImportCallback('large');
+const cancelledImportUiState = await runImportCallback('cancel');
+const busyImportUiState = await runImportCallback('busy');
+const refreshFailedImportUiState = await runImportCallback('refresh-fail');
+ok('workbench import: a valid file commits once, activates the new Session and reports its actual name',
+    importedUiState.inputValue === '' && importedUiState.fileReads === 1 &&
+    importedUiState.begin === 1 && importedUiState.end === 1 &&
+    importedUiState.storeArgs?.name === 'Research' &&
+    importedUiState.storeArgs?.options?.deduplicate === false &&
+    importedUiState.storeArgs?.options?.fallbackName === 'wb_import_default_name' &&
+    importedUiState.hidden === 'Existing' && importedUiState.reset === 1 &&
+    importedUiState.loaded === 'Research (2)' &&
+    importedUiState.notifications.join(',') === 'success:Research (2)');
+ok('workbench import: a busy transition reports why the selected file was not imported',
+    busyImportUiState.inputValue === '' && busyImportUiState.begin === 1 &&
+    busyImportUiState.end === 0 && busyImportUiState.fileReads === 0 &&
+    !busyImportUiState.storeArgs && busyImportUiState.loadAttempts === 0 &&
+    busyImportUiState.notifications.join(',') === 'wb_import_busy');
+ok('workbench import: a committed Session is never misreported as an unchanged failed import',
+    refreshFailedImportUiState.storeArgs?.name === 'Research' &&
+    refreshFailedImportUiState.loadAttempts === 2 &&
+    refreshFailedImportUiState.end === 1 &&
+    refreshFailedImportUiState.notifications.join(',') === 'wb_import_saved_refresh' &&
+    !refreshFailedImportUiState.notifications.includes('wb_import_failed'));
+ok('workbench import: future, oversized and cancelled files never mutate Session storage',
+    !futureImportUiState.storeArgs && futureImportUiState.begin === 1 &&
+    futureImportUiState.end === 1 &&
+    futureImportUiState.notifications.join(',') === 'localized:FUTURE_VERSION' &&
+    !largeImportUiState.storeArgs && largeImportUiState.begin === 0 &&
+    largeImportUiState.fileReads === 0 &&
+    largeImportUiState.notifications.join(',') === 'wb_import_too_large' &&
+    !cancelledImportUiState.storeArgs && cancelledImportUiState.begin === 0 &&
+    cancelledImportUiState.notifications.length === 0);
+ok('workbench import: UI wiring loads the transfer module and remains available without a Session',
+    /id="importSessionBtn"[^>]*\bdisabled\b/u.test(chatHtmlSource) &&
+    chatHtmlSource.includes('id="sessionImportInput"') &&
+    chatHtmlSource.indexOf('lib/session-transfer.js') < chatHtmlSource.indexOf('chat.js') &&
+    extractFunction(chatSource, 'setQuickActionsEnabled').includes('importSessionBtn.disabled = !enabled') &&
+    chatSource.indexOf("sessionImportInput.addEventListener('change'") <
+        chatSource.indexOf('importSessionBtn.disabled = false;') &&
+    extractFunction(chatSource, 'beginSessionTransition').includes('annotationInFlight'));
+const annotationToggleCallback = extractEventCallback(chatSource, 'showOnPageBtn', 'click');
+ok('workbench import: annotation busy state disables controls and replays external switches first',
+    annotationToggleCallback.indexOf('annotationInFlight = true') <
+        annotationToggleCallback.indexOf('await resolvePageAnnotationTarget()') &&
+    annotationToggleCallback.includes('setQuickActionsEnabled(false)') &&
+    annotationToggleCallback.indexOf('if (deferredExternalSessionChange !== undefined)') <
+        annotationToggleCallback.indexOf('setQuickActionsEnabled(!isStreaming') &&
+    extractFunction(chatSource, 'applyExternalSessionChange')
+        .includes('deferredExternalSessionChange = nextSession || null'));
+const compactPanelStart = chatCssSource.indexOf('@media (max-width: 520px)');
+const compactPanelEnd = chatCssSource.indexOf('@media (max-width: 400px)', compactPanelStart);
+const compactPanelCss = compactPanelStart >= 0
+    ? chatCssSource.slice(compactPanelStart, compactPanelEnd >= 0 ? compactPanelEnd : undefined)
+    : '';
+ok('workbench import/export: compact side panels keep both transfer actions reachable',
+    compactPanelCss.includes('body.mode-panel .header-left h2') &&
+    compactPanelCss.includes('body.mode-panel .header-btn.session-transfer-btn') &&
+    compactPanelCss.includes('width: 30px') &&
+    compactPanelCss.includes('body.mode-panel .header-btn.session-transfer-btn > span[data-i18n]') &&
+    compactPanelCss.includes('display: none'));
+
 // Exercise cleanSvg itself with a tiny XML DOM double. In particular, the
 // malicious handler sits on documentElement: querying descendants alone does
 // not see it, which reproduces the root-SVG regression.
+const sanitizerSource = read('lib/sanitize.js');
+ok('sanitize: rendered markdown cannot trigger remote image requests',
+    sanitizerSource.includes("if (tag === 'img')") &&
+    sanitizerSource.includes("data:image\\/(png|jpe?g|gif|webp);base64,") &&
+    !sanitizerSource.includes('svg\\+xml'));
+ok('sanitize: SVG rejects active containers, external resources and unbounded CSS',
+    sanitizerSource.includes("'clippath', 'mask', 'path'") &&
+    !sanitizerSource.includes("'image', 'use'") &&
+    sanitizerSource.includes("/url\\s*\\(|expression\\s*\\(|[@{}<>]/"));
 function makeXmlElement(nodeName, attrs = []) {
     const values = attrs.map(([name, value]) => ({ name, value }));
     return {
@@ -3751,6 +4998,9 @@ ok('smart read workflow: cache identity follows the model and never reuses sampl
     smartReadRunSource.includes('(page.blocks || []).map') &&
     smartReadRunSource.includes('coverageLimited') &&
     smartReadRunSource.includes('config: smartReadConfig'));
+ok('smart read workflow: missing reasoning falls back to strict off',
+    smartReadRunSource.includes("smartReadConfig.reasoning || 'off'") &&
+    !smartReadRunSource.includes("smartReadConfig.reasoning || 'auto'"));
 const smartReadAnalysisStart = chatSource.indexOf('async function requestSmartReadAnalysis');
 const smartReadAnalysisEnd = chatSource.indexOf('async function resolveSmartReadTarget', smartReadAnalysisStart);
 const smartReadAnalysisSource = chatSource.slice(smartReadAnalysisStart, smartReadAnalysisEnd);
@@ -4488,6 +5738,66 @@ ok('page annotations: UI requests have a bounded lifetime and mutation broadcast
     popupSource.includes('setTimeout(() => finish(null), 5000)') &&
     chatSource.includes('setTimeout(() => finish(null), 5000)') &&
     backgroundSource.includes("message.type !== 'getSessionHighlightState'"));
+ok('workbench refresh: snippet broadcasts defer while an Agent or stream owns the conversation DOM',
+    chatSource.includes('function isWorkbenchRefreshBusy()') &&
+    chatSource.includes('deferredSnippetsRefreshSession = preferred ?? null') &&
+    chatSource.includes('scheduleSnippetsRefresh(preferred)') &&
+    chatSource.includes('replayDeferredSnippetsRefresh()'));
+const scheduledRefreshLifecycle = await vm.runInNewContext(
+    `(async () => {
+        ${extractFunction(chatSource, 'isWorkbenchRefreshBusy')}
+        ${extractFunction(chatSource, 'scheduleSnippetsRefresh')}
+        ${extractFunction(chatSource, 'replayDeferredSnippetsRefresh')}
+        ${extractFunction(chatSource, 'beginSessionTransition')}
+        ${extractFunction(chatSource, 'endSessionTransition')}
+        let isStreaming = false;
+        let smartReadInFlight = false;
+        let sessionTransitionInFlight = false;
+        let annotationInFlight = false;
+        let modalPromptInFlight = false;
+        let activeAgentController = null;
+        let deferredSnippetsRefreshSession;
+        let snippetsRefreshTimer = null;
+        let timerCallback = null;
+        let releaseStorage = null;
+        let loadedPreferred = null;
+        const quickActionStates = [];
+        const sendButton = { disabled: false };
+        const setQuickActionsEnabled = (enabled) => quickActionStates.push(enabled);
+        const console = { warn() {} };
+        const clearTimeout = () => {};
+        const setTimeout = (callback) => {
+            timerCallback = callback;
+            return 1;
+        };
+        const storageGate = new Promise((resolve) => { releaseStorage = resolve; });
+        const loadSessions = async (preferred) => {
+            loadedPreferred = preferred;
+            await storageGate;
+        };
+        scheduleSnippetsRefresh('Research');
+        const refresh = timerCallback();
+        await Promise.resolve();
+        const lockedDuringStorage = sessionTransitionInFlight &&
+            isWorkbenchRefreshBusy() && sendButton.disabled &&
+            quickActionStates.at(-1) === false;
+        releaseStorage();
+        await refresh;
+        return {
+            lockedDuringStorage,
+            loadedPreferred,
+            lockedAfter: sessionTransitionInFlight,
+            sendDisabledAfter: sendButton.disabled,
+            quickActionStates,
+        };
+    })()`
+);
+ok('workbench refresh: scheduled storage reload holds the transition lock across its await',
+    scheduledRefreshLifecycle.lockedDuringStorage &&
+    scheduledRefreshLifecycle.loadedPreferred === 'Research' &&
+    !scheduledRefreshLifecycle.lockedAfter &&
+    !scheduledRefreshLifecycle.sendDisabledAfter &&
+    scheduledRefreshLifecycle.quickActionStates.join(',') === 'false,true');
 ok('page annotations: content script exposes persistent state and a clearing hide mode',
     contentAssistSource.includes("message.type === 'toggleSessionHighlights'") &&
     contentAssistSource.includes("message.type === 'getSessionHighlightState'") &&
@@ -4504,6 +5814,77 @@ ok('page annotations: shared cancellation and page identity guard every async jo
 // answer (finish_reason "length") is conclusive, so the probe must tolerate the
 // `output_limit` error chat() raises and treat any non-empty sample as success.
 const llmClientSource = read('lib/llm-client.js');
+const searchProviderSource = read('lib/search-provider.js');
+ok('search provider: caller cancellation is composed with the endpoint timeout',
+    searchProviderSource.includes('async function search(query, maxResults = 6, options = {})') &&
+    searchProviderSource.includes("callerSignal?.addEventListener('abort', abortFromCaller") &&
+    searchProviderSource.includes('callerSignal?.removeEventListener'));
+
+async function runSearchBodyAbort(config, bodyMethod) {
+    const searchContext = makeContext({ searchConfig: config });
+    let enteredBody;
+    const bodyStarted = new Promise((resolve) => { enteredBody = resolve; });
+    const neverFinishes = new Promise(() => {});
+    let fetchSignal = null;
+    searchContext.fetch = async (_url, init) => {
+        fetchSignal = init?.signal || null;
+        const response = {
+            ok: true,
+            status: 200,
+            json: async () => ({ results: [] }),
+            text: async () => '{"results":[]}',
+        };
+        response[bodyMethod] = () => {
+            enteredBody();
+            return neverFinishes;
+        };
+        return response;
+    };
+    const SearchProviderTest = load(
+        searchContext,
+        ['lib/search-provider.js'],
+        'SearchProvider'
+    );
+    const controller = new AbortController();
+    const abortReason = new Error(`cancel ${config.provider} body`);
+    abortReason.name = 'AbortError';
+    const pending = SearchProviderTest.search('research question', 2, {
+        signal: controller.signal,
+    });
+    await bodyStarted;
+    controller.abort(abortReason);
+    let timer = null;
+    const outcome = await Promise.race([
+        pending.then(
+            (value) => ({ value }),
+            (error) => ({ error })
+        ),
+        new Promise((resolve) => {
+            timer = setTimeout(() => resolve({ timeout: true }), 100);
+        }),
+    ]);
+    if (timer !== null) clearTimeout(timer);
+    return { outcome, fetchSignal };
+}
+
+const tavilyBodyAbort = await runSearchBodyAbort(
+    { provider: 'tavily', apiKey: 'test-key' },
+    'json'
+);
+ok('search provider: caller abort settles a stalled JSON body after response headers',
+    !tavilyBodyAbort.outcome.timeout &&
+    tavilyBodyAbort.outcome.error?.name === 'AbortError' &&
+    tavilyBodyAbort.fetchSignal?.aborted === true);
+
+const searxBodyAbort = await runSearchBodyAbort(
+    { provider: 'searxng', endpoint: 'https://search.example.test' },
+    'text'
+);
+ok('search provider: SearXNG preserves AbortError while its text body is stalled',
+    !searxBodyAbort.outcome.timeout &&
+    searxBodyAbort.outcome.error?.name === 'AbortError' &&
+    !String(searxBodyAbort.outcome.error?.message || '').includes('Could not reach') &&
+    searxBodyAbort.fetchSignal?.aborted === true);
 const testConnStart = llmClientSource.indexOf('async function testConnection');
 const testConnEnd = llmClientSource.indexOf('return { chat, completeJSON, testConnection');
 const testConnSource = llmClientSource.slice(testConnStart, testConnEnd);
