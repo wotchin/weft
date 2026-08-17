@@ -1090,7 +1090,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
                 'tb_ask', 'tb_ask_hint',
                 'card_thinking', 'card_reasoning', 'card_copy', 'card_copied',
                 'card_save', 'card_saved', 'card_save_hint', 'card_failed',
-                'card_close', 'card_disconnected', 'card_reload',
+                'card_close', 'card_drag', 'card_disconnected', 'card_reload',
                 'toast_saved_to', 'toast_save_failed',
                 'modal_cancel', 'modal_save', 'modal_comment_ph', 'modal_comment_title',
                 'card_elapsed', 'card_stats',

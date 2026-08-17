@@ -137,6 +137,9 @@
   "smart_read_analysing": {
     "message": "正在查找关键证据…"
   },
+  "smart_read_analysing_chunk": {
+    "message": "正在分析第 %s/%n 个分片…"
+  },
   "smart_read_saving": {
     "message": "正在创建会话…"
   },
@@ -196,6 +199,9 @@
   },
   "smart_read_visible_only": {
     "message": "仅分析了页面当前已经渲染的内容；Weft 不会绕过访问限制，也不会抓取隐藏正文。"
+  },
+  "smart_read_model_coverage_partial": {
+    "message": "当前页面超出了所选模型的分析预算。Weft 已对全文进行分层抽样；如需完整覆盖，请切换到上下文更大的模型。"
   },
   "smart_read_sources": {
     "message": "核验原文："
@@ -536,6 +542,9 @@
   "card_close": {
     "message": "关闭"
   },
+  "card_drag": {
+    "message": "拖动以移动"
+  },
   "card_disconnected": {
     "message": "与 Weft 的连接在返回结果前中断了，请重试。"
   },
@@ -705,7 +714,7 @@
     "message": "Weft 无法连接模型服务商，请检查网络和接口地址。"
   },
   "llm_error_timeout": {
-    "message": "模型响应超时，请重试。"
+    "message": "模型未能在时限内完成响应，可能与当前模型速度、上下文能力、服务负载或本机算力有关。请重试、减少内容，或切换到更快的模型。"
   },
   "llm_error_abort": {
     "message": "请求已取消。"
@@ -1083,7 +1092,7 @@
     "message": "无法连接服务商，请检查网络和 Base URL。"
   },
   "settings_llm_error_timeout": {
-    "message": "服务商未能及时响应。"
+    "message": "模型或服务商未能及时响应，可能与模型速度、服务负载或本机算力有关。"
   },
   "settings_llm_error_abort": {
     "message": "连接测试已取消。"

@@ -43,7 +43,7 @@
         card_thinking: 'Thinking\u2026', card_reasoning: 'Reasoning\u2026',
         card_copy: 'Copy', card_copied: 'Copied', card_save: 'Save', card_saved: 'Saved',
         card_save_hint: 'Save the passage and this result to your session',
-        card_failed: 'Failed', card_close: 'Close',
+        card_failed: 'Failed', card_close: 'Close', card_drag: 'Drag to move',
         modal_cancel: 'Cancel', modal_save: 'Save', modal_comment_ph: 'Add your comment (optional)…',
         card_disconnected: 'The connection to Weft ended before an answer arrived. Try again.',
         card_reload: 'Weft was reloaded \u2014 refresh the page and try again.',
@@ -55,7 +55,7 @@
         llm_error_rate_limit: 'The model is busy or its usage limit was reached. Wait a moment and try again.',
         llm_error_context_length: 'This selection is too long for the configured model.',
         llm_error_network: 'Weft could not reach the model provider. Check your connection and endpoint.',
-        llm_error_timeout: 'The model took too long to respond. Please try again.',
+        llm_error_timeout: 'The model did not finish in time. Its speed, context capacity, provider load, or this device may be the limiting factor. Retry, reduce the content, or choose a faster model.',
         llm_error_abort: 'The request was cancelled.',
         llm_error_server: 'The model provider returned an error. Please try again.',
         llm_error_bad_request: 'The model could not process this request. Check your model settings.',
@@ -72,6 +72,7 @@
 
     let toolbar = null;
     let card = null;
+    let cardInteractionCleanup = null;
     let commentModal = null;
     let cachedSelection = ''; // captured when toolbar shows, before click clears it
 
@@ -178,15 +179,20 @@
     /* Result card */
     #weft-card {
         position:fixed; z-index:2147483647; width:380px; max-width:calc(100vw - 24px);
+        max-height:calc(100vh - 24px); max-height:calc(100dvh - 24px);
+        display:flex; flex-direction:column;
         background:var(--weft-bg); color:var(--weft-fg);
         border:1px solid var(--weft-line); border-radius:14px;
         box-shadow:0 12px 40px rgba(15,23,42,.18), 0 1px 3px rgba(15,23,42,.08);
         animation:weft-pop .14s ease-out; overflow:hidden;
     }
+    #weft-card.weft-card-dragged { animation:none; }
     #weft-card .weft-card-head {
         display:flex; align-items:center; gap:8px;
         padding:11px 13px; border-bottom:1px solid var(--weft-line); background:#fbfcfe;
+        flex:0 0 auto; cursor:grab; user-select:none; touch-action:none;
     }
+    #weft-card.weft-card-dragging .weft-card-head { cursor:grabbing; }
     #weft-card .weft-card-title { font-size:13px; font-weight:600; flex:1; }
     #weft-card .weft-card-x {
         border:0; background:transparent; cursor:pointer; color:var(--weft-muted);
@@ -202,13 +208,14 @@
     @keyframes weft-slide { 0%{transform:translateX(-100%)} 100%{transform:translateX(320%)} }
     #weft-card .weft-card-body {
         padding:12px 13px; font-size:13px; line-height:1.62; color:#25303f;
-        max-height:320px; overflow-y:auto; white-space:pre-wrap; word-break:break-word;
+        min-height:0; flex:1 1 auto; max-height:320px; overflow-y:auto;
+        white-space:pre-wrap; word-break:break-word;
     }
     #weft-card .weft-status { color:var(--weft-muted); font-style:italic; }
     #weft-card .weft-card-foot {
         display:flex; align-items:center; gap:8px;
         padding:8px 13px; border-top:1px solid var(--weft-line);
-        font-size:11px; color:var(--weft-muted); background:#fbfcfe;
+        flex:0 0 auto; font-size:11px; color:var(--weft-muted); background:#fbfcfe;
     }
     #weft-card .weft-stats { flex:1; font-variant-numeric:tabular-nums; }
     #weft-card .weft-act {
@@ -389,11 +396,197 @@
         if (activeCardRun === run) activeCardRun = null;
     }
 
+    const CARD_VIEWPORT_MARGIN = 12;
+
+    /** Visible fixed-position bounds, excluding scrollbars and pinch-zoom clipping. */
+    function getCardViewportBounds() {
+        const widthCandidates = [
+            Number(window.innerWidth),
+            Number(document.documentElement?.clientWidth),
+        ].filter((value) => value > 0);
+        const heightCandidates = [
+            Number(window.innerHeight),
+            Number(document.documentElement?.clientHeight),
+        ].filter((value) => value > 0);
+        const layoutWidth = widthCandidates.length ? Math.min(...widthCandidates) : 0;
+        const layoutHeight = heightCandidates.length ? Math.min(...heightCandidates) : 0;
+        const visualViewport = window.visualViewport;
+        const visualWidth = Number(visualViewport?.width);
+        const visualHeight = Number(visualViewport?.height);
+
+        if (visualWidth > 0 && visualHeight > 0) {
+            const offsetLeft = Math.max(0, Number(visualViewport.offsetLeft) || 0);
+            const offsetTop = Math.max(0, Number(visualViewport.offsetTop) || 0);
+            const layoutRight = layoutWidth || offsetLeft + visualWidth;
+            const layoutBottom = layoutHeight || offsetTop + visualHeight;
+            const left = Math.min(offsetLeft, layoutRight);
+            const top = Math.min(offsetTop, layoutBottom);
+            const right = Math.max(left, Math.min(layoutRight, offsetLeft + visualWidth));
+            const bottom = Math.max(top, Math.min(layoutBottom, offsetTop + visualHeight));
+            return { left, top, width: right - left, height: bottom - top };
+        }
+
+        return { left: 0, top: 0, width: layoutWidth, height: layoutHeight };
+    }
+
+    /** Keep every reachable edge of a fixed result card inside the page viewport. */
+    function clampCardToViewport(cardElement, left, top) {
+        const viewport = getCardViewportBounds();
+        // A pinch-zoomed or keyboard-reduced visual viewport can be smaller
+        // than CSS viewport units, so cap the card to the actual visible area.
+        cardElement.style.maxWidth = `${Math.max(0, viewport.width - CARD_VIEWPORT_MARGIN * 2)}px`;
+        cardElement.style.maxHeight = `${Math.max(0, viewport.height - CARD_VIEWPORT_MARGIN * 2)}px`;
+        const rect = cardElement.getBoundingClientRect();
+        // offsetWidth/offsetHeight ignore the entry animation's transform, so
+        // initial placement is based on the card's real final dimensions.
+        const width = Math.max(0, Number(cardElement.offsetWidth) || rect.width || 0);
+        const height = Math.max(0, Number(cardElement.offsetHeight) || rect.height || 0);
+
+        // If the viewport is unusually smaller than the measured card, align
+        // that axis to its visible leading edge. Normally both margins are 12px.
+        const horizontalMargin = Math.min(
+            CARD_VIEWPORT_MARGIN,
+            Math.max(0, (viewport.width - width) / 2)
+        );
+        const verticalMargin = Math.min(
+            CARD_VIEWPORT_MARGIN,
+            Math.max(0, (viewport.height - height) / 2)
+        );
+        const minLeft = viewport.left + horizontalMargin;
+        const minTop = viewport.top + verticalMargin;
+        const maxLeft = Math.max(minLeft, viewport.left + viewport.width - width - horizontalMargin);
+        const maxTop = Math.max(minTop, viewport.top + viewport.height - height - verticalMargin);
+        const requestedLeft = Number.isFinite(left) ? left : rect.left;
+        const requestedTop = Number.isFinite(top) ? top : rect.top;
+        const nextLeft = Math.min(maxLeft, Math.max(minLeft, requestedLeft));
+        const nextTop = Math.min(maxTop, Math.max(minTop, requestedTop));
+
+        cardElement.style.left = `${Math.round(nextLeft)}px`;
+        cardElement.style.top = `${Math.round(nextTop)}px`;
+        return { left: nextLeft, top: nextTop };
+    }
+
+    /**
+     * Make the card header a pointer drag handle. The returned disposer owns
+     * every listener/observer so replacing or closing a card cannot leak work.
+     */
+    function enableCardDragging(cardElement, handle) {
+        let activePointerId = null;
+        let pointerStartX = 0;
+        let pointerStartY = 0;
+        let cardStartLeft = 0;
+        let cardStartTop = 0;
+        let clampFrame = null;
+        let resizeObserver = null;
+
+        const currentPosition = () => {
+            const rect = cardElement.getBoundingClientRect();
+            const styledLeft = Number.parseFloat(cardElement.style.left);
+            const styledTop = Number.parseFloat(cardElement.style.top);
+            return clampCardToViewport(
+                cardElement,
+                Number.isFinite(styledLeft) ? styledLeft : rect.left,
+                Number.isFinite(styledTop) ? styledTop : rect.top
+            );
+        };
+
+        const scheduleClamp = () => {
+            if (clampFrame !== null) return;
+            clampFrame = window.requestAnimationFrame(() => {
+                clampFrame = null;
+                currentPosition();
+            });
+        };
+
+        const finishDrag = (event) => {
+            if (activePointerId === null || event.pointerId !== activePointerId) return;
+            const pointerId = activePointerId;
+            activePointerId = null;
+            cardElement.classList.remove('weft-card-dragging');
+            try {
+                if (handle.hasPointerCapture?.(pointerId)) handle.releasePointerCapture(pointerId);
+            } catch { /* the browser may already have released capture */ }
+        };
+
+        const onPointerDown = (event) => {
+            const isInteractive = event.target?.closest?.(
+                'button, a, input, textarea, select, [role="button"]'
+            );
+            if (activePointerId !== null || event.isPrimary === false || event.button !== 0 || isInteractive) {
+                return;
+            }
+
+            event.preventDefault();
+            event.stopPropagation();
+            cardElement.classList.add('weft-card-dragged', 'weft-card-dragging');
+            const position = currentPosition();
+            activePointerId = event.pointerId;
+            pointerStartX = event.clientX;
+            pointerStartY = event.clientY;
+            cardStartLeft = position.left;
+            cardStartTop = position.top;
+            try { handle.setPointerCapture?.(event.pointerId); } catch { /* pointer already ended */ }
+        };
+
+        const onPointerMove = (event) => {
+            if (activePointerId === null || event.pointerId !== activePointerId) return;
+            event.preventDefault();
+            clampCardToViewport(
+                cardElement,
+                cardStartLeft + event.clientX - pointerStartX,
+                cardStartTop + event.clientY - pointerStartY
+            );
+        };
+
+        handle.addEventListener('pointerdown', onPointerDown);
+        handle.addEventListener('pointermove', onPointerMove);
+        handle.addEventListener('pointerup', finishDrag);
+        handle.addEventListener('pointercancel', finishDrag);
+        handle.addEventListener('lostpointercapture', finishDrag);
+        window.addEventListener('resize', scheduleClamp, { passive: true });
+        window.visualViewport?.addEventListener('resize', scheduleClamp, { passive: true });
+        window.visualViewport?.addEventListener('scroll', scheduleClamp, { passive: true });
+
+        const ResizeObserverClass = globalThis.ResizeObserver;
+        if (typeof ResizeObserverClass === 'function') {
+            resizeObserver = new ResizeObserverClass(scheduleClamp);
+            resizeObserver.observe(cardElement);
+        }
+
+        return () => {
+            if (clampFrame !== null) {
+                window.cancelAnimationFrame(clampFrame);
+                clampFrame = null;
+            }
+            if (activePointerId !== null) {
+                const pointerId = activePointerId;
+                activePointerId = null;
+                try {
+                    if (handle.hasPointerCapture?.(pointerId)) handle.releasePointerCapture(pointerId);
+                } catch { /* capture already released */ }
+            }
+            cardElement.classList.remove('weft-card-dragging');
+            handle.removeEventListener('pointerdown', onPointerDown);
+            handle.removeEventListener('pointermove', onPointerMove);
+            handle.removeEventListener('pointerup', finishDrag);
+            handle.removeEventListener('pointercancel', finishDrag);
+            handle.removeEventListener('lostpointercapture', finishDrag);
+            window.removeEventListener('resize', scheduleClamp);
+            window.visualViewport?.removeEventListener('resize', scheduleClamp);
+            window.visualViewport?.removeEventListener('scroll', scheduleClamp);
+            resizeObserver?.disconnect();
+        };
+    }
+
     function closeCard() {
         if (activeCardRun) {
             activeCardRun.cancelled = true;
             activeCardRun.settled = true;
             releaseCardRun(activeCardRun, { discardPending: true });
+        }
+        if (cardInteractionCleanup) {
+            cardInteractionCleanup();
+            cardInteractionCleanup = null;
         }
         if (card) { card.remove(); card = null; }
     }
@@ -407,6 +600,8 @@
 
         const head = document.createElement('div');
         head.className = 'weft-card-head';
+        head.dataset.weftI18nTitle = 'card_drag';
+        head.title = S.card_drag;
         const brand = document.createElement('span');
         brand.className = 'weft-brand';
         brand.textContent = 'W';
@@ -449,17 +644,19 @@
         document.body.appendChild(card);
 
         // Position near the selection, clamped to the viewport.
+        const viewport = getCardViewportBounds();
         const r = card.getBoundingClientRect();
-        let left = (anchorRect ? anchorRect.left : 20);
+        const cardHeight = Number(card.offsetHeight) || r.height;
+        const left = (anchorRect ? anchorRect.left : 20);
         let top = (anchorRect ? anchorRect.bottom + 10 : 20);
-        if (left + r.width > window.innerWidth - 12) left = window.innerWidth - r.width - 12;
-        if (left < 12) left = 12;
-        if (top + r.height > window.innerHeight - 12) {
-            const above = (anchorRect ? anchorRect.top : 0) - r.height - 10;
-            top = above > 12 ? above : Math.max(12, window.innerHeight - r.height - 12);
+        if (top + cardHeight > viewport.top + viewport.height - CARD_VIEWPORT_MARGIN) {
+            const above = (anchorRect ? anchorRect.top : 0) - cardHeight - 10;
+            top = above > viewport.top + CARD_VIEWPORT_MARGIN
+                ? above
+                : viewport.top + viewport.height - cardHeight - CARD_VIEWPORT_MARGIN;
         }
-        card.style.left = Math.round(left) + 'px';
-        card.style.top = Math.round(top) + 'px';
+        clampCardToViewport(card, left, top);
+        cardInteractionCleanup = enableCardDragging(card, head);
 
         return { body, stats, progress, foot };
     }
@@ -700,8 +897,9 @@
 
     // Listen for mouseup to show toolbar
     document.addEventListener('mouseup', (e) => {
-        // Don't show on toolbar itself or comment modal
+        // Don't show selection actions while interacting with Weft UI itself.
         if (toolbar && toolbar.contains(e.target)) return;
+        if (card && card.contains(e.target)) return;
         if (commentModal && commentModal.contains(e.target)) return;
 
         setTimeout(() => {

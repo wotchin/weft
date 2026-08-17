@@ -369,6 +369,89 @@ await load(
             report('smart read: long pages sample start, middle and end',
                 sampled.map((block) => block.id).join(',') === 'start,middle,end' &&
                 sampled.reduce((sum, block) => sum + block.text.length, 0) <= 60);
+
+            const oversizedText = ('😀 Long evidence sentence with exact source wording. ').repeat(70);
+            const chunkSourceBlocks = [
+                { id: 'chunk-start', text: 'Opening evidence remains an intact normal block.', tag: 'p' },
+                { id: 'chunk-long', text: oversizedText, tag: 'p', pageNumber: 7 },
+                { id: 'chunk-end', text: 'Closing evidence remains an intact normal block.', tag: 'p' },
+            ];
+            const blockChunks = SmartRead.chunkBlocksForAnalysis(chunkSourceBlocks, 700, 120);
+            const serializedChunkLength = (chunk) => JSON.stringify({
+                blocks: chunk.map((block) => ({ id: block.id, text: block.text })),
+            }).length;
+            const hasBrokenSurrogate = (text) => {
+                for (let offset = 0; offset < text.length; offset++) {
+                    const code = text.charCodeAt(offset);
+                    if (code >= 0xd800 && code <= 0xdbff) {
+                        const next = text.charCodeAt(offset + 1);
+                        if (!(next >= 0xdc00 && next <= 0xdfff)) return true;
+                        offset++;
+                    } else if (code >= 0xdc00 && code <= 0xdfff) {
+                        return true;
+                    }
+                }
+                return false;
+            };
+            const longParts = blockChunks.flat().filter((block) => block.id === 'chunk-long');
+            let longCoverageEnd = 0;
+            let longCoverageContinuous = true;
+            for (const part of longParts) {
+                const offset = oversizedText.indexOf(
+                    part.text,
+                    Math.max(0, longCoverageEnd - 120)
+                );
+                if (offset < 0 || offset > longCoverageEnd) {
+                    longCoverageContinuous = false;
+                    break;
+                }
+                longCoverageEnd = Math.max(longCoverageEnd, offset + part.text.length);
+            }
+            report('smart read chunks: block order, payload budgets and source ids are preserved',
+                blockChunks.length > 2 && blockChunks.every((chunk) => serializedChunkLength(chunk) <= 700) &&
+                blockChunks.flat().filter((block) => block.id === 'chunk-start').length === 1 &&
+                blockChunks.flat().filter((block) => block.id === 'chunk-end').length === 1 &&
+                longParts.length > 1 && longParts.every((block) =>
+                    block.pageNumber === 7 && block.tag === 'p' && oversizedText.includes(block.text)));
+            report('smart read chunks: oversized Unicode blocks split without corrupting text',
+                longParts[0].text.startsWith('😀') &&
+                longParts[longParts.length - 1].text.endsWith(' ') &&
+                longParts.every((block) => !hasBrokenSurrogate(block.text)) &&
+                longCoverageContinuous && longCoverageEnd === oversizedText.length);
+
+            const mergedArticle = SmartRead.mergeArticleAnalyses([
+                {
+                    sessionTitle: 'Merged reading', topic: 'Cross-section findings',
+                    takeaways: [{
+                        title: 'Shared finding', summary: 'Evidence appears in several sections.',
+                        evidence: [{ blockId: 'b1', quote: 'First evidence with meaningful facts', kind: 'fact' }],
+                    }],
+                },
+                {
+                    sessionTitle: 'Merged reading', topic: 'Cross-section findings',
+                    takeaways: [
+                        {
+                            title: 'Tail finding', summary: 'The ending supplies a separate conclusion.',
+                            evidence: [{ blockId: 'b3', quote: 'Closing evidence describes the decision', kind: 'claim' }],
+                        },
+                        {
+                            title: 'Shared finding', summary: 'Evidence appears in several sections.',
+                            evidence: [{ blockId: 'b2', quote: 'Middle context explains why the change matters', kind: 'reference' }],
+                        },
+                    ],
+                },
+            ], smartPage);
+            const sharedMerged = mergedArticle.takeaways.filter((item) => item.title === 'Shared finding');
+            report('smart read chunks: round-robin merge retains tail coverage and distinct evidence',
+                mergedArticle.takeaways.some((item) => item.title === 'Tail finding') &&
+                sharedMerged.length === 2 &&
+                new Set(sharedMerged.flatMap((item) =>
+                    item.evidence.map((evidence) => evidence.blockId))).size === 2);
+
+            const linkChunks = SmartRead.chunkLinksForAnalysis(broadLinks, 260);
+            report('smart read chunks: crowded index links retain stable ids without duplication',
+                linkChunks.length > 1 &&
+                linkChunks.flat().map((link) => link.id).join(',') === broadLinks.map((link) => link.id).join(','));
             report('smart read: fingerprint is stable and input-sensitive',
                 SmartRead.fingerprint('same') === SmartRead.fingerprint('same') &&
                 SmartRead.fingerprint('same') !== SmartRead.fingerprint('different'));
@@ -1148,6 +1231,71 @@ try {
 } catch (error) { timeoutError = error; }
 ok('llm: stalled provider exits with timeout', timeoutError?.kind === 'timeout');
 ok('llm: timeout carries a recovery hint', /responding|faster model/i.test(timeoutError?.hint || ''));
+
+const builtinErrorContext = makeContext();
+let builtinErrorMode = 'quota';
+let builtinSessionsDestroyed = 0;
+builtinErrorContext.LanguageModel = {
+    async create() {
+        return {
+            async prompt(_prompt, options = {}) {
+                if (builtinErrorMode === 'quota') {
+                    const error = new Error('context window exceeded');
+                    error.name = 'QuotaExceededError';
+                    error.requested = 9100;
+                    error.contextWindow = 6144;
+                    throw error;
+                }
+                return new Promise((_resolve, reject) => {
+                    const fail = () => {
+                        const error = new Error('aborted');
+                        error.name = 'AbortError';
+                        reject(error);
+                    };
+                    if (options.signal?.aborted) fail();
+                    else options.signal?.addEventListener('abort', fail, { once: true });
+                });
+            },
+            destroy() { builtinSessionsDestroyed++; },
+        };
+    },
+};
+load(builtinErrorContext, ['lib/providers.js', 'lib/store.js', 'lib/llm-client.js'],
+    'globalThis.__llmApi = LLMClient;');
+const builtinConfig = { provider: 'builtin', model: 'gemini-nano', maxTokens: 1000 };
+let builtinQuotaError = null;
+try {
+    await builtinErrorContext.__llmApi.chat([{ role: 'user', content: 'large input' }], {
+        stream: false,
+        config: builtinConfig,
+    });
+} catch (error) { builtinQuotaError = error; }
+ok('llm: built-in model context exhaustion triggers adaptive-split classification',
+    builtinQuotaError?.kind === 'context_length' &&
+    builtinQuotaError.requested === 9100 && builtinQuotaError.contextWindow === 6144);
+
+builtinErrorMode = 'abort';
+let builtinDeadlineError = null;
+try {
+    await builtinErrorContext.__llmApi.chat([{ role: 'user', content: 'slow input' }], {
+        stream: false,
+        timeoutMs: 25,
+        config: builtinConfig,
+    });
+} catch (error) { builtinDeadlineError = error; }
+const callerAbort = new AbortController();
+callerAbort.abort();
+let builtinCallerAbortError = null;
+try {
+    await builtinErrorContext.__llmApi.chat([{ role: 'user', content: 'cancelled input' }], {
+        stream: false,
+        signal: callerAbort.signal,
+        config: builtinConfig,
+    });
+} catch (error) { builtinCallerAbortError = error; }
+ok('llm: built-in deadline and caller cancellation remain distinguishable',
+    builtinDeadlineError?.kind === 'timeout' &&
+    builtinCallerAbortError?.kind === 'abort' && builtinSessionsDestroyed === 3);
 
 // Protocol completion must win over a proxy that leaves the HTTP stream open.
 const sseContext = makeContext();
@@ -2253,6 +2401,246 @@ ok('content assist: closing a run clears timers, frames and its port',
     contentAssistSource.includes('window.cancelAnimationFrame(run.renderFrame)') &&
     contentAssistSource.includes('port.disconnect()') &&
     contentAssistSource.includes('releaseCardRun(activeCardRun, { discardPending: true })'));
+
+const getCardViewportBoundsFunction = extractFunction(contentAssistSource, 'getCardViewportBounds');
+const clampCardToViewportFunction = extractFunction(contentAssistSource, 'clampCardToViewport');
+const enableCardDraggingFunction = extractFunction(contentAssistSource, 'enableCardDragging');
+const cardDragResults = vm.runInNewContext(
+    `(() => {
+        const CARD_VIEWPORT_MARGIN = 12;
+        ${getCardViewportBoundsFunction}
+        ${clampCardToViewportFunction}
+        ${enableCardDraggingFunction}
+
+        class FakeTarget {
+            constructor() {
+                this.listeners = new Map();
+                this.captured = new Set();
+                this.captureCalls = [];
+                this.releaseCalls = [];
+            }
+            addEventListener(type, listener) {
+                if (!this.listeners.has(type)) this.listeners.set(type, new Set());
+                this.listeners.get(type).add(listener);
+            }
+            removeEventListener(type, listener) {
+                this.listeners.get(type)?.delete(listener);
+            }
+            dispatch(type, event = {}) {
+                const fullEvent = { type, target: this, ...event };
+                for (const listener of [...(this.listeners.get(type) || [])]) listener(fullEvent);
+            }
+            setPointerCapture(pointerId) {
+                this.captureCalls.push(pointerId);
+                this.captured.add(pointerId);
+            }
+            hasPointerCapture(pointerId) { return this.captured.has(pointerId); }
+            releasePointerCapture(pointerId) {
+                this.releaseCalls.push(pointerId);
+                this.captured.delete(pointerId);
+            }
+            listenerCount() {
+                return [...this.listeners.values()].reduce((sum, listeners) => sum + listeners.size, 0);
+            }
+        }
+
+        const windowEvents = new FakeTarget();
+        const visualViewport = new FakeTarget();
+        let pendingFrame = null;
+        let cancelledFrames = 0;
+        const window = {
+            innerWidth: 800,
+            innerHeight: 600,
+            visualViewport,
+            addEventListener: (...args) => windowEvents.addEventListener(...args),
+            removeEventListener: (...args) => windowEvents.removeEventListener(...args),
+            requestAnimationFrame(callback) { pendingFrame = callback; return 1; },
+            cancelAnimationFrame() { cancelledFrames++; pendingFrame = null; },
+        };
+        const document = { documentElement: { clientWidth: 800, clientHeight: 600 } };
+        const flushFrame = () => {
+            const callback = pendingFrame;
+            pendingFrame = null;
+            callback?.();
+        };
+
+        let observerCallback = null;
+        let observerDisconnected = false;
+        globalThis.ResizeObserver = class {
+            constructor(callback) { observerCallback = callback; }
+            observe() {}
+            disconnect() { observerDisconnected = true; }
+        };
+
+        const classes = new Set();
+        const card = {
+            offsetWidth: 200,
+            offsetHeight: 100,
+            style: { left: '100px', top: '100px' },
+            classList: {
+                add: (...names) => names.forEach((name) => classes.add(name)),
+                remove: (...names) => names.forEach((name) => classes.delete(name)),
+            },
+            getBoundingClientRect() {
+                return {
+                    left: Number.parseFloat(this.style.left) || 0,
+                    top: Number.parseFloat(this.style.top) || 0,
+                    width: this.offsetWidth,
+                    height: this.offsetHeight,
+                };
+            },
+        };
+        const handle = new FakeTarget();
+        const passiveTarget = { closest: () => null };
+        let prevented = 0;
+        const pointerEvent = (overrides = {}) => ({
+            pointerId: 7,
+            button: 0,
+            isPrimary: true,
+            clientX: 100,
+            clientY: 100,
+            target: passiveTarget,
+            preventDefault() { prevented++; },
+            stopPropagation() {},
+            ...overrides,
+        });
+
+        const cleanup = enableCardDragging(card, handle);
+        handle.dispatch('pointerdown', pointerEvent());
+        const capturedOnPointerDown = handle.captured.has(7) && handle.captureCalls.includes(7);
+        handle.dispatch('pointermove', pointerEvent({ clientX: 1000, clientY: 1000 }));
+        const bottomRight = { left: card.style.left, top: card.style.top };
+        handle.dispatch('pointermove', pointerEvent({ clientX: -1000, clientY: -1000 }));
+        const topLeft = { left: card.style.left, top: card.style.top };
+        handle.dispatch('pointerup', pointerEvent());
+        const afterRelease = { left: card.style.left, top: card.style.top };
+        handle.dispatch('pointermove', pointerEvent({ clientX: 500, clientY: 500 }));
+        const releasedMoveIgnored = card.style.left === afterRelease.left &&
+            card.style.top === afterRelease.top;
+
+        const interactiveTarget = { closest: () => ({ tagName: 'BUTTON' }) };
+        handle.dispatch('pointerdown', pointerEvent({ pointerId: 8, target: interactiveTarget }));
+        handle.dispatch('pointermove', pointerEvent({ pointerId: 8, clientX: 700, clientY: 500 }));
+        const interactiveIgnored = !handle.captured.has(8) &&
+            card.style.left === afterRelease.left && card.style.top === afterRelease.top;
+
+        card.style.left = '588px';
+        card.style.top = '488px';
+        window.innerWidth = document.documentElement.clientWidth = 500;
+        window.innerHeight = document.documentElement.clientHeight = 400;
+        windowEvents.dispatch('resize');
+        flushFrame();
+        const afterViewportShrink = { left: card.style.left, top: card.style.top };
+
+        card.offsetHeight = 250;
+        observerCallback();
+        flushFrame();
+        const afterContentGrowth = { left: card.style.left, top: card.style.top };
+
+        card.offsetHeight = 100;
+        window.innerWidth = 800;
+        window.innerHeight = 600;
+        document.documentElement.clientWidth = 783;
+        document.documentElement.clientHeight = 583;
+        visualViewport.width = 0;
+        visualViewport.height = 0;
+        const scrollbarBounded = clampCardToViewport(card, 999, 999);
+
+        document.documentElement.clientWidth = 800;
+        document.documentElement.clientHeight = 600;
+        visualViewport.width = 300;
+        visualViewport.height = 240;
+        visualViewport.offsetLeft = 200;
+        visualViewport.offsetTop = 100;
+        const visualViewportBounded = clampCardToViewport(card, 999, 999);
+        visualViewport.offsetLeft = 100;
+        visualViewport.offsetTop = 50;
+        visualViewport.dispatch('scroll');
+        flushFrame();
+        const afterVisualViewportScroll = { left: card.style.left, top: card.style.top };
+
+        window.innerWidth = document.documentElement.clientWidth = 500;
+        window.innerHeight = document.documentElement.clientHeight = 400;
+        visualViewport.width = 0;
+        visualViewport.height = 0;
+
+        const oversizedCard = {
+            offsetWidth: 900,
+            offsetHeight: 700,
+            style: {},
+            getBoundingClientRect: () => ({ left: -20, top: -20, width: 900, height: 700 }),
+        };
+        const oversized = clampCardToViewport(oversizedCard, -20, -20);
+
+        handle.dispatch('pointerdown', pointerEvent({ pointerId: 9 }));
+        handle.dispatch('pointercancel', pointerEvent({ pointerId: 9 }));
+        const cancelEndedDrag = !handle.captured.has(9) &&
+            handle.releaseCalls.includes(9) && !classes.has('weft-card-dragging');
+
+        handle.dispatch('pointerdown', pointerEvent({ pointerId: 10 }));
+        const activeBeforeCleanup = handle.captured.has(10) && classes.has('weft-card-dragging');
+        windowEvents.dispatch('resize');
+        const framePendingBeforeCleanup = pendingFrame !== null;
+        cleanup();
+        const cleaned = observerDisconnected && handle.listenerCount() === 0 &&
+            windowEvents.listenerCount() === 0 && visualViewport.listenerCount() === 0 &&
+            !classes.has('weft-card-dragging') && !handle.captured.has(10) &&
+            handle.releaseCalls.includes(10) && cancelledFrames === 1 && pendingFrame === null;
+
+        return {
+            bottomRight,
+            topLeft,
+            afterRelease,
+            afterViewportShrink,
+            afterContentGrowth,
+            scrollbarBounded,
+            visualViewportBounded,
+            afterVisualViewportScroll,
+            interactiveIgnored,
+            releasedMoveIgnored,
+            capturedDuringDrag: capturedOnPointerDown && prevented >= 2 && !handle.captured.has(7),
+            cancelEndedDrag,
+            activeBeforeCleanup,
+            framePendingBeforeCleanup,
+            oversized,
+            cleaned,
+        };
+    })()`
+);
+ok('content assist: result cards drag by their header and stay inside all viewport edges',
+    cardDragResults.bottomRight.left === '588px' && cardDragResults.bottomRight.top === '488px' &&
+    cardDragResults.topLeft.left === '12px' && cardDragResults.topLeft.top === '12px' &&
+    cardDragResults.capturedDuringDrag);
+ok('content assist: result card drag ignores controls and stops after pointer release',
+    cardDragResults.interactiveIgnored && cardDragResults.releasedMoveIgnored &&
+    cardDragResults.afterRelease.left === cardDragResults.topLeft.left &&
+    cardDragResults.afterRelease.top === cardDragResults.topLeft.top);
+ok('content assist: pointer cancellation and active-card cleanup both end dragging',
+    cardDragResults.cancelEndedDrag && cardDragResults.activeBeforeCleanup &&
+    cardDragResults.framePendingBeforeCleanup);
+ok('content assist: viewport and streamed-content resizes re-clamp result cards',
+    cardDragResults.afterViewportShrink.left === '288px' &&
+    cardDragResults.afterViewportShrink.top === '288px' &&
+    cardDragResults.afterContentGrowth.left === '288px' &&
+    cardDragResults.afterContentGrowth.top === '138px');
+ok('content assist: usable viewport excludes scrollbars and follows visual viewport panning',
+    cardDragResults.scrollbarBounded.left === 571 &&
+    cardDragResults.scrollbarBounded.top === 471 &&
+    cardDragResults.visualViewportBounded.left === 288 &&
+    cardDragResults.visualViewportBounded.top === 228 &&
+    cardDragResults.afterVisualViewportScroll.left === '188px' &&
+    cardDragResults.afterVisualViewportScroll.top === '178px');
+ok('content assist: oversized cards use the only reachable viewport origin',
+    cardDragResults.oversized.left === 0 && cardDragResults.oversized.top === 0);
+ok('content assist: closing a result card disposes drag and resize resources',
+    cardDragResults.cleaned &&
+    contentAssistSource.includes('cardInteractionCleanup = enableCardDragging(card, head)') &&
+    contentAssistSource.includes('cardInteractionCleanup();') &&
+    contentAssistSource.includes('cardInteractionCleanup = null;'));
+ok('content assist: draggable card CSS preserves body scrolling and exposes a grab handle',
+    contentAssistSource.includes('max-height:calc(100dvh - 24px)') &&
+    contentAssistSource.includes('cursor:grab; user-select:none; touch-action:none') &&
+    contentAssistSource.includes('min-height:0; flex:1 1 auto; max-height:320px; overflow-y:auto'));
 const snippetHighlightStart = contentAssistSource.indexOf('const SNIPPET_HIGHLIGHT_LIMITS');
 const snippetHighlightEnd = contentAssistSource.indexOf('function makeSnippetSpan', snippetHighlightStart);
 const snippetHighlightSource = contentAssistSource.slice(snippetHighlightStart, snippetHighlightEnd);
@@ -3353,15 +3741,27 @@ ok('smart read workflow: analysis never annotates the page automatically',
     !smartReadRunSource.includes('highlightSmartReadData') &&
     !smartReadRunSource.includes('Highlighter.highlightGroups') &&
     !smartReadRunSource.includes('toggleSessionOnPage'));
+ok('smart read workflow: cache identity follows the model and never reuses sampled coverage',
+    smartReadRunSource.includes('smartReadConfig.provider') &&
+    smartReadRunSource.includes('smartReadConfig.model') &&
+    smartReadRunSource.includes('smartReadConfig.baseUrl') &&
+    smartReadRunSource.includes('smartReadConfig.reasoning') &&
+    smartReadRunSource.includes('smartReadConfig.maxTokens') &&
+    smartReadRunSource.includes('I18N.resolvedCode()') &&
+    smartReadRunSource.includes('(page.blocks || []).map') &&
+    smartReadRunSource.includes('coverageLimited') &&
+    smartReadRunSource.includes('config: smartReadConfig'));
 const smartReadAnalysisStart = chatSource.indexOf('async function requestSmartReadAnalysis');
 const smartReadAnalysisEnd = chatSource.indexOf('async function resolveSmartReadTarget', smartReadAnalysisStart);
 const smartReadAnalysisSource = chatSource.slice(smartReadAnalysisStart, smartReadAnalysisEnd);
 ok('smart read workflow: model analysis has a bounded request lifetime',
-    (smartReadAnalysisSource.match(/timeoutMs: 90000/g) || []).length === 2);
+    (smartReadAnalysisSource.match(/timeoutMs: SMART_READ_REQUEST_TIMEOUT_MS/g) || []).length === 2 &&
+    smartReadAnalysisSource.includes('profile.totalTimeoutMs') &&
+    smartReadAnalysisSource.includes('analysisController.abort()'));
 ok('smart read workflow: both page types use configured budgets and one recovery path',
     smartReadAnalysisSource.includes('smartReadOutputBudget(cfg.maxTokens, 3200)') &&
     smartReadAnalysisSource.includes('smartReadOutputBudget(cfg.maxTokens, 4000)') &&
-    (smartReadAnalysisSource.match(/completeSmartReadJSON\(primary/g) || []).length === 2);
+    (smartReadAnalysisSource.match(/completeSmartReadJSON\(/g) || []).length === 2);
 
 const smartReadRecoveryFunctions = [
     'normalizeSmartReadPurpose',
@@ -3370,15 +3770,26 @@ const smartReadRecoveryFunctions = [
     'buildSmartReadIndexPageData',
     'shouldRetrySmartReadCompletion',
     'completeSmartReadJSON',
+    'smartReadInputTokens',
+    'smartReadProfileForConfig',
+    'smartReadFullInputTokens',
+    'selectSmartReadBlocksForCoverage',
+    'smartReadChunkCharBudget',
+    'fitSmartReadChunks',
+    'shouldFallbackToSmartReadChunks',
+    'smartReadModelError',
+    'smartReadValidationError',
+    'completeSmartReadChunkQueue',
     'requestSmartReadAnalysis',
 ].map((name) => extractFunction(chatSource, name)).join('\n');
 const smartReadModuleSource = read('lib/smart-read.js');
+const tokenizerModuleSource = read('lib/tokenizer.js');
 const crowdedIndexPage = {
     pageType: 'index',
     title: 'A crowded news homepage',
     links: Array.from({ length: 120 }, (_, index) => ({
         id: `l${index + 1}`,
-        text: `Story ${index + 1} ${'decision-relevant detail '.repeat(18)}`,
+        text: `Story ${index + 1} ${'decision-relevant detail '.repeat(6)}`,
         href: `https://example.com/story/${index + 1}`,
         section: index % 2 ? 'Markets' : 'World',
     })),
@@ -3390,6 +3801,20 @@ async function exerciseSmartReadRecovery(mode) {
         `(async () => {
             const SMART_READ_PURPOSE_MAX_CHARS = 1600;
             const SMART_READ_MAX_OUTPUT_TOKENS = 32000;
+            const SMART_READ_REQUEST_TIMEOUT_MS = 90000;
+            const SMART_READ_MAX_INITIAL_CHUNKS = 12;
+            const SMART_READ_MAX_CHUNK_JOBS = 16;
+            const SMART_READ_INPUT_PROFILE = Object.freeze({
+                builtin: Object.freeze({
+                    directTokens: 1800, chunkTokens: 1400,
+                    coverageTokens: 11200, totalTimeoutMs: 360000,
+                }),
+                remote: Object.freeze({
+                    directTokens: 14000, chunkTokens: 7000,
+                    coverageTokens: 70000, totalTimeoutMs: 300000,
+                }),
+            });
+            ${tokenizerModuleSource}
             ${smartReadModuleSource}
             const Store = {
                 async getLlmConfig() {
@@ -3434,7 +3859,14 @@ async function exerciseSmartReadRecovery(mode) {
                 };
             }
         })()`,
-        { __calls: calls, __mode: mode, __page: crowdedIndexPage }
+        {
+            __calls: calls,
+            __mode: mode,
+            __page: crowdedIndexPage,
+            AbortController,
+            setTimeout,
+            clearTimeout,
+        }
     );
     return { ...outcome, calls };
 }
@@ -3448,13 +3880,12 @@ function smartReadRequestPageData(call) {
 const recoveredSmartRead = await exerciseSmartReadRecovery('recover');
 const primarySmartReadData = smartReadRequestPageData(recoveredSmartRead.calls[0]);
 const retrySmartReadData = smartReadRequestPageData(recoveredSmartRead.calls[1]);
-ok('smart read recovery: a crowded index retries once with less input and more output budget',
+ok('smart read recovery: a crowded index keeps full coverage while raising output budget',
     recoveredSmartRead.result?.sessionTitle === 'Focused reading' &&
     recoveredSmartRead.calls.length === 2 &&
-    primarySmartReadData.links.length <= 80 && retrySmartReadData.links.length <= 40 &&
-    retrySmartReadData.links.length < primarySmartReadData.links.length &&
-    JSON.stringify(primarySmartReadData).length <= 24000 &&
-    JSON.stringify(retrySmartReadData).length <= 12000 &&
+    primarySmartReadData.links.length === crowdedIndexPage.links.length &&
+    retrySmartReadData.links.length === primarySmartReadData.links.length &&
+    JSON.stringify(retrySmartReadData) === JSON.stringify(primarySmartReadData) &&
     recoveredSmartRead.calls[0].options.maxTokens === 5000 &&
     recoveredSmartRead.calls[1].options.maxTokens > recoveredSmartRead.calls[0].options.maxTokens,
     JSON.stringify({
@@ -3486,6 +3917,457 @@ ok('smart read recovery: repeated empty output stops after exactly one retry',
     twiceEmptySmartRead.calls.length === 2 &&
     twiceEmptySmartRead.error?.kind === 'empty_response' &&
     twiceEmptySmartRead.error?.retryable === true);
+
+const chunkingArticlePage = {
+    pageType: 'article',
+    title: 'A long evidence-rich article',
+    url: 'https://example.com/long-article',
+    blocks: Array.from({ length: 4 }, (_, index) => ({
+        id: `article-block-${index + 1}`,
+        tag: 'p',
+        text: `Section ${index + 1} has a distinct, verifiable opening statement. ` +
+            'Supporting context preserves an exact and independently verifiable statement for this section. '.repeat(55),
+    })),
+};
+chunkingArticlePage.content = chunkingArticlePage.blocks.map((block) => block.text).join('\n');
+
+async function exerciseSmartReadArticleChunking({
+    dialect,
+    page = chunkingArticlePage,
+    failFirstKind = '',
+    failEveryBlockId = '',
+    invalidFirstCall = false,
+    invalidEveryBlockId = '',
+    noMatchBlockId = '',
+    contradictoryNoMatchBlockId = '',
+}) {
+    const calls = [];
+    const progress = [];
+    const state = { active: 0, maxActive: 0 };
+    const outcome = await vm.runInNewContext(
+        `(async () => {
+            const SMART_READ_PURPOSE_MAX_CHARS = 1600;
+            const SMART_READ_MAX_OUTPUT_TOKENS = 32000;
+            const SMART_READ_REQUEST_TIMEOUT_MS = 90000;
+            const SMART_READ_MAX_INITIAL_CHUNKS = 12;
+            const SMART_READ_MAX_CHUNK_JOBS = 16;
+            const SMART_READ_INPUT_PROFILE = Object.freeze({
+                builtin: Object.freeze({
+                    directTokens: 1800, chunkTokens: 1400,
+                    coverageTokens: 11200, totalTimeoutMs: 360000,
+                }),
+                remote: Object.freeze({
+                    directTokens: 14000, chunkTokens: 7000,
+                    coverageTokens: 70000, totalTimeoutMs: 300000,
+                }),
+            });
+            ${tokenizerModuleSource}
+            ${smartReadModuleSource}
+            const Store = {
+                async getLlmConfig() {
+                    return {
+                        provider: __dialect === 'builtin' ? 'builtin' : 'deepseek',
+                        apiKey: __dialect === 'builtin' ? '' : 'k',
+                        model: __dialect === 'builtin' ? 'gemini-nano' : 'deepseek-v4-flash',
+                        maxTokens: 5000,
+                    };
+                },
+            };
+            const getProvider = () => ({ dialect: __dialect });
+            const I18N = { promptLanguageInstruction: () => 'Reply in English.' };
+            const LLMClient = {
+                async completeJSON(messages, options) {
+                    const user = messages.find((message) => message.role === 'user')?.content || '';
+                    const marker = user.indexOf('pageData=');
+                    const pageData = JSON.parse(user.slice(marker + 'pageData='.length));
+                    __calls.push({
+                        blockIds: pageData.blocks.map((block) => block.id),
+                        payloadChars: JSON.stringify(pageData).length,
+                        timeoutMs: options.timeoutMs,
+                        hasSignal: Boolean(options.signal),
+                    });
+                    __state.active++;
+                    __state.maxActive = Math.max(__state.maxActive, __state.active);
+                    try {
+                        await Promise.resolve();
+                        if (__failFirstKind && __calls.length === 1) {
+                            const error = new Error('simulated first-call failure');
+                            error.kind = __failFirstKind;
+                            throw error;
+                        }
+                        if (__failEveryBlockId && pageData.blocks.some((block) =>
+                            block.id === __failEveryBlockId)) {
+                            const error = new Error('simulated repeated chunk failure');
+                            error.kind = 'timeout';
+                            throw error;
+                        }
+                        const distinct = [...new Map(pageData.blocks.map((block) => [block.id, block])).values()];
+                        const current = [...new Map(
+                            [distinct[0], distinct[distinct.length - 1]]
+                                .filter(Boolean)
+                                .map((block) => [block.id, block])
+                        ).values()];
+                        const visibleIds = new Set(pageData.blocks.map((block) => block.id));
+                        if ((__invalidFirstCall && __calls.length === 1) ||
+                            (__invalidEveryBlockId && visibleIds.has(__invalidEveryBlockId))) {
+                            return {
+                                sessionTitle: 'Chunked evidence',
+                                topic: 'Evidence gathered across every article section.',
+                                noMatch: false,
+                                takeaways: [{
+                                    title: 'Unverifiable model result',
+                                    summary: 'This intentionally exercises semantic recovery.',
+                                    evidence: [{
+                                        blockId: 'invented-block',
+                                        quote: 'This quote does not occur in the source chunk.',
+                                        kind: 'fact',
+                                    }],
+                                }],
+                            };
+                        }
+                        if (__noMatchBlockId && visibleIds.has(__noMatchBlockId)) {
+                            return {
+                                sessionTitle: 'Chunked evidence',
+                                topic: 'Evidence gathered across every relevant article section.',
+                                noMatch: true,
+                                takeaways: [],
+                            };
+                        }
+                        const foreign = __page.blocks.find((block) => !visibleIds.has(block.id));
+                        const foreignQuote = foreign ? foreign.text.slice(300, 420) : '';
+                        return {
+                            sessionTitle: 'Chunked evidence',
+                            topic: 'Evidence gathered across every article section.',
+                            noMatch: Boolean(
+                                __contradictoryNoMatchBlockId &&
+                                visibleIds.has(__contradictoryNoMatchBlockId)
+                            ),
+                            takeaways: current.map((block) => ({
+                                title: 'Finding from ' + block.id,
+                                summary: 'This section contributes independently verified evidence.',
+                                evidence: [
+                                    { blockId: block.id, quote: block.text.slice(0, 120), kind: 'fact' },
+                                    ...(foreign ? [{
+                                        blockId: foreign.id,
+                                        quote: foreignQuote,
+                                        kind: 'quote',
+                                    }] : []),
+                                ],
+                            })),
+                        };
+                    } finally {
+                        __state.active--;
+                    }
+                },
+            };
+            ${smartReadRecoveryFunctions}
+            try {
+                const result = await requestSmartReadAnalysis(__page, 'Trace every section', {
+                    onChunkProgress(current, total) { __progress.push({ current, total }); },
+                });
+                return { result, error: null };
+            } catch (error) {
+                return { result: null, error: { kind: error.kind, message: error.message } };
+            }
+        })()`,
+        {
+            __calls: calls,
+            __progress: progress,
+            __state: state,
+            __page: page,
+            __dialect: dialect,
+            __failFirstKind: failFirstKind,
+            __failEveryBlockId: failEveryBlockId,
+            __invalidFirstCall: invalidFirstCall,
+            __invalidEveryBlockId: invalidEveryBlockId,
+            __noMatchBlockId: noMatchBlockId,
+            __contradictoryNoMatchBlockId: contradictoryNoMatchBlockId,
+            AbortController,
+            setTimeout,
+            clearTimeout,
+        }
+    );
+    return { ...outcome, calls, progress, state };
+}
+
+function smartReadEvidenceIds(result) {
+    return new Set((result?.takeaways || []).flatMap((takeaway) =>
+        (takeaway.evidence || []).map((evidence) => evidence.blockId)));
+}
+
+const builtinChunkedRead = await exerciseSmartReadArticleChunking({ dialect: 'builtin' });
+const allArticleBlockIds = new Set(chunkingArticlePage.blocks.map((block) => block.id));
+const builtinRequestedIds = new Set(builtinChunkedRead.calls.flatMap((call) => call.blockIds));
+const builtinEvidenceIds = smartReadEvidenceIds(builtinChunkedRead.result);
+ok('smart read chunks: a long built-in-model article is covered by serial bounded calls',
+    builtinChunkedRead.error === null && builtinChunkedRead.calls.length > 1 &&
+    builtinChunkedRead.state.maxActive === 1 &&
+    builtinChunkedRead.calls.every((call) => call.timeoutMs === 90000 && call.hasSignal) &&
+    [...allArticleBlockIds].every((id) => builtinRequestedIds.has(id)) &&
+    [...allArticleBlockIds].every((id) => builtinEvidenceIds.has(id)) &&
+    builtinChunkedRead.progress.some((item) => item.total > 1));
+ok('smart read chunks: each map result is restricted to evidence visible in that chunk',
+    (builtinChunkedRead.result?.takeaways || []).every((takeaway) =>
+        takeaway.evidence.every((evidence) => evidence.kind !== 'quote')));
+
+const builtinChunkTimeout = await exerciseSmartReadArticleChunking({
+    dialect: 'builtin',
+    failFirstKind: 'timeout',
+});
+ok('smart read chunks: one timed-out map chunk is bisected once and then recovered',
+    builtinChunkTimeout.error === null &&
+    builtinChunkTimeout.calls.length > builtinChunkedRead.calls.length &&
+    smartReadEvidenceIds(builtinChunkTimeout.result).has('article-block-4'));
+
+const repeatedChunkTimeout = await exerciseSmartReadArticleChunking({
+    dialect: 'builtin',
+    failEveryBlockId: 'article-block-1',
+});
+ok('smart read chunks: a second-level timeout stops instead of caching partial work',
+    repeatedChunkTimeout.result === null && repeatedChunkTimeout.error?.kind === 'timeout' &&
+    repeatedChunkTimeout.calls.length >= 2 && repeatedChunkTimeout.calls.length <= 3);
+
+const recoveredInvalidEvidence = await exerciseSmartReadArticleChunking({
+    dialect: 'builtin',
+    invalidFirstCall: true,
+});
+ok('smart read chunks: unverifiable JSON gets one full-section semantic recovery',
+    recoveredInvalidEvidence.error === null &&
+    recoveredInvalidEvidence.calls.length === builtinChunkedRead.calls.length + 1 &&
+    smartReadEvidenceIds(recoveredInvalidEvidence.result).has('article-block-4'));
+
+const repeatedInvalidEvidence = await exerciseSmartReadArticleChunking({
+    dialect: 'builtin',
+    invalidEveryBlockId: 'article-block-1',
+});
+ok('smart read chunks: repeated unverifiable JSON fails without saving other chunks',
+    repeatedInvalidEvidence.result === null &&
+    repeatedInvalidEvidence.error?.kind === 'empty_response' &&
+    repeatedInvalidEvidence.calls.length === 2);
+
+const builtinNoMatchRead = await exerciseSmartReadArticleChunking({
+    dialect: 'builtin',
+    noMatchBlockId: 'article-block-2',
+});
+const noMatchEvidenceIds = smartReadEvidenceIds(builtinNoMatchRead.result);
+ok('smart read chunks: an explicit no-match section counts as covered without forcing evidence',
+    builtinNoMatchRead.error === null && builtinNoMatchRead.calls.length > 1 &&
+    !noMatchEvidenceIds.has('article-block-2') &&
+    noMatchEvidenceIds.has('article-block-1') && noMatchEvidenceIds.has('article-block-4'));
+
+const contradictoryNoMatchRead = await exerciseSmartReadArticleChunking({
+    dialect: 'builtin',
+    contradictoryNoMatchBlockId: 'article-block-2',
+});
+ok('smart read chunks: contradictory no-match output cannot become a partial cached result',
+    contradictoryNoMatchRead.result === null &&
+    contradictoryNoMatchRead.error?.kind === 'empty_response');
+
+const remoteDirectRead = await exerciseSmartReadArticleChunking({ dialect: 'openai' });
+ok('smart read chunks: a capable remote model keeps the same article to one request',
+    remoteDirectRead.error === null && remoteDirectRead.calls.length === 1 &&
+    remoteDirectRead.state.maxActive === 1 && remoteDirectRead.progress.length === 0);
+const remoteDirectSemanticRecovery = await exerciseSmartReadArticleChunking({
+    dialect: 'openai',
+    invalidFirstCall: true,
+});
+ok('smart read recovery: a direct response also retries unverifiable evidence once',
+    remoteDirectSemanticRecovery.error === null &&
+    remoteDirectSemanticRecovery.calls.length === 2 &&
+    smartReadEvidenceIds(remoteDirectSemanticRecovery.result).has('article-block-4'));
+
+const remoteTimeoutFallback = await exerciseSmartReadArticleChunking({
+    dialect: 'openai',
+    failFirstKind: 'timeout',
+});
+const fallbackRequestedIds = new Set(
+    remoteTimeoutFallback.calls.slice(1).flatMap((call) => call.blockIds)
+);
+ok('smart read chunks: a direct timeout falls back to smaller complete sections',
+    remoteTimeoutFallback.error === null && remoteTimeoutFallback.calls.length > 2 &&
+    remoteTimeoutFallback.state.maxActive === 1 &&
+    remoteTimeoutFallback.calls.slice(1).every((call) =>
+        call.payloadChars < remoteTimeoutFallback.calls[0].payloadChars) &&
+    [...allArticleBlockIds].every((id) => fallbackRequestedIds.has(id)) &&
+    [...allArticleBlockIds].every((id) => smartReadEvidenceIds(remoteTimeoutFallback.result).has(id)) &&
+    remoteTimeoutFallback.progress.some((item) => item.total > 1));
+
+const tailHeavyArticlePage = {
+    pageType: 'article',
+    title: 'Twelve separately chunked sections',
+    url: 'https://example.com/twelve-sections',
+    blocks: Array.from({ length: 12 }, (_, index) => ({
+        id: `tail-block-${index + 1}`,
+        tag: 'p',
+        text: `Tail coverage section ${index + 1} starts with unique evidence. ` +
+            'This independently verifiable passage anchors one section for source validation. '.repeat(36),
+    })),
+};
+tailHeavyArticlePage.content = tailHeavyArticlePage.blocks.map((block) => block.text).join('\n');
+const tailHeavyRead = await exerciseSmartReadArticleChunking({
+    dialect: 'builtin',
+    page: tailHeavyArticlePage,
+});
+ok('smart read chunks: more than eight sections still retain the final section',
+    tailHeavyRead.error === null && tailHeavyRead.calls.length > 8 &&
+    smartReadEvidenceIds(tailHeavyRead.result).has('tail-block-12'));
+const nearCapChunkTimeout = await exerciseSmartReadArticleChunking({
+    dialect: 'builtin',
+    page: tailHeavyArticlePage,
+    failFirstKind: 'timeout',
+});
+ok('smart read chunks: near-cap adaptive splitting retains the final source section',
+    nearCapChunkTimeout.error === null && nearCapChunkTimeout.calls.length > 12 &&
+    nearCapChunkTimeout.calls.length <= 16 &&
+    smartReadEvidenceIds(nearCapChunkTimeout.result).has('tail-block-12'));
+
+const unevenArticlePage = {
+    pageType: 'article',
+    title: 'Uneven block packing',
+    url: 'https://example.com/uneven-blocks',
+    blocks: Array.from({ length: 14 }, (_, index) => ({
+        id: `uneven-block-${index + 1}`,
+        tag: 'p',
+        text: `Uneven section ${index + 1} starts with independently verifiable evidence. ` +
+            'This medium source block must remain intact while the queue is packed efficiently. '.repeat(29),
+    })),
+};
+unevenArticlePage.content = unevenArticlePage.blocks.map((block) => block.text).join('\n');
+const unevenBlockRead = await exerciseSmartReadArticleChunking({
+    dialect: 'builtin',
+    page: unevenArticlePage,
+});
+const unevenRequestedIds = new Set(unevenBlockRead.calls.flatMap((call) => call.blockIds));
+ok('smart read chunks: uneven intact blocks repack below the bounded job limit',
+    unevenBlockRead.error === null && unevenBlockRead.calls.length > 1 &&
+    unevenBlockRead.calls.length <= 12 &&
+    unevenRequestedIds.size === unevenArticlePage.blocks.length);
+
+const shortBlockArticlePage = {
+    pageType: 'article',
+    title: 'A page with many short source blocks',
+    url: 'https://example.com/many-short-blocks',
+    blocks: Array.from({ length: 1000 }, (_, index) => ({
+        id: `short-block-${index + 1}`,
+        tag: 'p',
+        text: `Short evidence ${index + 1} remains valid and exact.`,
+    })),
+};
+shortBlockArticlePage.content = shortBlockArticlePage.blocks.map((block) => block.text).join('\n');
+const shortBlockRead = await exerciseSmartReadArticleChunking({
+    dialect: 'builtin',
+    page: shortBlockArticlePage,
+});
+const requestedShortBlockIds = new Set(shortBlockRead.calls.flatMap((call) => call.blockIds));
+ok('smart read chunks: JSON overhead from many short blocks remains inside the coverage budget',
+    shortBlockRead.error === null && shortBlockRead.calls.length <= 12 &&
+    requestedShortBlockIds.size < shortBlockArticlePage.blocks.length &&
+    requestedShortBlockIds.has('short-block-1') &&
+    requestedShortBlockIds.has('short-block-1000'));
+
+const largeIndexPage = {
+    pageType: 'index',
+    title: 'A homepage with five hundred links',
+    url: 'https://example.com/news',
+    links: Array.from({ length: 500 }, (_, index) => ({
+        id: `l-${index + 1}`,
+        text: `Story ${index + 1} semiconductor evidence`,
+        href: `https://example.com/news/${index + 1}`,
+        section: 'N',
+    })),
+};
+const indexCoverageCalls = [];
+const indexCoverageState = { active: 0, maxActive: 0 };
+const indexCoverageResult = await vm.runInNewContext(
+    `(async () => {
+        const SMART_READ_PURPOSE_MAX_CHARS = 1600;
+        const SMART_READ_MAX_OUTPUT_TOKENS = 32000;
+        const SMART_READ_REQUEST_TIMEOUT_MS = 90000;
+        const SMART_READ_MAX_INITIAL_CHUNKS = 12;
+        const SMART_READ_MAX_CHUNK_JOBS = 16;
+        const SMART_READ_INPUT_PROFILE = Object.freeze({
+            builtin: Object.freeze({
+                directTokens: 1800, chunkTokens: 1400,
+                coverageTokens: 11200, totalTimeoutMs: 360000,
+            }),
+            remote: Object.freeze({
+                directTokens: 14000, chunkTokens: 7000,
+                coverageTokens: 70000, totalTimeoutMs: 300000,
+            }),
+        });
+        ${tokenizerModuleSource}
+        ${smartReadModuleSource}
+        const Store = {
+            async getLlmConfig() {
+                return { provider: 'builtin', model: 'gemini-nano', maxTokens: 5000 };
+            },
+        };
+        const getProvider = () => ({ dialect: 'builtin' });
+        const I18N = { promptLanguageInstruction: () => 'Reply in English.' };
+        const LLMClient = {
+            async completeJSON(messages) {
+                const user = messages.find((message) => message.role === 'user')?.content || '';
+                const marker = user.indexOf('pageData=');
+                const pageData = JSON.parse(user.slice(marker + 'pageData='.length));
+                __calls.push(pageData.links.map((link) => link.id));
+                __state.active++;
+                __state.maxActive = Math.max(__state.maxActive, __state.active);
+                try {
+                    await Promise.resolve();
+                    const link = pageData.links.find((candidate) =>
+                        candidate.id === 'l-500');
+                    if (!link) {
+                        return {
+                            sessionTitle: 'Homepage focus',
+                            topic: 'Semiconductor policy evidence.',
+                            noMatch: true,
+                            selections: [],
+                        };
+                    }
+                    return {
+                        sessionTitle: 'Homepage focus',
+                        topic: 'Semiconductor policy evidence.',
+                        noMatch: false,
+                        selections: [{
+                            linkId: link.id,
+                            reason: 'This link directly matches the requested focus.',
+                        }],
+                    };
+                } finally {
+                    __state.active--;
+                }
+            },
+        };
+        ${smartReadRecoveryFunctions}
+        return requestSmartReadAnalysis(__page, 'semiconductor policy');
+    })()`,
+    {
+        __calls: indexCoverageCalls,
+        __state: indexCoverageState,
+        __page: largeIndexPage,
+        AbortController,
+        setTimeout,
+        clearTimeout,
+    }
+);
+const requestedIndexIds = new Set(indexCoverageCalls.flat());
+ok('smart read chunks: a 500-link homepage is model-filtered without pre-dropping its tail',
+    indexCoverageCalls.length > 1 && indexCoverageState.maxActive === 1 &&
+    requestedIndexIds.size === largeIndexPage.links.length &&
+    requestedIndexIds.has('l-500') &&
+    indexCoverageResult.selections.some((selection) => selection.linkId === 'l-500'));
+
+const enLocaleMessages = JSON.parse(read('_locales/en/messages.json'));
+const zhLocaleMessages = JSON.parse(read('_locales/zh_CN/messages.json'));
+ok('smart read timeout copy names model limits and gives actionable recovery choices',
+    /model/i.test(enLocaleMessages.llm_error_timeout.message) &&
+    /reduce the content/i.test(enLocaleMessages.llm_error_timeout.message) &&
+    /faster model/i.test(enLocaleMessages.llm_error_timeout.message) &&
+    /模型/u.test(zhLocaleMessages.llm_error_timeout.message) &&
+    /减少内容/u.test(zhLocaleMessages.llm_error_timeout.message) &&
+    /更快的模型/u.test(zhLocaleMessages.llm_error_timeout.message) &&
+    contentAssistSource.includes('Retry, reduce the content, or choose a faster model.'));
+
 const pendingConsumeStart = chatSource.indexOf('function schedulePendingSmartReadRetry');
 const pendingConsumeEnd = chatSource.indexOf('function renderSmartReadResult', pendingConsumeStart);
 const pendingConsumeSource = chatSource.slice(pendingConsumeStart, pendingConsumeEnd);

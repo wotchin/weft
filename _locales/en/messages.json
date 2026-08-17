@@ -137,6 +137,9 @@
   "smart_read_analysing": {
     "message": "Finding evidence…"
   },
+  "smart_read_analysing_chunk": {
+    "message": "Analyzing section %s of %n…"
+  },
   "smart_read_saving": {
     "message": "Creating session…"
   },
@@ -196,6 +199,9 @@
   },
   "smart_read_visible_only": {
     "message": "Only content currently rendered on the page was analyzed. Weft did not bypass an access gate or fetch hidden text."
+  },
+  "smart_read_model_coverage_partial": {
+    "message": "This page exceeds the current model's analysis budget. Weft sampled sections across the document; choose a larger-context model for complete coverage."
   },
   "smart_read_sources": {
     "message": "Verified source:"
@@ -536,6 +542,9 @@
   "card_close": {
     "message": "Close"
   },
+  "card_drag": {
+    "message": "Drag to move"
+  },
   "card_disconnected": {
     "message": "The connection to Weft ended before an answer arrived. Try again."
   },
@@ -705,7 +714,7 @@
     "message": "Weft could not reach the model provider. Check your connection and endpoint."
   },
   "llm_error_timeout": {
-    "message": "The model took too long to respond. Please try again."
+    "message": "The model did not finish in time. Its speed, context capacity, provider load, or this device may be the limiting factor. Retry, reduce the content, or choose a faster model."
   },
   "llm_error_abort": {
     "message": "The request was cancelled."
@@ -1083,7 +1092,7 @@
     "message": "Could not reach the provider. Check your network and Base URL."
   },
   "settings_llm_error_timeout": {
-    "message": "The provider did not respond in time."
+    "message": "The model or provider did not respond in time. Model speed, service load, or this device may be the limiting factor."
   },
   "settings_llm_error_abort": {
     "message": "The connection test was cancelled."
