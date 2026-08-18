@@ -3034,6 +3034,61 @@ ok('diagram sandbox: bridge verifies parent and echoes request ids',
     mermaidSandboxSource.includes('event.source !== parentWindow') &&
     mermaidSandboxSource.includes("event.data.type === 'mermaid-ping'") &&
     /type: 'mermaid-result',\s*requestId/.test(mermaidSandboxSource));
+const inlineSvgPresentationSource = extractFunction(mermaidSandboxSource, 'inlineSvgPresentation');
+const inlinedDiagramPresentation = vm.runInNewContext(
+    `(() => {
+        const makeNode = (localName, computedValues) => ({
+            localName,
+            computedValues,
+            attributes: {},
+            setAttribute(name, value) { this.attributes[name] = value; },
+        });
+        const rect = makeNode('rect', { fill: 'rgb(0, 0, 0)', stroke: 'rgb(70, 70, 70)' });
+        const text = makeNode('text', {
+            fill: 'rgb(255, 255, 255)',
+            'font-family': 'sans-serif',
+            'font-size': '16px',
+            'text-anchor': 'start',
+        });
+        text.closest = (selector) => selector === '.mindmap-node.section-root' ? {} : null;
+        const tspan = makeNode('tspan', {
+            fill: 'rgb(255, 255, 255)',
+            'text-anchor': 'start',
+        });
+        const ignored = makeNode('style', { fill: 'rgb(255, 0, 0)' });
+        const root = {
+            outerHTML: '<svg></svg>',
+            querySelectorAll() { return [rect, text, tspan, ignored]; },
+        };
+        let computedCalls = 0;
+        const window = {
+            getComputedStyle(node) {
+                computedCalls++;
+                return { getPropertyValue(name) { return node.computedValues[name] || ''; } };
+            },
+        };
+        ${inlineSvgPresentationSource}
+        return {
+            output: inlineSvgPresentation(root),
+            rect: rect.attributes,
+            text: text.attributes,
+            tspan: tspan.attributes,
+            ignored: ignored.attributes,
+            computedCalls,
+        };
+    })()`,
+    { Set, Array }
+);
+ok('diagram sandbox: resolved node and label colours survive SVG sanitization',
+    inlinedDiagramPresentation.output === '<svg></svg>' &&
+    inlinedDiagramPresentation.rect.fill === 'rgb(0, 0, 0)' &&
+    inlinedDiagramPresentation.text.fill === 'rgb(255, 255, 255)' &&
+    inlinedDiagramPresentation.text['font-size'] === '16px' &&
+    inlinedDiagramPresentation.text['text-anchor'] === 'middle' &&
+    !Object.hasOwn(inlinedDiagramPresentation.tspan, 'text-anchor') &&
+    Object.keys(inlinedDiagramPresentation.ignored).length === 0 &&
+    inlinedDiagramPresentation.computedCalls === 3 &&
+    mermaidSandboxSource.includes('svg: renderedSvg'));
 
 // Performance guardrails live in browser-injected code which deliberately has
 // no DOM test dependency. Keep source-level assertions for the invariants most
@@ -5163,8 +5218,8 @@ ok('smart read recovery: filtered or refused output is not retried',
     filteredSmartRead.error?.retryable === false);
 
 const twiceEmptySmartRead = await exerciseSmartReadRecovery('double-empty');
-ok('smart read recovery: repeated empty output stops after exactly one retry',
-    twiceEmptySmartRead.calls.length === 2 &&
+ok('smart read recovery: repeated empty output exhausts one bounded smaller-input fallback',
+    twiceEmptySmartRead.calls.length > 2 && twiceEmptySmartRead.calls.length <= 6 &&
     twiceEmptySmartRead.error?.kind === 'empty_response' &&
     twiceEmptySmartRead.error?.retryable === true);
 
@@ -5185,6 +5240,7 @@ async function exerciseSmartReadArticleChunking({
     dialect,
     page = chunkingArticlePage,
     failFirstKind = '',
+    emptyFirstAttempts = 0,
     failEveryBlockId = '',
     invalidFirstCall = false,
     invalidEveryBlockId = '',
@@ -5243,6 +5299,12 @@ async function exerciseSmartReadArticleChunking({
                         if (__failFirstKind && __calls.length === 1) {
                             const error = new Error('simulated first-call failure');
                             error.kind = __failFirstKind;
+                            throw error;
+                        }
+                        if (__emptyFirstAttempts && __calls.length <= __emptyFirstAttempts) {
+                            const error = new Error('simulated empty model response');
+                            error.kind = 'empty_response';
+                            error.retryable = true;
                             throw error;
                         }
                         if (__failEveryBlockId && pageData.blocks.some((block) =>
@@ -5327,6 +5389,7 @@ async function exerciseSmartReadArticleChunking({
             __page: page,
             __dialect: dialect,
             __failFirstKind: failFirstKind,
+            __emptyFirstAttempts: emptyFirstAttempts,
             __failEveryBlockId: failEveryBlockId,
             __invalidFirstCall: invalidFirstCall,
             __invalidEveryBlockId: invalidEveryBlockId,
@@ -5393,7 +5456,9 @@ const repeatedInvalidEvidence = await exerciseSmartReadArticleChunking({
 ok('smart read chunks: repeated unverifiable JSON fails without saving other chunks',
     repeatedInvalidEvidence.result === null &&
     repeatedInvalidEvidence.error?.kind === 'empty_response' &&
-    repeatedInvalidEvidence.calls.length === 2);
+    repeatedInvalidEvidence.calls.length > 2 && repeatedInvalidEvidence.calls.length <= 6 &&
+    Math.min(...repeatedInvalidEvidence.calls.slice(2).map((call) => call.payloadChars))
+        < repeatedInvalidEvidence.calls[0].payloadChars);
 
 const builtinNoMatchRead = await exerciseSmartReadArticleChunking({
     dialect: 'builtin',
@@ -5441,6 +5506,33 @@ ok('smart read chunks: a direct timeout falls back to smaller complete sections'
     [...allArticleBlockIds].every((id) => fallbackRequestedIds.has(id)) &&
     [...allArticleBlockIds].every((id) => smartReadEvidenceIds(remoteTimeoutFallback.result).has(id)) &&
     remoteTimeoutFallback.progress.some((item) => item.total > 1));
+
+const pdfModelRecoveryPage = {
+    pageType: 'article',
+    documentType: 'pdf',
+    title: 'A technical PDF with dense source pages',
+    url: 'https://example.com/paper.pdf',
+    blocks: Array.from({ length: 2 }, (_, index) => ({
+        id: `pdf-p${index + 1}-b1`,
+        pageNumber: index + 1,
+        tag: 'p',
+        text: `PDF page ${index + 1} starts with a distinct, verifiable technical claim. ` +
+            'Dense paper text preserves exact evidence while the model input is adaptively reduced. '.repeat(28),
+    })),
+};
+pdfModelRecoveryPage.content = pdfModelRecoveryPage.blocks.map((block) => block.text).join('\n');
+const pdfEmptyResponseFallback = await exerciseSmartReadArticleChunking({
+    dialect: 'openai',
+    page: pdfModelRecoveryPage,
+    emptyFirstAttempts: 2,
+});
+const pdfFallbackEvidenceIds = smartReadEvidenceIds(pdfEmptyResponseFallback.result);
+ok('smart read PDF: two empty direct responses fall back to smaller verified sections',
+    pdfEmptyResponseFallback.error === null && pdfEmptyResponseFallback.calls.length > 2 &&
+    pdfEmptyResponseFallback.calls[0].payloadChars === pdfEmptyResponseFallback.calls[1].payloadChars &&
+    pdfEmptyResponseFallback.calls.slice(2).every((call) =>
+        call.payloadChars < pdfEmptyResponseFallback.calls[0].payloadChars) &&
+    pdfModelRecoveryPage.blocks.every((block) => pdfFallbackEvidenceIds.has(block.id)));
 
 const tailHeavyArticlePage = {
     pageType: 'article',

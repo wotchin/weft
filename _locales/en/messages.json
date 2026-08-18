@@ -233,6 +233,9 @@
   "smart_read_pdf_unsupported_url": {
     "message": "Only PDFs opened from HTTP or HTTPS addresses are supported in this version."
   },
+  "smart_read_pdf_model_empty": {
+    "message": "Weft extracted the PDF text, but the model returned no usable analysis even after retrying smaller sections. Try again or switch to a faster model with a larger context window."
+  },
   "smart_read_access_gate": {
     "message": "This article is still behind a visible access gate. Sign in or reload until the full text is visible, then run Smart Read again."
   },

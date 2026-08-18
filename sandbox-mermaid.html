@@ -30,6 +30,75 @@
             if (parentWindow !== window) parentWindow.postMessage(message, '*');
         }
 
+        /**
+         * Mermaid emits most diagram colours in a <style> block and class
+         * selectors. The parent page intentionally removes both from untrusted
+         * SVG, so snapshot the resolved paint/text styles as presentation
+         * attributes while the SVG is still inside this isolated renderer.
+         */
+        function inlineSvgPresentation(root) {
+            if (!root || typeof root.querySelectorAll !== 'function') return '';
+            const paintProperties = [
+                ['fill', 'fill'],
+                ['fill-opacity', 'fill-opacity'],
+                ['stroke', 'stroke'],
+                ['stroke-width', 'stroke-width'],
+                ['stroke-linecap', 'stroke-linecap'],
+                ['stroke-linejoin', 'stroke-linejoin'],
+                ['stroke-dasharray', 'stroke-dasharray'],
+                ['stroke-opacity', 'stroke-opacity'],
+                ['opacity', 'opacity'],
+            ];
+            const textProperties = [
+                ...paintProperties,
+                ['font-family', 'font-family'],
+                ['font-size', 'font-size'],
+                ['font-weight', 'font-weight'],
+                ['text-anchor', 'text-anchor'],
+                ['dominant-baseline', 'dominant-baseline'],
+            ];
+            const tspanProperties = textProperties
+                .filter(([, attributeName]) => attributeName !== 'text-anchor');
+            const stopProperties = [
+                ['opacity', 'opacity'],
+                ['stop-color', 'stop-color'],
+                ['stop-opacity', 'stop-opacity'],
+            ];
+            const paintTags = new Set([
+                'path', 'rect', 'circle', 'ellipse', 'line', 'polyline',
+                'polygon', 'text', 'tspan', 'stop',
+            ]);
+            const nodes = Array.from(root.querySelectorAll('*'))
+                .filter((node) => paintTags.has(String(node.localName || '').toLowerCase()));
+            // Read every computed style before writing attributes, so one
+            // mutation cannot influence a later descendant's snapshot.
+            const snapshots = nodes.map((node) => {
+                const computed = window.getComputedStyle(node);
+                const tag = String(node.localName || '').toLowerCase();
+                const properties = tag === 'text'
+                    ? textProperties
+                    : tag === 'tspan' ? tspanProperties
+                    : tag === 'stop' ? stopProperties : paintProperties;
+                const rootMindmapLabel = tag === 'text'
+                    && node.closest?.('.mindmap-node.section-root');
+                return {
+                    node,
+                    values: properties.map(([cssName, attributeName]) => [
+                        attributeName,
+                        rootMindmapLabel && attributeName === 'text-anchor'
+                            ? 'middle'
+                            : computed.getPropertyValue(cssName).trim(),
+                    ]),
+                };
+            });
+            for (const { node, values } of snapshots) {
+                for (const [name, value] of values) {
+                    if (value) node.setAttribute(name, value);
+                }
+            }
+            return root.outerHTML || '';
+        }
+
         window.addEventListener('message', async (event) => {
             if (event.source !== parentWindow || !event.data) return;
 
@@ -57,10 +126,13 @@ ${code}`;
                     const id = `mermaid-${++renderCounter}`;
                     const { svg } = await mermaid.render(id, safeCode);
                     container.innerHTML = svg;
+                    const renderedRoot = container.querySelector('svg');
+                    const renderedSvg = inlineSvgPresentation(renderedRoot);
+                    if (!renderedSvg) throw new Error('Mermaid returned an empty SVG.');
                     sendToParent({
                         type: 'mermaid-result',
                         requestId,
-                        svg: svg,
+                        svg: renderedSvg,
                     });
                 } catch (err) {
                     sendToParent({

@@ -1972,7 +1972,16 @@ document.addEventListener('DOMContentLoaded', async function() {
     }
 
     function shouldFallbackToSmartReadChunks(error) {
-        return error?.kind === 'timeout' || error?.kind === 'context_length';
+        // A provider can return a syntactically successful but empty completion
+        // when a dense section still exceeds the model's practical capacity.
+        // completeSmartReadJSON has already retried the same input once before
+        // this point, so the useful next recovery is a smaller input rather than
+        // a third identical call. Never split refusals/content filters.
+        if (error?.retryable === false) return false;
+        return error?.kind === 'timeout'
+            || error?.kind === 'context_length'
+            || error?.kind === 'empty_response'
+            || error?.kind === 'output_limit';
     }
 
     function smartReadModelError(kind, message) {
@@ -2598,9 +2607,13 @@ Return ${minTakeaways}-${maxTakeaways} takeaways with 1-${maxEvidence} evidence 
         } catch (error) {
             removeTypingIndicator();
             console.error('Smart Read failed:', error);
-            const displayError = error?.code === 'TARGET_PAGE_CHANGED'
+            let displayError = error?.code === 'TARGET_PAGE_CHANGED'
                 ? uiError('smart_read_page_changed', 'TARGET_PAGE_CHANGED')
                 : error;
+            if (pageContent?.documentType === 'pdf'
+                && (error?.kind === 'empty_response' || error?.kind === 'output_limit')) {
+                displayError = uiError('smart_read_pdf_model_empty', 'SMART_READ_PDF_MODEL_EMPTY');
+            }
             appendError(displayError);
         } finally {
             smartReadInFlight = false;

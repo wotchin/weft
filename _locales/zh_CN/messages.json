@@ -233,6 +233,9 @@
   "smart_read_pdf_unsupported_url": {
     "message": "当前版本仅支持从 HTTP 或 HTTPS 地址打开的 PDF。"
   },
+  "smart_read_pdf_model_empty": {
+    "message": "Weft 已成功提取 PDF 文字，但模型在缩小分片重试后仍未返回可用分析。请重试，或切换到速度更快、上下文更大的模型。"
+  },
   "smart_read_access_gate": {
     "message": "这篇文章仍被可见的访问限制遮挡。请先登录或重新加载，确认完整正文已经显示后再运行智能阅读。"
   },
