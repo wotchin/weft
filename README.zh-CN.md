@@ -60,12 +60,9 @@ flowchart LR
 
 ### 🎬 快速演示
 
-<p align="center">
-  <video src="assets/3.0.2-beta-demo.mp4" controls preload="metadata" width="720" alt="Weft 3.0.2 beta 演示">
-    你的浏览器不支持 video 标签。可直接下载演示：
-    <a href="assets/3.0.2-beta-demo.mp4">3.0.2-beta-demo.mp4</a>。
-  </video>
-</p>
+[![Weft 工作流程动态预览](.github/media/3.0.2-beta-demo-preview.webp)](assets/3.0.2-beta-demo.mp4)
+
+_页面内预览为加速、静音版本。点击预览可打开完整画质 MP4，也可以[直接下载视频](assets/3.0.2-beta-demo.mp4)。_
 
 > 安装时引导页（onboarding）也会嵌入这段视频，让新用户在不配置任何东西前先看到核心流程。
 

@@ -111,12 +111,9 @@ flowchart LR
 
 ### 🎬 Quick demo
 
-<p align="center">
-  <video src="assets/3.0.2-beta-demo.mp4" controls preload="metadata" width="720" alt="Weft 3.0.2 beta demo">
-    Your browser does not support the video tag. You can download the demo directly:
-    <a href="assets/3.0.2-beta-demo.mp4">3.0.2-beta-demo.mp4</a>.
-  </video>
-</p>
+[![Animated preview of the Weft workflow](.github/media/3.0.2-beta-demo-preview.webp)](assets/3.0.2-beta-demo.mp4)
+
+_The inline preview is accelerated and silent. Click it to open the full-quality MP4, or [download the video directly](assets/3.0.2-beta-demo.mp4)._
 
 > The installer also embeds this clip on the welcome page so new users can watch the core flow before configuring anything.
 
