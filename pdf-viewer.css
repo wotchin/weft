@@ -1,0 +1,168 @@
+@font-face{font-family:Inter;src:url("assets/fonts/inter-400.woff2") format("woff2");font-weight:400;font-style:normal;font-display:swap}
+@font-face{font-family:Inter;src:url("assets/fonts/inter-600.woff2") format("woff2");font-weight:600;font-style:normal;font-display:swap}
+
+:root{
+    color-scheme:light;
+    --ink:#26263a;
+    --muted:#717186;
+    --line:#dedee9;
+    --paper:#fff;
+    --surface:#f5f5fa;
+    --accent:#6c5ce7;
+    --accent-soft:rgba(108,92,231,.24);
+    --highlight:#ffe76a;
+    --highlight-active:#ffbf3f;
+}
+
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{font-family:Inter,"Segoe UI",sans-serif;color:var(--ink);background:var(--surface);overflow:hidden}
+button,select,input{font:inherit}
+
+.viewer-header{
+    height:64px;padding:0 18px;display:flex;align-items:center;justify-content:space-between;gap:20px;
+    background:#28283d;color:#fff;border-bottom:1px solid rgba(255,255,255,.12)
+}
+.viewer-brand{display:flex;align-items:center;gap:11px;min-width:0}
+.viewer-brand img{width:32px;height:32px}
+.viewer-brand strong{font-size:17px}
+.document-title{font-size:12px;color:#c7c7d7;max-width:48vw;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px}
+.viewer-actions{display:flex;align-items:center;gap:10px}
+.session-field{display:flex;align-items:center;gap:7px;font-size:12px;color:#d7d7e4}
+.session-field select{max-width:210px;height:34px;border:1px solid #53536b;border-radius:9px;background:#35354c;color:#fff;padding:0 28px 0 10px}
+.viewer-btn,.tool-btn{
+    border:1px solid #55556f;background:#35354c;color:#fff;border-radius:9px;cursor:pointer
+}
+.viewer-btn{height:36px;padding:0 13px}
+.viewer-btn:hover,.tool-btn:hover{border-color:#8e82ff;background:#43435e}
+.viewer-btn.is-active{border-color:#9d92ff;background:#5549ad}
+
+.viewer-toolbar{
+    height:48px;display:flex;align-items:center;gap:8px;padding:0 18px;background:#fff;border-bottom:1px solid var(--line)
+}
+.tool-btn{width:32px;height:32px;color:var(--ink);background:#fff;border-color:var(--line);font-size:20px;line-height:1}
+.zoom-label{min-width:48px;text-align:center;font-size:12px;color:var(--muted)}
+.toolbar-divider{width:1px;height:22px;background:var(--line);margin:0 5px}
+.page-field{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--muted)}
+.page-field input{width:58px;height:30px;border:1px solid var(--line);border-radius:7px;padding:0 7px;color:var(--ink)}
+.viewer-status{margin-left:auto;font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+.viewer-layout{height:calc(100% - 112px);display:grid;grid-template-columns:270px minmax(0,1fr)}
+.snippet-panel{background:#fff;border-right:1px solid var(--line);overflow:auto;padding:14px}
+.snippet-heading{display:flex;align-items:center;justify-content:space-between;font-size:13px;margin-bottom:10px}
+.snippet-heading span{color:var(--muted)}
+.snippet-list{display:flex;flex-direction:column;gap:8px}
+.snippet-empty{font-size:12px;color:var(--muted);line-height:1.55;padding:10px 2px}
+.snippet-card{
+    width:100%;border:1px solid var(--line);border-radius:10px;background:#fff;padding:10px;text-align:left;color:var(--ink);cursor:pointer
+}
+.snippet-card:hover{border-color:#a99fff;background:#f9f8ff}
+.snippet-card.is-located{border-left:3px solid var(--accent)}
+.snippet-card-page{font-size:11px;color:var(--accent);font-weight:600;margin-bottom:5px}
+.snippet-card-text{font-size:12px;line-height:1.45;display:-webkit-box;-webkit-line-clamp:4;-webkit-box-orient:vertical;overflow:hidden}
+
+.pdf-scroll{position:relative;overflow:auto;background:#e7e7ee;scroll-behavior:smooth}
+.pdf-pages{display:flex;flex-direction:column;align-items:center;gap:20px;padding:24px 24px 80px;min-height:100%}
+.pdf-page{
+    position:relative;background:var(--paper);box-shadow:0 2px 14px rgba(28,28,48,.16);overflow:hidden;
+    --scale-factor:1;--user-unit:1;--total-scale-factor:calc(var(--scale-factor) * var(--user-unit))
+}
+.pdf-page canvas{display:block;position:absolute;inset:0;width:100%;height:100%}
+.page-placeholder{position:absolute;inset:0;display:grid;place-items:center;color:#9a9aaa;font-size:12px;background:#fff}
+.pdf-page.is-rendered .page-placeholder{display:none}
+
+/* Minimal PDF.js text-layer styles. The layer stays transparent so the PDF
+   canvas remains authoritative while selection and Weft highlights stay live. */
+.textLayer{
+    color-scheme:only light;position:absolute;text-align:initial;inset:0;overflow:clip;opacity:1;line-height:1;
+    letter-spacing:normal;word-spacing:normal;text-size-adjust:none;forced-color-adjust:none;transform-origin:0 0;
+    caret-color:CanvasText;z-index:2;--min-font-size:1;--text-scale-factor:calc(var(--total-scale-factor) * var(--min-font-size));
+    --min-font-size-inv:calc(1 / var(--min-font-size))
+}
+.textLayer span,.textLayer br{
+    color:transparent;position:absolute;white-space:pre;cursor:text;transform-origin:0 0;user-select:text
+}
+.textLayer>span,.textLayer .markedContent span:not(.markedContent){
+    z-index:1;--font-height:0;font-size:calc(var(--text-scale-factor) * var(--font-height));--scale-x:1;--rotate:0deg;
+    transform:rotate(var(--rotate)) scaleX(var(--scale-x)) scale(var(--min-font-size-inv))
+}
+.textLayer .markedContent{display:contents}
+.textLayer ::selection{background:rgba(82,107,255,.32);color:transparent}
+.textLayer .weft-pdf-highlight{
+    background:color-mix(in srgb,var(--highlight) 76%,transparent);box-shadow:0 0 0 1px rgba(180,137,0,.2);border-radius:2px
+}
+.textLayer .weft-pdf-highlight.is-focused{background:var(--highlight-active);box-shadow:0 0 0 2px rgba(255,142,0,.45)}
+body.highlights-hidden .textLayer .weft-pdf-highlight{background:transparent;box-shadow:none}
+
+/* Keep PDF selection actions visually and behaviourally aligned with the
+   regular-page selection toolbar without injecting into Chrome's PDF viewer. */
+#weft-toolbar,#weft-card{
+    --weft-fg:#1f2328;--weft-muted:#6b7280;--weft-line:#e5e7eb;--weft-accent:#2563eb;--weft-bg:#fff;
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;box-sizing:border-box
+}
+#weft-toolbar *,#weft-card *{box-sizing:border-box}
+#weft-toolbar{
+    position:fixed;z-index:2147483647;display:none;background:var(--weft-bg);border:1px solid var(--weft-line);
+    border-radius:12px;box-shadow:0 6px 24px rgba(15,23,42,.14),0 1px 2px rgba(15,23,42,.06);
+    padding:4px;white-space:nowrap;line-height:1;animation:weft-pop .12s ease-out
+}
+@keyframes weft-pop{from{opacity:0;transform:translateY(3px) scale(.98)}to{opacity:1;transform:none}}
+#weft-toolbar .weft-sep{display:inline-block;width:1px;height:18px;margin:0 4px;background:var(--weft-line);vertical-align:middle}
+#weft-toolbar button{
+    display:inline-flex;align-items:center;gap:5px;vertical-align:middle;margin:0 1px;padding:6px 9px;border:0;
+    border-radius:8px;background:transparent;font:500 12px/1 inherit;color:var(--weft-fg);cursor:pointer;
+    transition:background .12s,color .12s
+}
+#weft-toolbar button:hover{background:#eff4ff;color:var(--weft-accent)}
+#weft-toolbar button:active{background:#dbe6ff}
+#weft-toolbar button:disabled{opacity:.55;cursor:wait}
+#weft-toolbar button .weft-ico{font-size:12px;opacity:.75}
+#weft-toolbar button.weft-primary{color:var(--weft-accent);font-weight:600}
+#weft-toolbar button.weft-primary .weft-ico{opacity:1;font-weight:700}
+
+#weft-card{
+    position:fixed;z-index:2147483647;width:380px;max-width:calc(100vw - 24px);max-height:calc(100dvh - 24px);
+    display:flex;flex-direction:column;background:var(--weft-bg);color:var(--weft-fg);border:1px solid var(--weft-line);
+    border-radius:14px;box-shadow:0 12px 40px rgba(15,23,42,.18),0 1px 3px rgba(15,23,42,.08);
+    animation:weft-pop .14s ease-out;overflow:hidden
+}
+#weft-card .weft-card-head{
+    display:flex;align-items:center;gap:8px;padding:11px 13px;border-bottom:1px solid var(--weft-line);
+    background:#fbfcfe;flex:0 0 auto;cursor:grab;user-select:none;touch-action:none
+}
+#weft-card.weft-card-dragging .weft-card-head{cursor:grabbing}
+#weft-card .weft-brand{
+    display:inline-grid;place-items:center;width:24px;height:24px;border-radius:7px;background:linear-gradient(135deg,#3b82f6,#1d4ed8);
+    color:#fff;font-size:11px;font-weight:700
+}
+#weft-card .weft-card-title{font-size:13px;font-weight:600;flex:1}
+#weft-card .weft-card-x{border:0;background:transparent;cursor:pointer;color:var(--weft-muted);font-size:16px;line-height:1;padding:2px 4px;border-radius:5px}
+#weft-card .weft-card-x:hover{background:#eee;color:var(--weft-fg)}
+#weft-card .weft-progress{height:2px;background:#eef2f7;overflow:hidden}
+#weft-card .weft-progress i{display:block;height:100%;width:35%;background:linear-gradient(90deg,#3b82f6,#60a5fa);animation:weft-slide 1.1s ease-in-out infinite}
+@keyframes weft-slide{0%{transform:translateX(-100%)}100%{transform:translateX(320%)}}
+#weft-card .weft-card-body{
+    padding:12px 13px;font-size:13px;line-height:1.62;color:#25303f;min-height:0;flex:1 1 auto;
+    max-height:320px;overflow-y:auto;white-space:pre-wrap;word-break:break-word
+}
+#weft-card .weft-card-foot{display:flex;align-items:center;gap:8px;padding:8px 13px;border-top:1px solid var(--weft-line);flex:0 0 auto;font-size:11px;color:var(--weft-muted);background:#fbfcfe}
+#weft-card .weft-stats{flex:1;font-variant-numeric:tabular-nums}
+#weft-card .weft-act{border:1px solid var(--weft-line);background:#fff;color:#374151;border-radius:7px;padding:4px 9px;font-size:11px;cursor:pointer}
+#weft-card .weft-act:hover{border-color:var(--weft-accent);color:var(--weft-accent)}
+#weft-card .weft-err{color:#b42318}
+#weft-card .weft-incomplete{margin-top:10px;padding-top:8px;border-top:1px solid #f0c9c5;color:#b42318;font-size:12px}
+.viewer-toast{
+    position:fixed;z-index:30;left:50%;bottom:24px;transform:translateX(-50%) translateY(12px);opacity:0;
+    pointer-events:none;background:#29293e;color:#fff;border-radius:9px;padding:9px 15px;font-size:12px;transition:.18s ease
+}
+.viewer-toast.is-visible{opacity:1;transform:translateX(-50%) translateY(0)}
+.viewer-error{max-width:620px;margin:60px auto;padding:20px;border:1px solid #efb2b2;border-radius:12px;background:#fff0f0;color:#812b2b;line-height:1.55}
+
+@media (max-width:760px){
+    .viewer-header{height:auto;min-height:64px;align-items:flex-start;padding:12px}
+    .viewer-actions{flex-wrap:wrap;justify-content:flex-end}
+    .session-field span,.viewer-btn{font-size:11px}
+    .viewer-layout{grid-template-columns:1fr;height:calc(100% - 124px)}
+    .snippet-panel{display:none}
+    .document-title{max-width:34vw}
+}

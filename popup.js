@@ -16,6 +16,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     const showOnPageLabel = document.getElementById('showOnPageLabel');
     const [activePageTab] = await chrome.tabs.query({ active: true, currentWindow: true });
     const currentWindowId = activePageTab?.windowId;
+    const activeSourceUrl = SourceUtils.safeHttpUrl(activePageTab?.url)
+        || SourceUtils.embeddedHttpUrl(activePageTab?.url);
 
     const RECENT_LIMIT = 4;
     let sessions = {};
@@ -24,7 +26,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     let annotationInFlight = false;
 
     function currentSessionHasPdfForActiveTab() {
-        const activeUrl = activePageTab?.url || '';
+        const activeUrl = activeSourceUrl || '';
         if (SourceUtils.isLikelyPdfUrl(activeUrl, activePageTab?.title || '')) return true;
         return Boolean(currentSession && activeUrl && (sessions[currentSession] || []).some(
             (snippet) => SourceUtils.isPdfSnippet(snippet)
@@ -85,8 +87,9 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
         if (currentSessionHasPdfForActiveTab()) {
             setShowOnPageState(false);
-            showOnPageBtn.disabled = true;
-            showOnPageBtn.title = t('wb_pdf_annotation_unavailable');
+            showOnPageBtn.disabled = annotationInFlight;
+            showOnPageBtn.title = t('wb_open_pdf_viewer');
+            showOnPageLabel.textContent = t('popup_open_pdf_viewer');
             return;
         }
         const result = await sendAnnotationMessage('getSessionHighlightState', sessionName);
@@ -251,6 +254,23 @@ document.addEventListener('DOMContentLoaded', async () => {
     showOnPageBtn.addEventListener('click', async () => {
         if (!currentSession || annotationInFlight) return;
         const sessionName = currentSession;
+        if (currentSessionHasPdfForActiveTab()) {
+            const firstPage = (sessions[sessionName] || [])
+                .filter((snippet) => SourceUtils.isPdfSnippet(snippet)
+                    && SourceUtils.sameDocumentUrl(snippet.sourceUrl, activeSourceUrl || ''))
+                .map((snippet) => SourceUtils.pdfPageNumber(snippet.sourcePageNumber))
+                .find(Boolean);
+            const viewerUrl = SourceUtils.pdfViewerUrl(activeSourceUrl, {
+                sessionName,
+                pageNumber: firstPage,
+                title: activePageTab?.title || '',
+            });
+            if (viewerUrl) {
+                await chrome.tabs.create({ url: viewerUrl });
+                window.close();
+            }
+            return;
+        }
         annotationInFlight = true;
         ++highlightStateGeneration;
         showOnPageBtn.disabled = true;

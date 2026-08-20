@@ -599,6 +599,9 @@
   "card_disconnected": {
     "message": "与 Weft 的连接在返回结果前中断了，请重试。"
   },
+  "card_disconnected_partial": {
+    "message": "连接提前中断，当前结果不完整，请重试。"
+  },
   "card_reload": {
     "message": "Weft 已重新加载——请刷新页面后重试。"
   },
@@ -742,6 +745,9 @@
   },
   "notify_save_before_tag": {
     "message": "请先保存片段，再为它添加标签。"
+  },
+  "notify_image_unavailable": {
+    "message": "无法读取这个由浏览器管理的图片。请改为划选文字，或使用 Weft PDF 阅读器打开 PDF。"
   },
   "modal_comment_title": {
     "message": "添加备注到“%s”"
@@ -1480,5 +1486,86 @@
   },
   "agent_failed_local_fallback": {
     "message": "研究规划未能完成，Weft 已改用检索到的 Session 证据直接回答。"
+  },
+  "pdf_viewer_document_title": {
+    "message": "Weft PDF 阅读器"
+  },
+  "pdf_viewer_title": {
+    "message": "Weft PDF 阅读器"
+  },
+  "pdf_viewer_session": {
+    "message": "Session"
+  },
+  "pdf_viewer_controls": {
+    "message": "PDF 阅读控制"
+  },
+  "pdf_viewer_annotations": {
+    "message": "Session 标注"
+  },
+  "pdf_viewer_page": {
+    "message": "页码"
+  },
+  "pdf_viewer_zoom_out": {
+    "message": "缩小"
+  },
+  "pdf_viewer_zoom_in": {
+    "message": "放大"
+  },
+  "pdf_viewer_hide_highlights": {
+    "message": "隐藏标注"
+  },
+  "pdf_viewer_show_highlights": {
+    "message": "显示标注"
+  },
+  "pdf_viewer_open_original": {
+    "message": "打开原始 PDF"
+  },
+  "pdf_viewer_save_selection": {
+    "message": "保存到 Session"
+  },
+  "pdf_viewer_selection_actions": {
+    "message": "PDF 划选操作"
+  },
+  "pdf_viewer_no_annotations": {
+    "message": "当前 Session 还没有来自此 PDF 的片段。请在文档中划选文字后保存。"
+  },
+  "pdf_viewer_locating_page": {
+    "message": "正在识别页码…"
+  },
+  "pdf_viewer_page_not_found": {
+    "message": "暂时无法唯一确定这段文字所在的页码。"
+  },
+  "pdf_viewer_locating_progress": {
+    "message": "正在定位已保存片段… %s/%t"
+  },
+  "pdf_viewer_pages_resolved": {
+    "message": "已定位 %s 个保存片段。"
+  },
+  "pdf_viewer_downloading": {
+    "message": "正在下载 PDF…"
+  },
+  "pdf_viewer_download_progress": {
+    "message": "正在下载 PDF… %s MB"
+  },
+  "pdf_viewer_opening": {
+    "message": "正在打开 PDF…"
+  },
+  "pdf_viewer_ready": {
+    "message": "已就绪"
+  },
+  "pdf_viewer_load_failed": {
+    "message": "无法在 Weft 阅读器中打开此 PDF。"
+  },
+  "pdf_viewer_selection_saved": {
+    "message": "已将划选内容保存到 %s。"
+  },
+  "pdf_viewer_selection_failed": {
+    "message": "无法保存划选内容。"
+  },
+  "wb_open_pdf_viewer": {
+    "message": "在 Weft PDF 阅读器中打开并显示 Session 标注"
+  },
+  "popup_open_pdf_viewer": {
+    "message": "Weft PDF 阅读器"
   }
 }

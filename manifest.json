@@ -51,6 +51,7 @@
         "pages": ["sandbox-mermaid.html"]
     },
     "content_security_policy": {
+        "extension_pages": "script-src 'self'; object-src 'self'; img-src 'self' data:",
         "sandbox": "sandbox allow-scripts allow-forms allow-popups allow-modals; script-src 'self' 'unsafe-inline' 'unsafe-eval'"
     }
 }

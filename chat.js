@@ -119,8 +119,15 @@ document.addEventListener('DOMContentLoaded', async function() {
     const CONTEXT_RENDER_BATCH = 80;
     const SMART_READ_REQUEST_MAX_AGE_MS = 10 * 60 * 1000;
     const SMART_READ_REQUEST_LEASE_MS = 2 * 60 * 1000;
+    const MAX_CACHED_IMAGE_DATA_URL_CHARS = 24 * 1024 * 1024;
     const smartReadConsumerId = `workbench:${createSmartReadId()}`;
     const reCacheJobs = new Map();
+
+    function safeCachedImageDataUrl(value) {
+        if (typeof value !== 'string' || value.length > MAX_CACHED_IMAGE_DATA_URL_CHARS) return '';
+        const candidate = value.trim();
+        return /^data:image\/(?:png|jpe?g|gif|webp);base64,/iu.test(candidate) ? candidate : '';
+    }
 
     const ERROR_KIND_I18N_KEYS = Object.freeze({
         auth: 'llm_error_auth',
@@ -520,10 +527,19 @@ document.addEventListener('DOMContentLoaded', async function() {
 
     async function resolvePageAnnotationTarget() {
         try {
-            const tab = await PageExtractor.getReadableActiveTab();
-            const url = tab?.pendingUrl || tab?.url || '';
-            return Number.isInteger(tab?.id) && /^https?:/i.test(url)
-                ? { tabId: tab.id, url }
+            const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+            const activeUrl = activeTab?.pendingUrl || activeTab?.url || '';
+            // A side panel can see the real active tab directly. Preserve a
+            // third-party viewer wrapper long enough to recover its embedded
+            // source URL; PageExtractor correctly rejects that private DOM.
+            const tab = Number.isInteger(activeTab?.id)
+                && (SourceUtils.safeHttpUrl(activeUrl) || SourceUtils.embeddedHttpUrl(activeUrl))
+                ? activeTab
+                : await PageExtractor.getReadableActiveTab();
+            const tabUrl = tab?.pendingUrl || tab?.url || '';
+            const url = SourceUtils.safeHttpUrl(tabUrl) || SourceUtils.embeddedHttpUrl(tabUrl);
+            return Number.isInteger(tab?.id) && url
+                ? { tabId: tab.id, url, tabUrl, title: tab.title || '' }
                 : null;
         } catch {
             return null;
@@ -574,7 +590,7 @@ document.addEventListener('DOMContentLoaded', async function() {
 
     function targetHasPdfSnippets(target) {
         if (!target?.url) return false;
-        if (SourceUtils.isLikelyPdfUrl(target.url)) return true;
+        if (SourceUtils.isLikelyPdfUrl(target.url, target.title || '')) return true;
         if (pageContent?.documentType === 'pdf'
             && PageExtractor.isSameDocumentUrl(pageContent.url, target.url)) return true;
         return sessionSnippets.some((snippet) => SourceUtils.isPdfSnippet(snippet)
@@ -626,9 +642,10 @@ document.addEventListener('DOMContentLoaded', async function() {
         }
         if (targetHasPdfSnippets(target)) {
             setShowOnPageState(false);
-            showOnPageBtn.disabled = true;
-            showOnPageBtn.title = t('wb_pdf_annotation_unavailable');
-            showOnPageBtn.setAttribute('aria-label', t('wb_pdf_annotation_unavailable'));
+            showOnPageBtn.disabled = isStreaming || smartReadInFlight
+                || sessionTransitionInFlight || annotationInFlight;
+            showOnPageBtn.title = t('wb_open_pdf_viewer');
+            showOnPageBtn.setAttribute('aria-label', t('wb_open_pdf_viewer'));
             return;
         }
         const result = await sendPageAnnotationMessage('getSessionHighlightState', sessionName, target);
@@ -649,7 +666,17 @@ document.addEventListener('DOMContentLoaded', async function() {
             const target = await resolvePageAnnotationTarget();
             if (!target || generation !== showOnPageStateGeneration || currentSession !== sessionName) return;
             if (targetHasPdfSnippets(target)) {
-                Citations.notify(t('wb_pdf_annotation_unavailable'));
+                const firstPage = sessionSnippets
+                    .filter((snippet) => SourceUtils.isPdfSnippet(snippet)
+                        && SourceUtils.sameDocumentUrl(snippet.sourceUrl, target.url))
+                    .map((snippet) => SourceUtils.pdfPageNumber(snippet.sourcePageNumber))
+                    .find(Boolean);
+                const viewerUrl = SourceUtils.pdfViewerUrl(target.url, {
+                    sessionName,
+                    pageNumber: firstPage,
+                    title: target.title,
+                });
+                if (viewerUrl) await chrome.tabs.create({ url: viewerUrl });
                 return;
             }
             const result = await sendPageAnnotationMessage('toggleSessionOnPage', sessionName, target);
@@ -862,7 +889,11 @@ document.addEventListener('DOMContentLoaded', async function() {
             if (snippet.type === 'image') {
                 const img = document.createElement('img');
                 img.className = 'context-image';
-                img.src = snippet.imageUrl || '';
+                // Never point a privileged extension page at a raw snippet
+                // URL. Chrome's PDF Viewer exposes private chrome-extension://
+                // resources that Weft cannot load. Only our raster cache may
+                // become a thumbnail source.
+                img.hidden = true;
                 img.alt = t('wb_image_snippet_alt');
                 img.style.maxWidth = '80px';
                 img.style.maxHeight = '60px';
@@ -887,13 +918,18 @@ document.addEventListener('DOMContentLoaded', async function() {
 
                 // Resolve the cached data URL (inline legacy or IDB) for the thumbnail.
                 Store.resolveImage(snippet).then((dataUrl) => {
-                    if (dataUrl && img.isConnected) img.src = dataUrl;
+                    const safeDataUrl = safeCachedImageDataUrl(dataUrl);
+                    if (safeDataUrl && img.isConnected) {
+                        img.src = safeDataUrl;
+                        img.hidden = false;
+                    }
                 }).catch(() => {});
 
                 const urlText = document.createElement('span');
                 urlText.className = 'context-text';
-                urlText.textContent = snippet.imageUrl || t('popup_image');
-                urlText.title = snippet.imageUrl || '';
+                const publicImageUrl = Citations.safeExternalUrl(snippet.imageUrl);
+                urlText.textContent = publicImageUrl || t('popup_image');
+                urlText.title = publicImageUrl;
                 item.appendChild(urlText);
             } else {
                 const text = document.createElement('span');
@@ -923,12 +959,21 @@ document.addEventListener('DOMContentLoaded', async function() {
             const actions = document.createElement('div');
             actions.className = 'context-actions';
 
-            const annotationSourceUrl = snippetAnnotationSourceUrl(snippet);
+            const isPdfSource = SourceUtils.isPdfSnippet(snippet);
+            const annotationSourceUrl = isPdfSource
+                ? SourceUtils.pdfViewerUrl(snippet.sourceUrl, {
+                    sessionName: renderedSession,
+                    pageNumber: snippet.sourcePageNumber,
+                    title: snippet.sourceTitle,
+                })
+                : Citations.safeExternalUrl(snippetAnnotationSourceUrl(snippet));
             if (annotationSourceUrl) {
                 const open = document.createElement('button');
                 open.className = 'context-act';
                 open.textContent = '↗';
-                open.title = t('wb_open_source');
+                open.title = isPdfSource
+                    ? t('wb_open_pdf_viewer')
+                    : t('wb_open_source');
                 open.addEventListener('click', () => chrome.tabs.create({ url: annotationSourceUrl }));
                 actions.appendChild(open);
             }
@@ -1104,7 +1149,7 @@ document.addEventListener('DOMContentLoaded', async function() {
             const snippet = snippets[i];
             if (snippet.type !== 'image') continue;
             // Resolve from inline (legacy) or IndexedDB.
-            const dataUrl = await Store.resolveImage(snippet);
+            const dataUrl = safeCachedImageDataUrl(await Store.resolveImage(snippet));
             if (dataUrl) {
                 const source = RAGEngine.llmSourceLabel(snippet) || 'unknown source';
                 const tags = (snippet.tags || []).join(', ');

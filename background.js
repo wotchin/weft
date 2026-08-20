@@ -156,6 +156,71 @@ chrome.runtime.onInstalled.addListener((details) => {
 // 最近一次保存的 snippet（用于给最近保存的内容打标签）
 let lastSavedSnippetInfo = null;
 
+function trustedPdfViewerContext(tabUrl) {
+    try {
+        const viewer = new URL(String(tabUrl || ''));
+        const expected = new URL(chrome.runtime.getURL('pdf-viewer.html'));
+        if (viewer.origin !== expected.origin || viewer.pathname !== expected.pathname) return null;
+        const sourceUrl = SourceUtils.safeHttpUrl(viewer.searchParams.get('src'));
+        if (!sourceUrl) return null;
+        return {
+            sourceUrl,
+            sourceTitle: String(viewer.searchParams.get('title') || '').trim().slice(0, 300),
+            sessionName: String(viewer.searchParams.get('session') || '').trim(),
+        };
+    } catch {
+        return null;
+    }
+}
+
+function sessionsKnowPdf(sessions, sourceUrl) {
+    if (!sourceUrl || !sessions || typeof sessions !== 'object') return false;
+    return Object.values(sessions).some((snippets) => Array.isArray(snippets) && snippets.some(
+        (snippet) => SourceUtils.isPdfSnippet(snippet)
+            && SourceUtils.sameDocumentUrl(snippet.sourceUrl, sourceUrl)
+    ));
+}
+
+function pdfSelectionMetadata(info, tab, sessions) {
+    const viewer = trustedPdfViewerContext(tab?.url || info?.pageUrl);
+    const tabUrl = tab?.url || info?.pageUrl;
+    const sourceUrl = viewer?.sourceUrl
+        || SourceUtils.safeHttpUrl(tabUrl)
+        || SourceUtils.embeddedHttpUrl(tabUrl);
+    const sourceTitle = viewer?.sourceTitle || String(tab?.title || '').trim();
+    const isPdf = Boolean(viewer)
+        || SourceUtils.isLikelyPdfUrl(sourceUrl, sourceTitle)
+        || sessionsKnowPdf(sessions, sourceUrl);
+    if (!isPdf || !sourceUrl) return null;
+    const page = SourceUtils.inferPdfSelectionPage(sessions, sourceUrl, info?.selectionText || '');
+    return {
+        sourceUrl,
+        sourceTitle,
+        sourceDocumentType: 'pdf',
+        ...(page ? { sourcePageNumber: page } : {}),
+    };
+}
+
+function applyPdfSelectionMetadata(snippet, info, tab, sessions) {
+    const metadata = pdfSelectionMetadata(info, tab, sessions);
+    if (metadata && snippet?.type === 'text' && snippet.content) Object.assign(snippet, metadata);
+    return snippet;
+}
+
+function trustedPdfMessageMetadata(message, sender) {
+    const viewer = trustedPdfViewerContext(sender?.url || sender?.tab?.url);
+    if (!viewer) return null;
+    const sourceUrl = SourceUtils.safeHttpUrl(message?.sourceUrl);
+    const pageNumber = SourceUtils.pdfPageNumber(message?.sourcePageNumber || message?.pageNumber);
+    if (!sourceUrl || !pageNumber || !SourceUtils.sameDocumentUrl(viewer.sourceUrl, sourceUrl)) return null;
+    return {
+        sourceUrl,
+        sourceTitle: String(message?.sourceTitle || viewer.sourceTitle || '').trim().slice(0, 300),
+        sourceDocumentType: 'pdf',
+        sourcePageNumber: pageNumber,
+    };
+}
+
 chrome.contextMenus.onClicked.addListener(async (info, tab) => {
     // Smart Read must call sidePanel.open() before this listener's first
     // await, or Chrome no longer considers it a user gesture and it always
@@ -229,28 +294,39 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
         assert(sessions[sessionName], `Session ${sessionName} does not exist`);
 
         // 判断 snippet 类型
-        const isImage = !!info.srcUrl;
-        const isLink = !!info.linkUrl && !isImage;
+        // Chrome's built-in PDF viewer can expose one of its private
+        // chrome-extension:// resources as srcUrl alongside selected text.
+        // Selection must win, and inaccessible extension resources must never
+        // enter Weft's image fetch/cache pipeline.
+        const hasSelection = Boolean(String(info.selectionText || '').trim());
+        const safeImageUrl = hasSelection ? '' : SourceUtils.safeHttpUrl(info.srcUrl);
+        if (info.srcUrl && !hasSelection && !safeImageUrl) {
+            await sendNotification(t('notify_info_title'), t('notify_image_unavailable'));
+            return;
+        }
+        const safeLinkUrl = hasSelection ? '' : SourceUtils.safeHttpUrl(info.linkUrl);
+        const isImage = Boolean(safeImageUrl);
+        const isLink = Boolean(safeLinkUrl) && !isImage;
         const snippetType = isImage ? 'image' : (isLink ? 'link' : 'text');
 
         // 构建新的 snippet 对象（带元数据）
-        const snippet = {
+        const snippet = applyPdfSelectionMetadata({
             id: generateId(),
             type: snippetType,
-            content: isImage ? (info.srcUrl || '') : (info.selectionText || info.linkUrl || ''),
+            content: isImage ? safeImageUrl : (info.selectionText || safeLinkUrl || ''),
             sourceUrl: tab?.url || '',
             sourceTitle: tab?.title || '',
             timestamp: Date.now(),
             tags: []
-        };
+        }, info, tab, sessions);
 
         if (isImage) {
-            snippet.imageUrl = info.srcUrl;
+            snippet.imageUrl = safeImageUrl;
             // 尝试多策略缓存图片为 base64（service worker fetch → content script capture）
-            snippet.cachedDataUrl = await cacheImage(info.srcUrl, tab?.id, tab?.url);
+            snippet.cachedDataUrl = await cacheImage(safeImageUrl, tab?.id, tab?.url);
         } else if (isLink) {
-            snippet.content = info.selectionText || info.linkUrl;
-            snippet.linkUrl = info.linkUrl;
+            snippet.content = safeLinkUrl;
+            snippet.linkUrl = safeLinkUrl;
         }
 
         // Store.addSnippet offloads large base64 images into IndexedDB.
@@ -287,7 +363,7 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
         const { sessions } = await chrome.storage.local.get(["sessions"]);
         const targetSession = Object.keys(sessions)[0] || 'default';
 
-        const snippet = {
+        const snippet = applyPdfSelectionMetadata({
             id: generateId(),
             type: 'text',
             content: info.selectionText || '',
@@ -295,7 +371,7 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
             sourceTitle: tab?.title || '',
             timestamp: Date.now(),
             tags: [tag]
-        };
+        }, info, tab, sessions);
 
         await Store.addSnippet(targetSession, snippet);
         lastSavedSnippetInfo = { sessionName: targetSession, snippetId: snippet.id };
@@ -364,7 +440,7 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
                 const { sessions } = await chrome.storage.local.get(["sessions"]);
                 if (!sessions[sessionName]) return;
 
-                const snippet = {
+                const snippet = applyPdfSelectionMetadata({
                     id: generateId(),
                     type: 'text',
                     content: selectedText,
@@ -373,7 +449,7 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
                     sourceTitle: tab?.title || '',
                     timestamp: Date.now(),
                     tags: [],
-                };
+                }, info, tab, sessions);
 
                 await Store.addSnippet(sessionName, snippet);
                 lastSavedSnippetInfo = { sessionName, snippetId: snippet.id };
@@ -392,7 +468,7 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
             // Fallback: save without comment
             const { sessions } = await chrome.storage.local.get(["sessions"]);
             if (!sessions[sessionName]) return;
-            const snippet = {
+            const snippet = applyPdfSelectionMetadata({
                 id: generateId(),
                 type: 'text',
                 content: selectedText,
@@ -401,7 +477,7 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
                 sourceTitle: tab?.title || '',
                 timestamp: Date.now(),
                 tags: [],
-            };
+            }, info, tab, sessions);
             await Store.addSnippet(sessionName, snippet);
             sendNotification(`${sessionName} +1`, t('notify_comment_skipped'));
         }
@@ -521,7 +597,18 @@ async function blobToResizedDataUrl(blob, maxSize = 1024, quality = 0.85) {
 const IMAGE_FETCH_TIMEOUT_MS = 10000;
 const MAX_IMAGE_SOURCE_BYTES = 15 * 1024 * 1024;
 
+function safeHttpImageUrl(value) {
+    try {
+        const url = new URL(String(value || ''));
+        return url.protocol === 'https:' || url.protocol === 'http:' ? url.href : '';
+    } catch {
+        return '';
+    }
+}
+
 async function fetchImageAsDataUrl(imageUrl, sourcePageUrl) {
+    imageUrl = safeHttpImageUrl(imageUrl);
+    if (!imageUrl) return null;
     const strategies = [
         // Strategy 1: plain fetch
         (signal) => fetch(imageUrl, { signal }),
@@ -600,6 +687,8 @@ async function captureImageFromTab(tabId, imageUrl) {
 
 // Main image caching function: tries background fetch first, then content-script capture
 async function cacheImage(imageUrl, tabId, sourcePageUrl) {
+    imageUrl = safeHttpImageUrl(imageUrl);
+    if (!imageUrl) return null;
     // Strategy A: fetch from service worker (works with host_permissions)
     let dataUrl = await fetchImageAsDataUrl(imageUrl, sourcePageUrl);
     if (dataUrl) return dataUrl;
@@ -1109,6 +1198,43 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         return true;
     }
 
+    if (message.type === 'savePdfSelection') {
+        (async () => {
+            const viewer = trustedPdfViewerContext(sender.url || sender.tab?.url);
+            const sourceUrl = SourceUtils.safeHttpUrl(message.sourceUrl);
+            const text = String(message.text || '').replace(/\s+/gu, ' ').trim();
+            const pageNumber = SourceUtils.pdfPageNumber(message.pageNumber);
+            if (!viewer || !sourceUrl || !SourceUtils.sameDocumentUrl(viewer.sourceUrl, sourceUrl)) {
+                throw new Error('PDF_VIEWER_SOURCE_MISMATCH');
+            }
+            if (!text || text.length > 100000 || !pageNumber) throw new Error('PDF_SELECTION_INVALID');
+            const sessions = await Store.getSessions();
+            const requestedSession = String(message.sessionName || viewer.sessionName || '').trim();
+            const target = Object.prototype.hasOwnProperty.call(sessions, requestedSession)
+                ? requestedSession
+                : (await Store.getCurrentSession()) || Object.keys(sessions)[0] || 'default';
+            const snippet = {
+                id: generateId(),
+                type: 'text',
+                content: text,
+                sourceUrl,
+                sourceTitle: String(message.sourceTitle || viewer.sourceTitle || '').trim().slice(0, 300),
+                sourceDocumentType: 'pdf',
+                sourcePageNumber: pageNumber,
+                timestamp: Date.now(),
+                tags: [],
+            };
+            await Store.addSnippet(target, snippet);
+            lastSavedSnippetInfo = { sessionName: target, snippetId: snippet.id };
+            sendNotification(`${target} +1`, text.substring(0, 50));
+            sendResponse({ ok: true, session: target, snippet });
+        })().catch((error) => {
+            console.warn('[Weft] PDF selection save failed:', error);
+            sendResponse({ ok: false, error: error?.message || 'PDF_SELECTION_SAVE_FAILED' });
+        });
+        return true;
+    }
+
     if (message.type === 'saveSelection') {
         // One-click save from the selection toolbar — always the active session.
         // Choosing a different session is the context menu's job.
@@ -1136,19 +1262,30 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (message.type === 'saveQuickResult') {
         (async () => {
             const sessions = await Store.getSessions();
-            const target = (await Store.getCurrentSession()) || Object.keys(sessions)[0] || 'default';
-            await Store.addSnippet(target, {
+            const viewer = trustedPdfViewerContext(sender.url || sender.tab?.url);
+            const pdfMetadata = trustedPdfMessageMetadata(message, sender);
+            if (viewer && !pdfMetadata) throw new Error('PDF_VIEWER_SOURCE_MISMATCH');
+            const requestedSession = viewer ? String(message.sessionName || viewer.sessionName || '').trim() : '';
+            const target = Object.prototype.hasOwnProperty.call(sessions, requestedSession)
+                ? requestedSession
+                : (await Store.getCurrentSession()) || Object.keys(sessions)[0] || 'default';
+            const snippet = {
                 id: generateId(),
                 type: 'text',
                 content: message.selectedText || '',
                 comment: message.result || '',
-                sourceUrl: message.sourceUrl || '',
-                sourceTitle: message.sourceTitle || '',
+                sourceUrl: pdfMetadata?.sourceUrl || message.sourceUrl || '',
+                sourceTitle: pdfMetadata?.sourceTitle || message.sourceTitle || '',
                 timestamp: Date.now(),
                 tags: ['analysed'],
-            });
+                ...(pdfMetadata || {}),
+            };
+            await Store.addSnippet(target, snippet);
             sendResponse({ ok: true, session: target });
-        })();
+        })().catch((error) => {
+            console.warn('[Weft] Quick result save failed:', error);
+            sendResponse({ ok: false, error: error?.message || 'QUICK_RESULT_SAVE_FAILED' });
+        });
         return true;
     }
 

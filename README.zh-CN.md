@@ -30,7 +30,7 @@
 - **每条引用都能点回原文。** AI 生成的每句话都带 `[S1]`、`[W2]` 这样的标记：`S` 指向你保存的原文片段，`W` 指向 Deep Search 抓回的网页片段，点击跳转到来源。
 - **Session 是回答边界。** Weft 只在当前 Session 的片段范围内回答，不会把整张网页当作研究主题。证据不够时再通过 Deep Search 主动补。
 - **Session 可迁移。** 工作台可把当前 Session 导出为便于阅读的 HTML，也可将其重新导入 Weft。新导出文件内含独立版本号和惰性结构化数据，可恢复文本、来源、PDF 与 Smart Read 元数据；外部图片引用会转成安全链接，不会在导入后被自动下载。旧版 Weft HTML 在可识别时会以安全的尽力模式导入。
-- **Smart Read** 可从文章或带文字层的 HTTP(S) PDF 抽取要点建立新 Session；每条摘要在保存前都会反查提取后的源文，找不到出处的丢弃，PDF 片段还会保留页码。Weft 与 Chrome 原生预览器并存；若其他 PDF 扩展把标签页改成其私有的 `chrome-extension://` 地址，受 Chrome 跨扩展隔离限制，Weft 无法读取。
+- **Smart Read** 可从文章或带文字层的 HTTP(S) PDF 抽取要点建立新 Session；每条摘要在保存前都会反查提取后的源文，找不到出处的丢弃，PDF 片段还会保留页码。用户也可以手工划选 PDF 文字，并使用与网页一致的“保存、验证、解释、要点、提问”操作栏；本地 Weft PDF 阅读器还能显示、隐藏和继续添加标注。Weft 不接管 Chrome 默认 PDF 预览；第三方查看器若暴露原始 HTTP(S) 地址，Weft 会安全恢复来源，否则降级为只保存文字。
 - **Deep Search** 是一个受限的 Session-first 研究 Agent：先在本地检索 Session，必要时调用无依赖计算工具；只在发现实质证据缺口时才提议外部搜索，且每条查询都要先经你审阅或修改。它不提供任意点击、表单提交等通用浏览器自动化；未配置搜索服务时不会发起网页搜索，模型调用仍遵循 Settings 中配置的 LLM。
 - **九种综合场景**：报告、重写、事实核查、摘要、对比、信息抽取、表格、翻译、Mermaid 图表，一键产出。
 - **自带密钥（BYOK）或免密。** 兼容 OpenAI / Anthropic / Gemini / DeepSeek / Moonshot / Qwen / Ollama / OpenAI 兼容端点 / Chrome 内置 AI。
@@ -52,7 +52,7 @@ flowchart LR
 
 操作步骤：
 
-1. 对长文或带文字层的 PDF 运行 **Smart Read** 建立聚焦 Session；网页片段可用 **Show on Page** 标注，PDF 片段则会跳转到对应页码（Chrome 原生 PDF 预览器不支持 Weft DOM 标注）。
+1. 对长文或带文字层的 PDF 运行 **Smart Read** 建立聚焦 Session；网页片段可用 **Show on Page** 原位标注，PDF 场景则显式打开 Weft PDF 阅读器显示 Session 标注或继续手工划选，不替换 Chrome 原生预览器。
 2. 在其他标签页选中文本、图片、链接，右键存入同一 Session。
 3. 打开侧边栏 Workbench，向当前 Session 提问或选择综合场景。
 4. 证据不足时对问题运行 Deep Search；Agent 如需外部证据，会先让你逐条审核或修改联网查询。

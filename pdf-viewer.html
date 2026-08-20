@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title data-i18n="pdf_viewer_document_title">Weft PDF Reader</title>
+    <link rel="stylesheet" href="pdf-viewer.css?v=3.0.2">
+</head>
+<body>
+    <header class="viewer-header">
+        <div class="viewer-brand">
+            <img src="assets/icon.svg" alt="">
+            <div>
+                <strong data-i18n="pdf_viewer_title">Weft PDF Reader</strong>
+                <div id="documentTitle" class="document-title"></div>
+            </div>
+        </div>
+        <div class="viewer-actions">
+            <label class="session-field">
+                <span data-i18n="pdf_viewer_session">Session</span>
+                <select id="sessionSelect" aria-label="Session" data-i18n-aria-label="pdf_viewer_session"></select>
+            </label>
+            <button id="toggleHighlights" class="viewer-btn is-active" type="button" aria-pressed="true" data-i18n="pdf_viewer_hide_highlights">Hide highlights</button>
+            <button id="openOriginal" class="viewer-btn" type="button" data-i18n="pdf_viewer_open_original">Open original</button>
+        </div>
+    </header>
+
+    <div class="viewer-toolbar" role="toolbar" aria-label="PDF controls" data-i18n-aria-label="pdf_viewer_controls">
+        <button id="zoomOut" class="tool-btn" type="button" aria-label="Zoom out" data-i18n-aria-label="pdf_viewer_zoom_out">−</button>
+        <span id="zoomLabel" class="zoom-label">100%</span>
+        <button id="zoomIn" class="tool-btn" type="button" aria-label="Zoom in" data-i18n-aria-label="pdf_viewer_zoom_in">+</button>
+        <span class="toolbar-divider"></span>
+        <label class="page-field">
+            <span data-i18n="pdf_viewer_page">Page</span>
+            <input id="pageInput" type="number" min="1" value="1" inputmode="numeric">
+            <span id="pageCount">/ —</span>
+        </label>
+        <div id="viewerStatus" class="viewer-status" aria-live="polite"></div>
+    </div>
+
+    <div class="viewer-layout">
+        <aside class="snippet-panel">
+            <div class="snippet-heading">
+                <strong data-i18n="pdf_viewer_annotations">Session highlights</strong>
+                <span id="snippetCount">0</span>
+            </div>
+            <div id="snippetList" class="snippet-list"></div>
+        </aside>
+        <main id="pdfScroll" class="pdf-scroll">
+            <div id="pdfPages" class="pdf-pages"></div>
+            <div id="viewerError" class="viewer-error" hidden></div>
+        </main>
+    </div>
+
+    <div id="viewerToast" class="viewer-toast" role="status" aria-live="polite"></div>
+
+    <script src="lib/idb.js"></script>
+    <script src="lib/store.js"></script>
+    <script src="lib/source-utils.js"></script>
+    <script src="lib/pdf-extractor.js"></script>
+    <script src="lib/pdf-selection-assist.js"></script>
+    <script src="lib/i18n.js"></script>
+    <script src="pdf-viewer.js"></script>
+</body>
+</html>

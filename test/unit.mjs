@@ -1295,6 +1295,14 @@ const extractedPdf = await pdfContext.__pdfApi.extractFromUrl(
         sourceTitle: 'download.pdf',
     }
 );
+const viewerPdfBytes = await pdfContext.__pdfApi.fetchBytesFromUrl(
+    'https://example.com/viewer.pdf#page=9',
+    { fetchImpl: async () => bufferedPdfResponse(pdfBytes, { 'content-type': 'application/pdf' }) }
+);
+ok('PDF extractor: the local viewer reuses bounded validated PDF downloads',
+    viewerPdfBytes.url === 'https://example.com/viewer.pdf' &&
+    viewerPdfBytes.bytes.length === pdfBytes.length &&
+    viewerPdfBytes.contentType === 'application/pdf');
 ok('PDF extractor: extensionless PDF produces stable page-aware blocks',
     extractedPdf.documentType === 'pdf' && extractedPdf.pageCount === 3 &&
     extractedPdf.url === 'https://example.com/download?id=42' &&
@@ -2537,9 +2545,39 @@ const batchNoop = await batchCacheContext.__storeApi.markImagesCached(
 ok('image cache: overlapping batch retries do not rewrite sessions',
     batchNoop === 0 && batchSessionWrites === writesBeforeNoop);
 
+const batchSnippetStorage = {
+    sessions: {
+        PDF: [
+            { id: 'pdf-a', type: 'text', content: 'First imported selection' },
+            { id: 'pdf-b', type: 'text', content: 'Second imported selection' },
+            { id: 'untouched', type: 'text', content: 'Keep this unchanged' },
+        ],
+    },
+};
+const batchSnippetContext = makeContext(batchSnippetStorage);
+let batchSnippetWrites = 0;
+const originalSnippetBatchSet = batchSnippetContext.chrome.storage.local.set;
+batchSnippetContext.chrome.storage.local.set = async (value) => {
+    if (Object.prototype.hasOwnProperty.call(value, 'sessions')) batchSnippetWrites++;
+    return originalSnippetBatchSet(value);
+};
+load(batchSnippetContext, ['lib/store.js'], 'globalThis.__storeApi = Store;');
+const snippetsUpdated = await batchSnippetContext.__storeApi.updateSnippets('PDF', [
+    { id: 'pdf-a', changes: { sourceDocumentType: 'pdf', sourcePageNumber: 3 } },
+    { id: 'pdf-b', changes: { sourceDocumentType: 'pdf', sourcePageNumber: 8 } },
+]);
+ok('PDF page recovery: Store.updateSnippets commits all resolved pages in one sessions write',
+    snippetsUpdated === 2 && batchSnippetWrites === 1 &&
+    batchSnippetStorage.sessions.PDF[0].id === 'pdf-a' &&
+    batchSnippetStorage.sessions.PDF[0].sourcePageNumber === 3 &&
+    batchSnippetStorage.sessions.PDF[1].id === 'pdf-b' &&
+    batchSnippetStorage.sessions.PDF[1].sourcePageNumber === 8 &&
+    batchSnippetStorage.sessions.PDF[2].content === 'Keep this unchanged');
+
 // The background worker must share one cache job when multiple extension
 // views request the same session at once.
-const backgroundEvent = { addListener() {} };
+const backgroundListeners = [];
+const backgroundEvent = { addListener(listener) { backgroundListeners.push(listener); } };
 let backgroundFetchCalls = 0;
 let backgroundPutCalls = 0;
 const backgroundBatches = [];
@@ -2586,7 +2624,9 @@ const backgroundContext = {
 vm.createContext(backgroundContext);
 vm.runInContext(
     `${read('background.js')}\n;globalThis.__handleReCacheImages = handleReCacheImages;` +
-    `globalThis.__setImageFetcher = (fn) => { fetchImageAsDataUrl = fn; };`,
+    `const __originalImageFetcher = fetchImageAsDataUrl;` +
+    `globalThis.__setImageFetcher = (fn) => { fetchImageAsDataUrl = fn; };` +
+    `globalThis.__restoreImageFetcher = () => { fetchImageAsDataUrl = __originalImageFetcher; };`,
     backgroundContext,
     { filename: 'background-cache-tests' }
 );
@@ -2604,6 +2644,77 @@ ok('image cache: concurrent session requests share one background job',
     backgroundJobA === backgroundJobB && backgroundFetchCalls === 2 &&
     backgroundPutCalls === 2 && backgroundBatches.length === 1 &&
     backgroundResultA.updated === 2 && backgroundResultB.updated === 2);
+backgroundContext.__restoreImageFetcher();
+
+// Chrome's built-in PDF viewer exposes private extension resource URLs for
+// some right-clicked images. They are neither portable nor fetchable by Weft:
+// reject them before both the network and executeScript fallback boundaries.
+vm.runInContext(read('lib/source-utils.js'), backgroundContext);
+const chromePdfPrivateImage =
+    'chrome-extension://mhjfbmdgcfjbbpaeojofohoefgiehjai/01234567-89ab-cdef/image.png';
+const privateImageAttempts = { fetch: [], capture: [] };
+backgroundContext.AbortController = AbortController;
+backgroundContext.console = { warn() {}, error() {}, log() {} };
+backgroundContext.__privateImageUrl = chromePdfPrivateImage;
+backgroundContext.fetch = async (url) => {
+    privateImageAttempts.fetch.push(String(url));
+    return { ok: false, headers: { get() { return null; } } };
+};
+backgroundContext.chrome.scripting = {
+    async executeScript(options) {
+        privateImageAttempts.capture.push(options?.args?.[0] || '');
+        return [{ result: null }];
+    },
+};
+const privateImageCacheResult = await vm.runInContext(
+    `cacheImage(__privateImageUrl, 91, 'https://example.com/report.pdf')`,
+    backgroundContext
+);
+const fetchAttemptsBeforeHttpControl = privateImageAttempts.fetch.length;
+await vm.runInContext(
+    `cacheImage('https://images.example.com/chart.png', null, 'https://example.com/report')`,
+    backgroundContext
+);
+ok('image cache: Chrome PDF Viewer private resources never reach fetch or tab capture',
+    privateImageCacheResult === null && fetchAttemptsBeforeHttpControl === 0 &&
+    privateImageAttempts.capture.length === 0 &&
+    !privateImageAttempts.fetch.includes(chromePdfPrivateImage));
+ok('image cache: rejecting private viewer resources does not disable normal HTTP image fetching',
+    privateImageAttempts.fetch.some((url) => url === 'https://images.example.com/chart.png'));
+
+const contextMenuHandler = backgroundListeners.find((listener) =>
+    listener?.constructor?.name === 'AsyncFunction' && String(listener).includes('info.menuItemId'));
+let selectedPdfSnippet = null;
+backgroundContext.I18N = { async init() {}, get: (key) => key };
+backgroundContext.t = (key) => key;
+backgroundContext.Store.addSnippet = async (sessionName, snippet) => {
+    selectedPdfSnippet = { sessionName, snippet };
+};
+backgroundContext.chrome.runtime.getURL = (path) => `chrome-extension://weft-test/${path}`;
+backgroundContext.chrome.storage.local.get = async () => ({ sessions: { Saved: [] } });
+backgroundContext.chrome.tabs = {
+    async query() { return []; },
+    async sendMessage() {},
+};
+backgroundContext.chrome.notifications = { create() {} };
+await contextMenuHandler({
+    menuItemId: 'session-Saved',
+    selectionText: 'A selected sentence from the PDF text layer.',
+    srcUrl: chromePdfPrivateImage,
+}, {
+    id: 91,
+    url: 'chrome-extension://mhjfbmdgcfjbbpaeojofohoefgiehjai/index.html?file=' +
+        encodeURIComponent('https://example.com/report.pdf#page=5'),
+    title: 'Research report',
+});
+ok('PDF context menu: text selection wins over Chrome Viewer private image metadata',
+    selectedPdfSnippet?.sessionName === 'Saved' &&
+    selectedPdfSnippet?.snippet?.type === 'text' &&
+    selectedPdfSnippet?.snippet?.content === 'A selected sentence from the PDF text layer.' &&
+    selectedPdfSnippet?.snippet?.sourceUrl === 'https://example.com/report.pdf#page=5' &&
+    selectedPdfSnippet?.snippet?.sourceDocumentType === 'pdf' &&
+    !Object.hasOwn(selectedPdfSnippet?.snippet || {}, 'imageUrl') &&
+    !JSON.stringify(selectedPdfSnippet).includes('mhjfbmdgcfjbbpaeojofohoefgiehjai'));
 
 const backgroundSource = read('background.js');
 const quickRunStart = backgroundSource.indexOf("if (port.name !== 'weft-quick') return;");
@@ -4951,10 +5062,81 @@ ok('workbench import/export: compact side panels keep both transfer actions reac
 // malicious handler sits on documentElement: querying descendants alone does
 // not see it, which reproduces the root-SVG regression.
 const sanitizerSource = read('lib/sanitize.js');
+const renderPipelineSource = read('lib/render.js');
+const contextPanelRenderSource = extractFunction(chatSource, 'renderContextPanel');
+const nonPdfOpenSourcePolicy = load(
+    makeContext(),
+    ['lib/source-utils.js', 'lib/citations.js'],
+    `(() => ({
+        privateSource: Citations.safeExternalUrl(SourceUtils.annotationSourceUrl({
+            type: 'text',
+            sourceUrl: 'chrome-extension://mhjfbmdgcfjbbpaeojofohoefgiehjai/index.html'
+        })),
+        webSource: Citations.safeExternalUrl(SourceUtils.annotationSourceUrl({
+            type: 'text',
+            sourceUrl: 'https://example.com/article'
+        }))
+    }))()`
+);
+const cachedImageSourcePolicy = vm.runInNewContext(
+    `(() => {
+        const MAX_CACHED_IMAGE_DATA_URL_CHARS = 24 * 1024 * 1024;
+        ${extractFunction(chatSource, 'safeCachedImageDataUrl')}
+        return {
+            chromePdf: safeCachedImageDataUrl(
+                'chrome-extension://mhjfbmdgcfjbbpaeojofohoefgiehjai/private.png'
+            ),
+            weftLocal: safeCachedImageDataUrl('chrome-extension://weft-test/assets/icon-128.png'),
+            remote: safeCachedImageDataUrl('https://images.example.com/untrusted.png'),
+            raster: safeCachedImageDataUrl('data:image/png;base64,AAAA'),
+            svg: safeCachedImageDataUrl('data:image/svg+xml;base64,PHN2Zz48L3N2Zz4='),
+        };
+    })()`
+);
+const renderedImageUrlPolicy = vm.runInNewContext(
+    `(() => {
+        ${extractFunction(sanitizerSource, 'isSafeUrl')}
+        return {
+            chromePdf: isSafeUrl(
+                'chrome-extension://mhjfbmdgcfjbbpaeojofohoefgiehjai/private.png', 'img'
+            ),
+            remote: isSafeUrl('https://images.example.com/untrusted.png', 'img'),
+            cached: isSafeUrl('data:image/png;base64,AAAA', 'img'),
+        };
+    })()`
+);
+ok('sanitize: rendered Markdown cannot retain Chrome PDF Viewer or remote image src values',
+    renderedImageUrlPolicy.chromePdf === false &&
+    renderedImageUrlPolicy.remote === false &&
+    renderedImageUrlPolicy.cached === true &&
+    renderPipelineSource.includes('return WeftSanitize.clean(html)') &&
+    sanitizerSource.includes('child.removeAttribute(attr.name)'));
+ok('workbench images: Session URLs never become an unvalidated thumbnail load or private label',
+    !contextPanelRenderSource.includes("img.src = snippet.imageUrl || ''") &&
+    !contextPanelRenderSource.includes('if (dataUrl && img.isConnected) img.src = dataUrl') &&
+    !contextPanelRenderSource.includes("urlText.textContent = snippet.imageUrl || t('popup_image')") &&
+    !contextPanelRenderSource.includes("urlText.title = snippet.imageUrl || ''") &&
+    contextPanelRenderSource.includes('Store.resolveImage(snippet)'));
+ok('workbench sources: non-PDF open actions reject private extension URLs',
+    nonPdfOpenSourcePolicy.privateSource === '' &&
+    nonPdfOpenSourcePolicy.webSource === 'https://example.com/article' &&
+    contextPanelRenderSource.includes(
+        'Citations.safeExternalUrl(snippetAnnotationSourceUrl(snippet))'
+    ) &&
+    contextPanelRenderSource.includes('if (annotationSourceUrl)'));
+ok('workbench images: only cached raster data can reach thumbnail src',
+    cachedImageSourcePolicy.chromePdf === '' && cachedImageSourcePolicy.weftLocal === '' &&
+    cachedImageSourcePolicy.remote === '' && cachedImageSourcePolicy.svg === '' &&
+    cachedImageSourcePolicy.raster === 'data:image/png;base64,AAAA');
 ok('sanitize: rendered markdown cannot trigger remote image requests',
     sanitizerSource.includes("if (tag === 'img')") &&
     sanitizerSource.includes("data:image\\/(png|jpe?g|gif|webp);base64,") &&
     !sanitizerSource.includes('svg\\+xml'));
+const extensionPagesCsp = JSON.parse(read('manifest.json'))
+    .content_security_policy?.extension_pages || '';
+ok('manifest CSP: extension pages load images only from self and data URLs',
+    extensionPagesCsp.split(';').map((directive) => directive.trim())
+        .includes("img-src 'self' data:"));
 ok('sanitize: SVG rejects active containers, external resources and unbounded CSS',
     sanitizerSource.includes("'clippath', 'mask', 'path'") &&
     !sanitizerSource.includes("'image', 'use'") &&
@@ -5721,6 +5903,10 @@ ok('smart read handoff: workbench atomically claims, renews and finishes request
     pendingConsumeSource.includes('pendingSmartReadWakeRequested = true') &&
     !pendingConsumeSource.includes("chrome.storage.local.remove('pendingSmartRead')"));
 const popupSource = read('popup.js');
+const pdfViewerSource = read('pdf-viewer.js');
+const pdfViewerHtmlSource = read('pdf-viewer.html');
+const pdfSelectionAssistSource = read('lib/pdf-selection-assist.js');
+const packageFilesSource = read('scripts/package-files.mjs');
 ok('smart read handoff: popup and service worker publish through the locked Store API',
     popupSource.includes('Store.setPendingSmartRead({') &&
     backgroundSource.includes('Store.setPendingSmartRead({'));
@@ -5730,6 +5916,175 @@ ok('page annotations: both extension surfaces use one explicit toggle command',
     backgroundSource.includes("message.type === 'toggleSessionOnPage'"));
 const workbenchSourceResolver = extractFunction(chatSource, 'snippetAnnotationSourceUrl');
 const sourceUtilsSource = read('lib/source-utils.js');
+const pdfSelectionTextCases = vm.runInNewContext(
+    `(() => {
+        ${sourceUtilsSource}
+        return {
+            splitWord: SourceUtils.joinPdfSelectionSegments([
+                { text: 'I work wi', transform: [1, 0, 0, 10, 10, 100], width: 36, height: 10 },
+                { text: 'th you at office', transform: [1, 0, 0, 10, 46, 100], width: 62, height: 10 },
+            ]),
+            realWordGap: SourceUtils.joinPdfSelectionSegments([
+                { text: 'I work', transform: [1, 0, 0, 10, 10, 80], width: 30, height: 10 },
+                { text: 'with you', transform: [1, 0, 0, 10, 46, 80], width: 40, height: 10 },
+            ]),
+            explicitTrailingSpace: SourceUtils.joinPdfSelectionSegments([
+                { text: 'I work ', transform: [1, 0, 0, 10, 10, 60], width: 30, height: 10 },
+                { text: 'with you', transform: [1, 0, 0, 10, 40, 60], width: 40, height: 10 },
+            ]),
+            explicitLeadingSpace: SourceUtils.joinPdfSelectionSegments([
+                { text: 'I work', transform: [1, 0, 0, 10, 10, 40], width: 30, height: 10 },
+                { text: ' with you', transform: [1, 0, 0, 10, 40, 40], width: 40, height: 10 },
+            ]),
+            punctuation: SourceUtils.joinPdfSelectionSegments([
+                { text: 'Hello' }, { text: ',' }, { text: 'world' }, { text: '!' },
+            ]),
+            cjk: SourceUtils.joinPdfSelectionSegments([
+                { text: '知识' }, { text: '整理' }, { text: '，' }, { text: '鉴别' },
+            ]),
+        };
+    })()`,
+    { URL }
+);
+ok('PDF selection text: adjacent PDF.js items repair a zero-gap word split',
+    pdfSelectionTextCases.splitWord === 'I work with you at office');
+ok('PDF selection text: a measurable word gap remains a real space',
+    pdfSelectionTextCases.realWordGap === 'I work with you');
+ok('PDF selection text: explicit trailing or leading boundaries retain exactly one space',
+    pdfSelectionTextCases.explicitTrailingSpace === 'I work with you' &&
+    pdfSelectionTextCases.explicitLeadingSpace === 'I work with you');
+ok('PDF selection text: punctuation and CJK boundaries do not gain artificial spaces',
+    pdfSelectionTextCases.punctuation === 'Hello, world!' &&
+    pdfSelectionTextCases.cjk === '知识整理，鉴别');
+
+const portablePdfSnippets = [
+    {
+        id: 'old-manual-pdf-id',
+        type: 'text',
+        content: 'Manually selected evidence from the report.',
+        sourceUrl: 'https://example.com/report.pdf#page=4',
+        sourceTitle: 'Portable PDF report',
+        sourceDocumentType: 'pdf',
+        sourcePageNumber: 4,
+        timestamp: 1700000001000,
+        tags: ['pdf', 'manual'],
+    },
+    {
+        id: 'old-smart-pdf-id',
+        type: 'text',
+        content: 'Smart Read evidence from the same report.',
+        sourceUrl: 'https://example.com/report.pdf#page=9',
+        sourceTitle: 'Portable PDF report',
+        sourceDocumentType: 'pdf',
+        sourcePageNumber: 9,
+        sourcePageCount: 12,
+        sourceBlockId: 'pdf-page-9',
+        smartReadPageType: 'article',
+        smartReadTopic: 'Portable PDF evidence',
+        smartReadSessionTitle: 'Imported PDF research',
+        smartReadTakeawayIndex: 1,
+        smartReadTakeawayTitle: 'Verified finding',
+        smartReadSummary: 'The finding remains traceable after import.',
+        smartReadEvidenceKind: 'fact',
+        smartReadCoverageLimited: true,
+        timestamp: 1700000002000,
+        tags: ['pdf', 'smart-read'],
+    },
+    {
+        id: 'old-web-id',
+        type: 'text',
+        content: 'Ordinary web evidence must not appear in the PDF reader.',
+        sourceUrl: 'https://example.com/article',
+        timestamp: 1700000003000,
+        tags: [],
+    },
+];
+const portablePdfPayload = SessionTransferTest.createPayload(
+    'Imported PDF research',
+    portablePdfSnippets,
+    { version: '3.0.2', versionName: '3.0.2-beta', exportedAt: 1700000000000 }
+);
+const portablePdfImported = SessionTransferTest.prepareImport(
+    SessionTransferTest.parseHtml(SessionTransferTest.embeddedPayloadHtml(portablePdfPayload)),
+    { idFactory: (index) => `new-imported-pdf-${index}` }
+);
+const portablePdfMatches = vm.runInNewContext(
+    `${sourceUtilsSource}\n;SourceUtils.pdfSnippetsForDocument(__snippets, __sourceUrl)`,
+    {
+        URL,
+        __snippets: portablePdfImported.snippets,
+        __sourceUrl: 'https://example.com/report.pdf#page=12',
+    }
+);
+ok('session transfer: imported v1 PDF snippets receive new ids and still match fragment URLs',
+    portablePdfImported.formatVersion === 1 &&
+    portablePdfImported.snippets.map((snippet) => snippet.id).join(',') ===
+        'new-imported-pdf-0,new-imported-pdf-1,new-imported-pdf-2' &&
+    portablePdfImported.snippets.every((snippet, index) => snippet.id !== portablePdfSnippets[index].id) &&
+    portablePdfMatches.length === 2 &&
+    portablePdfMatches.map((snippet) => snippet.id).join(',') ===
+        'new-imported-pdf-0,new-imported-pdf-1');
+ok('session transfer: manual and Smart Read PDF location metadata survives export/import',
+    portablePdfMatches[0].sourceUrl === 'https://example.com/report.pdf#page=4' &&
+    portablePdfMatches[0].sourceDocumentType === 'pdf' &&
+    portablePdfMatches[0].sourcePageNumber === 4 &&
+    portablePdfMatches[0].tags.join(',') === 'pdf,manual' &&
+    portablePdfMatches[1].sourceUrl === 'https://example.com/report.pdf#page=9' &&
+    portablePdfMatches[1].sourcePageNumber === 9 &&
+    portablePdfMatches[1].sourcePageCount === 12 &&
+    portablePdfMatches[1].sourceBlockId === 'pdf-page-9' &&
+    portablePdfMatches[1].smartReadTopic === 'Portable PDF evidence' &&
+    portablePdfMatches[1].smartReadTakeawayIndex === 1 &&
+    portablePdfMatches[1].smartReadCoverageLimited === true);
+
+const pdfSourceUtilities = vm.runInNewContext(
+    `(() => {
+        ${sourceUtilsSource}
+        const sessions = { Saved: [
+            {
+                id: 'p4', type: 'text', content: 'Revenue increased by twelve percent.',
+                sourceDocumentType: 'pdf', sourcePageNumber: 4,
+                sourceUrl: 'https://example.com/report.pdf#page=1',
+            },
+        ] };
+        const ambiguous = { Saved: [
+            ...sessions.Saved,
+            { ...sessions.Saved[0], id: 'p9', sourcePageNumber: 9 },
+        ] };
+        return {
+            inferred: SourceUtils.inferPdfSelectionPage(
+                sessions, 'https://example.com/report.pdf', 'increased by twelve percent'
+            ),
+            ambiguous: SourceUtils.inferPdfSelectionPage(
+                ambiguous, 'https://example.com/report.pdf', 'increased by twelve percent'
+            ),
+            viewer: SourceUtils.pdfViewerUrl('https://example.com/report.pdf#page=8', {
+                sessionName: 'Saved', pageNumber: 4, title: 'Report',
+            }),
+            unsafe: SourceUtils.pdfViewerUrl('javascript:alert(1)', { sessionName: 'Saved' }),
+            chromePrivate: SourceUtils.safeHttpUrl(
+                'chrome-extension://mhjfbmdgcfjbbpaeojofohoefgiehjai/private-resource.png'
+            ),
+            chromePdfSource: SourceUtils.embeddedHttpUrl(
+                'chrome-extension://mhjfbmdgcfjbbpaeojofohoefgiehjai/index.html?file=' +
+                    encodeURIComponent('https://example.com/original.pdf#page=6')
+            ),
+        };
+    })()`,
+    {
+        URL,
+        chrome: { runtime: { getURL: (path) => 'chrome-extension://weft-test/' + path } },
+    }
+);
+ok('PDF manual selection: existing verified evidence infers only an unambiguous page',
+    pdfSourceUtilities.inferred === 4 && pdfSourceUtilities.ambiguous === null);
+ok('PDF viewer routing: only safe HTTP sources enter the explicit Weft reader',
+    pdfSourceUtilities.viewer ===
+        'chrome-extension://weft-test/pdf-viewer.html?src=https%3A%2F%2Fexample.com%2Freport.pdf%23page%3D8&session=Saved&page=4&title=Report' &&
+    pdfSourceUtilities.unsafe === '' && pdfSourceUtilities.chromePrivate === '');
+ok('PDF selection source: Chrome Viewer wrappers reveal only their embedded HTTP document',
+    pdfSourceUtilities.chromePdfSource === 'https://example.com/original.pdf#page=6' &&
+    pdfSourceUtilities.viewer.startsWith('chrome-extension://weft-test/pdf-viewer.html?'));
 const sourceRouting = vm.runInNewContext(
     `(() => {
         ${sourceUtilsSource}
@@ -5826,6 +6181,165 @@ const pdfAnnotationRouting = vm.runInNewContext(
 ok('page annotations: native PDF targets are rejected before content-script messaging',
     pdfAnnotationRouting.obvious === true && pdfAnnotationRouting.persisted === true &&
     pdfAnnotationRouting.webpage === false);
+const pdfSelectionMetadataFunctions = [
+    'trustedPdfViewerContext',
+    'sessionsKnowPdf',
+    'pdfSelectionMetadata',
+].map((name) => extractFunction(backgroundSource, name)).join('\n');
+const manualPdfSelectionRouting = vm.runInNewContext(
+    `(() => {
+        ${sourceUtilsSource}
+        ${pdfSelectionMetadataFunctions}
+        const sessions = { Saved: [{
+            id: 'known', type: 'text', content: 'A verified database result.',
+            sourceUrl: 'https://example.com/download?id=42',
+            sourceDocumentType: 'pdf', sourcePageNumber: 6,
+        }] };
+        const known = pdfSelectionMetadata(
+            { selectionText: 'verified database result' },
+            { url: 'https://example.com/download?id=42', title: 'Research paper' },
+            sessions
+        );
+        const viewer = pdfSelectionMetadata(
+            { selectionText: 'new selection' },
+            {
+                url: 'chrome-extension://weft-test/pdf-viewer.html?src=' +
+                    encodeURIComponent('https://example.com/report.pdf') +
+                    '&session=Saved&title=Report',
+                title: 'Weft PDF Reader',
+            },
+            sessions
+        );
+        const wrappedViewer = pdfSelectionMetadata(
+            { selectionText: 'selected in another viewer' },
+            {
+                url: 'chrome-extension://other-viewer/' +
+                    'https://arxiv.org/pdf/2603.02001',
+                title: '2603.02001v2.pdf',
+            },
+            sessions
+        );
+        const webpage = pdfSelectionMetadata(
+            { selectionText: 'ordinary text' },
+            { url: 'https://example.com/article', title: 'Article' },
+            sessions
+        );
+        return { known, viewer, wrappedViewer, webpage };
+    })()`,
+    {
+        URL,
+        chrome: { runtime: { getURL: (path) => 'chrome-extension://weft-test/' + path } },
+    }
+);
+ok('PDF manual selection: native and Weft-viewer captures retain original source identity',
+    manualPdfSelectionRouting.known?.sourceDocumentType === 'pdf' &&
+    manualPdfSelectionRouting.known?.sourcePageNumber === 6 &&
+    manualPdfSelectionRouting.viewer?.sourceUrl === 'https://example.com/report.pdf' &&
+    manualPdfSelectionRouting.viewer?.sourceTitle === 'Report' &&
+    manualPdfSelectionRouting.wrappedViewer?.sourceUrl === 'https://arxiv.org/pdf/2603.02001' &&
+    manualPdfSelectionRouting.wrappedViewer?.sourceDocumentType === 'pdf' &&
+    manualPdfSelectionRouting.webpage === null);
+const quickResultBranchStart = backgroundSource.indexOf("if (message.type === 'saveQuickResult')");
+const quickResultBranchOpen = backgroundSource.indexOf('{', quickResultBranchStart);
+const quickResultSaveBranch = backgroundSource.slice(
+    quickResultBranchStart,
+    findClosingBrace(backgroundSource, quickResultBranchOpen) + 1
+);
+const quickPdfSaveState = { saved: null };
+const quickPdfSaveResult = await vm.runInNewContext(
+    `(async () => {
+        ${sourceUtilsSource}
+        ${extractFunction(backgroundSource, 'trustedPdfViewerContext')}
+        ${extractFunction(backgroundSource, 'trustedPdfMessageMetadata')}
+        const generateId = () => 'quick-pdf-result';
+        const Store = {
+            async getSessions() { return { Saved: [] }; },
+            async getCurrentSession() { return 'Fallback'; },
+            async addSnippet(sessionName, snippet) { __state.saved = { sessionName, snippet }; },
+        };
+        const handleMessage = (message, sender, sendResponse) => {
+            ${quickResultSaveBranch}
+            return false;
+        };
+        return new Promise((resolve) => {
+            const keepChannelOpen = handleMessage({
+                type: 'saveQuickResult',
+                selectedText: 'Selected PDF claim',
+                result: 'Verified explanation',
+                sourceUrl: 'https://example.com/report.pdf#page=7',
+                sourceTitle: 'Trusted report',
+                sourceDocumentType: 'pdf',
+                sourcePageNumber: 7,
+                sessionName: 'Saved',
+            }, {
+                url: 'chrome-extension://weft-test/pdf-viewer.html?src=' +
+                    encodeURIComponent('https://example.com/report.pdf#page=2') +
+                    '&session=Saved&title=Trusted%20report',
+            }, (response) => resolve({ response, keepChannelOpen }));
+        });
+    })()`,
+    {
+        URL,
+        __state: quickPdfSaveState,
+        console: { warn() {} },
+        chrome: { runtime: { getURL: (path) => 'chrome-extension://weft-test/' + path } },
+    }
+);
+ok('PDF quick result: saving an analysis retains the trusted document source and exact page',
+    quickPdfSaveResult.keepChannelOpen === true && quickPdfSaveResult.response?.ok === true &&
+    quickPdfSaveResult.response?.session === 'Saved' &&
+    quickPdfSaveState.saved?.sessionName === 'Saved' &&
+    quickPdfSaveState.saved?.snippet?.id === 'quick-pdf-result' &&
+    quickPdfSaveState.saved?.snippet?.content === 'Selected PDF claim' &&
+    quickPdfSaveState.saved?.snippet?.comment === 'Verified explanation' &&
+    quickPdfSaveState.saved?.snippet?.sourceUrl === 'https://example.com/report.pdf#page=7' &&
+    quickPdfSaveState.saved?.snippet?.sourceTitle === 'Trusted report' &&
+    quickPdfSaveState.saved?.snippet?.sourceDocumentType === 'pdf' &&
+    quickPdfSaveState.saved?.snippet?.sourcePageNumber === 7 &&
+    quickPdfSaveState.saved?.snippet?.tags.join(',') === 'analysed');
+const pdfQuickActionSource = extractFunction(pdfSelectionAssistSource, 'runQuickAction');
+const pdfQuickDisconnectStart = pdfQuickActionSource.indexOf('run.port.onDisconnect.addListener');
+const pdfQuickDisconnectOpen = pdfQuickActionSource.indexOf('{', pdfQuickDisconnectStart);
+const pdfQuickDisconnectSource = pdfQuickActionSource.slice(
+    pdfQuickDisconnectStart,
+    findClosingBrace(pdfQuickActionSource, pdfQuickDisconnectOpen) + 1
+);
+const pdfCloseCardSource = extractFunction(pdfSelectionAssistSource, 'closeCard');
+ok('PDF selection assist: streamed quick deltas batch text-node writes on animation frames',
+    pdfSelectionAssistSource.includes('function scheduleRunDelta(') &&
+    pdfSelectionAssistSource.includes('function flushRunDelta(') &&
+    pdfSelectionAssistSource.includes('function cancelRunDeltaFrame(') &&
+    /run\.pendingDelta\s*\+=\s*delta/u.test(pdfSelectionAssistSource) &&
+    /window\.requestAnimationFrame\(\(\)\s*=>\s*\{[\s\S]{0,160}flushRunDelta\(run,\s*ui\)/u
+        .test(pdfSelectionAssistSource) &&
+    pdfQuickActionSource.includes('scheduleRunDelta(run, ui);') &&
+    pdfSelectionAssistSource.includes('run.answerNode.appendData(') &&
+    !pdfSelectionAssistSource.includes('ui.body.appendChild(document.createTextNode(delta))'));
+ok('PDF selection assist: terminal and close paths settle queued delta rendering',
+    pdfQuickActionSource.includes("response?.type === 'done'") &&
+    pdfQuickActionSource.includes('flushRunDelta(run, ui);') &&
+    pdfQuickActionSource.includes('cancelRunDeltaFrame(run);') &&
+    pdfCloseCardSource.includes('cancelRunDeltaFrame(activeRun)') &&
+    pdfQuickDisconnectSource.includes('run.chunks.length === 0') &&
+    pdfQuickDisconnectSource.includes('flushRunDelta(run, ui);') &&
+    pdfQuickDisconnectSource.includes("incomplete.className = 'weft-incomplete'") &&
+    pdfQuickDisconnectSource.includes("'card_disconnected_partial'") &&
+    !pdfQuickDisconnectSource.includes('addCardActions('));
+ok('PDF reader: rendering, local selection saving and packaging stay explicit and isolated',
+    pdfViewerHtmlSource.includes('lib/vendor/pdfjs') === false &&
+    pdfViewerHtmlSource.includes('<script src="lib/pdf-selection-assist.js"></script>') &&
+    !pdfViewerHtmlSource.includes('id="selectionSave"') &&
+    !pdfViewerSource.includes('selectionSave') &&
+    pdfViewerSource.includes("import(chrome.runtime.getURL('lib/vendor/pdfjs/pdf.min.mjs'))") &&
+    pdfViewerSource.includes("new Worker(workerUrl, { type: 'module'") &&
+    pdfViewerSource.includes('new pdfjs.TextLayer({') &&
+    pdfViewerSource.includes("type: 'savePdfSelection'") &&
+    pdfViewerSource.includes('locateUnknownSnippetPages()') &&
+    !pdfViewerSource.includes('declarativeNetRequest') &&
+    !pdfViewerSource.includes('webRequest') &&
+    packageFilesSource.includes("'pdf-viewer.html'") &&
+    packageFilesSource.includes("'pdf-viewer.js'") &&
+    packageFilesSource.includes("'pdf-viewer.css'"));
 ok('page annotations: UI requests have a bounded lifetime and mutation broadcasts do not loop',
     popupSource.includes('setTimeout(() => finish(null), 5000)') &&
     chatSource.includes('setTimeout(() => finish(null), 5000)') &&

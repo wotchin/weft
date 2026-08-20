@@ -69,11 +69,14 @@ are cited as `[W#]` alongside `[S#]` Session evidence.
 Run **Smart Read** on an article or a text-layer HTTP(S) PDF to build a new focused
 Session from key passages. Every quoted passage is **checked against the extracted
 source** before it is saved, so hallucinated evidence is silently dropped. PDF
-passages retain their page number and citations reopen that page in Chrome. On
+passages retain their page number. You can also select PDF text manually: the
+same compact bar used on web pages offers Save, Verify, Explain, Key points and
+Ask. **Show on Page** opens the optional local Weft PDF Reader, where saved
+passages can be shown or hidden and new selections can be captured. On
 link-heavy pages, tell Weft what matters first and it shortlists only the visible,
-relevant links. Weft coexists with Chrome's built-in viewer; a replacement viewer
-that changes the tab to another extension's private `chrome-extension://` URL
-cannot be read across Chrome's extension boundary.
+relevant links. Weft never replaces Chrome's built-in viewer or registers itself
+as the default PDF handler. When another viewer exposes the original HTTP(S) URL,
+Weft safely recovers that source without entering or modifying the other extension.
 
 ### 🧩 Synthesis scenarios
 One-click scenarios turn raw snippets into specific deliverables:
@@ -103,7 +106,7 @@ flowchart LR
     C --> F
 ```
 
-1. **Read** — `Smart Read` an article or text-layer PDF to seed a focused Session. Web passages can be highlighted in place; PDF passages reopen at their source page because Chrome's native PDF viewer cannot accept Weft DOM highlights.
+1. **Read** — `Smart Read` an article or text-layer PDF to seed a focused Session. Web passages can be highlighted in place; PDF passages can be reviewed and manually captured in the explicit Weft PDF Reader without taking over Chrome's native viewer.
 2. **Collect** — right-click or use the selection toolbar to save more text / image / link snippets.
 3. **Synthesize** — open the Workbench side panel; ask the Session a question, or pick a scenario.
 4. **Deep Search** — start from a Session question; if the Agent needs outside evidence, review or edit each proposed web query before it runs.

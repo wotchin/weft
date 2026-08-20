@@ -34,6 +34,8 @@ export default [
                 URLSearchParams: 'readonly',
                 Blob: 'readonly',
                 FileReader: 'readonly',
+                Worker: 'readonly',
+                IntersectionObserver: 'readonly',
                 navigator: 'readonly',
                 screen: 'readonly',
                 location: 'readonly',

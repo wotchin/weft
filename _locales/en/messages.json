@@ -599,6 +599,9 @@
   "card_disconnected": {
     "message": "The connection to Weft ended before an answer arrived. Try again."
   },
+  "card_disconnected_partial": {
+    "message": "The connection ended early. This response is incomplete; try again."
+  },
   "card_reload": {
     "message": "Weft was reloaded — refresh the page and try again."
   },
@@ -742,6 +745,9 @@
   },
   "notify_save_before_tag": {
     "message": "Save a snippet first, then tag it."
+  },
+  "notify_image_unavailable": {
+    "message": "This browser-owned image cannot be read. Select text instead, or open the PDF in the Weft PDF Reader."
   },
   "modal_comment_title": {
     "message": "Comment to “%s”"
@@ -1480,5 +1486,86 @@
   },
   "agent_failed_local_fallback": {
     "message": "The research planner could not finish, so Weft answered from the retrieved Session evidence."
+  },
+  "pdf_viewer_document_title": {
+    "message": "Weft PDF Reader"
+  },
+  "pdf_viewer_title": {
+    "message": "Weft PDF Reader"
+  },
+  "pdf_viewer_session": {
+    "message": "Session"
+  },
+  "pdf_viewer_controls": {
+    "message": "PDF controls"
+  },
+  "pdf_viewer_annotations": {
+    "message": "Session highlights"
+  },
+  "pdf_viewer_page": {
+    "message": "Page"
+  },
+  "pdf_viewer_zoom_out": {
+    "message": "Zoom out"
+  },
+  "pdf_viewer_zoom_in": {
+    "message": "Zoom in"
+  },
+  "pdf_viewer_hide_highlights": {
+    "message": "Hide highlights"
+  },
+  "pdf_viewer_show_highlights": {
+    "message": "Show highlights"
+  },
+  "pdf_viewer_open_original": {
+    "message": "Open original"
+  },
+  "pdf_viewer_save_selection": {
+    "message": "Save to Session"
+  },
+  "pdf_viewer_selection_actions": {
+    "message": "PDF selection actions"
+  },
+  "pdf_viewer_no_annotations": {
+    "message": "This Session has no snippets from this PDF yet. Select text in the document to save one."
+  },
+  "pdf_viewer_locating_page": {
+    "message": "Locating page…"
+  },
+  "pdf_viewer_page_not_found": {
+    "message": "The exact page has not been identified yet."
+  },
+  "pdf_viewer_locating_progress": {
+    "message": "Locating saved selections… %s/%t"
+  },
+  "pdf_viewer_pages_resolved": {
+    "message": "Located %s saved selection(s)."
+  },
+  "pdf_viewer_downloading": {
+    "message": "Downloading PDF…"
+  },
+  "pdf_viewer_download_progress": {
+    "message": "Downloading PDF… %s MB"
+  },
+  "pdf_viewer_opening": {
+    "message": "Opening PDF…"
+  },
+  "pdf_viewer_ready": {
+    "message": "Ready"
+  },
+  "pdf_viewer_load_failed": {
+    "message": "This PDF could not be opened in the Weft reader."
+  },
+  "pdf_viewer_selection_saved": {
+    "message": "Selection saved to %s."
+  },
+  "pdf_viewer_selection_failed": {
+    "message": "The selection could not be saved."
+  },
+  "wb_open_pdf_viewer": {
+    "message": "Open this PDF in the Weft reader to show Session highlights"
+  },
+  "popup_open_pdf_viewer": {
+    "message": "Weft PDF Reader"
   }
 }
