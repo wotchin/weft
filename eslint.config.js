@@ -62,7 +62,6 @@ export default [
                 BM25Index: 'readonly',
                 VectorIndex: 'readonly',
                 DiagramGenerator: 'readonly',
-                Highlighter: 'readonly',
                 PageExtractor: 'readonly',
                 PDFExtractor: 'readonly',
                 SourceUtils: 'readonly',

@@ -66,9 +66,9 @@ _页面内预览为加速、静音版本。点击预览可打开完整画质 MP4
 
 > 安装时引导页（onboarding）也会嵌入这段视频，让新用户在不配置任何东西前先看到核心流程。
 
-### 方式 A — Chrome 应用商店（上线后）
+### 方式 A — Chrome 应用商店（推荐）
 
-商店审核中，在此之前请用方式 B。
+[前往 Chrome 应用商店安装 Weft](https://chromewebstore.google.com/detail/weft/obcegdkdebekhmaipdnnkpmhapjncnbm)。
 
 ### 方式 B — 加载已解压的扩展（开发 / 侧载）
 
@@ -103,7 +103,7 @@ _页面内预览为加速、静音版本。点击预览可打开完整画质 MP4
 | 渲染 | `markdown.js`、`lib/render.js`、`lib/diagram-generator.js` | Markdown、引用、Mermaid |
 | LLM | `lib/llm-client.js`、`lib/providers.js` | 多服务商、JSON 模式、流式 |
 | 检索 | `lib/rag-engine.js`、`lib/rag-indexer.js`、`lib/bm25.js`、`lib/vector-index.js`、`lib/tokenizer.js` | 混合 BM25 + 向量 RAG |
-| 抽取 | `lib/page-extractor.js`、`lib/pdf-extractor.js`、`lib/smart-read.js`、`lib/highlighter.js` | 网页/PDF 抽取、来源校验、页面高亮 |
+| 抽取 | `lib/page-extractor.js`、`lib/pdf-extractor.js`、`lib/smart-read.js`、`content-assist.js` | 网页/PDF 抽取、来源校验、页面高亮 |
 | Agent | `lib/agent-runner.js`, `lib/agent-tools.js` | 受限 JSON action、本地 Session 检索与确定性计算 |
 | 搜索 | `lib/search-provider.js` | 经用户确认的 SearXNG / Tavily / Brave 搜索 |
 | 存储 | `lib/store.js`、`lib/idb.js` | chrome.storage + IndexedDB |

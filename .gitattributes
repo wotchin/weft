@@ -1,0 +1,2 @@
+# Vendored browser bundles are copied and byte-verified against npm packages.
+lib/vendor/mermaid.min.js -text whitespace=-trailing-space

@@ -1,6 +1,8 @@
 name: Release
 
-# Triggered when a version tag (v3.0.1, v3.0.1-rc.1, ...) is pushed.
+# Triggered when a version tag (v3.0.1, v3.1.0-beta, ...) is pushed.
+# The tag must match manifest.version_name when present, otherwise
+# manifest.version. Chrome requires manifest.version itself to stay numeric.
 # Builds the store zip, publishes to the Chrome Web Store, and creates a
 # GitHub Release with the zip attached.
 on:
@@ -20,29 +22,20 @@ jobs:
     if: github.repository == 'wotchin/weft'
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Set up Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '24'
+          cache: 'npm'
 
       - name: Read metadata
         id: meta
-        run: |
-          TAG="${GITHUB_REF_NAME#v}"
-          VERSION=$(node -p "require('./manifest.json').version")
-          if [ "$TAG" != "$VERSION" ]; then
-            echo "::error::Tag '$GITHUB_REF_NAME' does not match manifest version '$VERSION'"
-            exit 1
-          fi
-          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-          echo "zip=weft-${VERSION}.zip" >> "$GITHUB_OUTPUT"
-          echo "is_prerelease=$(grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+-' <<< "$TAG" && echo true || echo false)" >> "$GITHUB_OUTPUT"
-
-      - name: Set up Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: 'lts/*'
+        run: node scripts/release-metadata.mjs
 
       - name: Install dependencies
-        # No lockfile in this repo — see ci.yml for the rationale.
-        run: npm install
+        run: npm ci
 
       - name: Gate — lint + test + validate manifest
         run: npm run check
@@ -53,20 +46,36 @@ jobs:
       # Upload first so a failed store publish still leaves a usable zip in
       # the GitHub release — users can sideload while we recover.
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v3
+        uses: softprops/action-gh-release@3d0d9888cb7fd7b750713d6e236d1fcb99157228 # v3.0.2
         with:
           tag_name: ${{ github.ref_name }}
-          name: Weft v${{ steps.meta.outputs.version }}
+          name: Weft v${{ steps.meta.outputs.release_version }}
           generate_release_notes: true
           prerelease: ${{ steps.meta.outputs.is_prerelease }}
           fail_on_unmatched_files: true
           files: ${{ steps.meta.outputs.zip }}
 
+      - name: Check Chrome Web Store credentials
+        id: chrome_credentials
+        env:
+          EXTENSION_ID: ${{ vars.CHROME_EXTENSION_ID }}
+          PUBLISHER_ID: ${{ secrets.CHROME_PUBLISHER_ID }}
+          CLIENT_ID: ${{ secrets.CHROME_CLIENT_ID }}
+          CLIENT_SECRET: ${{ secrets.CHROME_CLIENT_SECRET }}
+          REFRESH_TOKEN: ${{ secrets.CHROME_REFRESH_TOKEN }}
+        run: |
+          if [[ -n "$EXTENSION_ID" && -n "$PUBLISHER_ID" && -n "$CLIENT_ID" && -n "$CLIENT_SECRET" && -n "$REFRESH_TOKEN" ]]; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Publish to Chrome Web Store
-        # Skipped when the maintainer has not stored publish credentials;
-        # the GitHub Release above is still produced so the build is not lost.
-        if: ${{ vars.CHROME_EXTENSION_ID != '' }}
-        uses: wdzeng/chrome-extension@v3
+        # Beta/RC tags create a GitHub prerelease for sideload testing, but
+        # never advance the production Store listing automatically.
+        # Stable tags are also skipped when publish credentials are absent.
+        if: ${{ steps.meta.outputs.is_prerelease != 'true' && steps.chrome_credentials.outputs.ready == 'true' }}
+        uses: wdzeng/chrome-extension@37f4f9cdc664959bafef36b1f4da03dec5141620 # v2.0.0
         with:
           extension-id: ${{ vars.CHROME_EXTENSION_ID }}
           zip-path: ${{ steps.meta.outputs.zip }}

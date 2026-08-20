@@ -4,13 +4,12 @@ importScripts(
     'lib/store.js',
     'lib/source-utils.js',
     'lib/tokenizer.js',
+    'lib/rag-indexer.js',
     'lib/providers.js',
     'lib/llm-client.js',
     'lib/i18n.js'
 );
 
-// 保存子菜单的 ID 数组，用于更新右键菜单
-let sessionMenuIds = [];
 let _updatingMenus = false;
 let _menuRefreshQueued = false;
 
@@ -125,9 +124,43 @@ async function createStaticMenus() {
     });
 }
 
+async function runStorageMaintenance() {
+    // Migration advances its completion marker only after every authoritative
+    // transformation succeeds. Cache GC is safe to retry independently.
+    let migrationError = null;
+    let garbageError = null;
+    try {
+        await Store.migrate();
+    } catch (error) {
+        migrationError = error;
+    }
+    try {
+        await Store.collectGarbage();
+    } catch (error) {
+        garbageError = error;
+    }
+
+    // Orphan cache bytes may be the reason migration hit quota. Once GC has
+    // succeeded, retry the authoritative migration in the same startup rather
+    // than waiting for another browser restart.
+    if (migrationError && !garbageError) {
+        try {
+            await Store.migrate();
+            migrationError = null;
+        } catch (error) {
+            migrationError = error;
+        }
+    }
+    if (migrationError || garbageError) {
+        throw new AggregateError(
+            [migrationError, garbageError].filter(Boolean),
+            'Storage maintenance did not complete.'
+        );
+    }
+}
+
 chrome.runtime.onInstalled.addListener((details) => {
-    // Bring persisted data up to the current schema (idempotent).
-    Store.migrate().catch((e) => console.warn('[Weft] migrate failed', e));
+    void runStorageMaintenance().catch((e) => console.warn('[Weft] storage maintenance failed', e));
 
     // First-run onboarding (also seeds a demo session). On install only,
     // also pick a sane default provider: prefer Chrome built-in AI when the
@@ -151,6 +184,10 @@ chrome.runtime.onInstalled.addListener((details) => {
         chrome.sidePanel.setOptions({ path: 'chat.html?mode=panel', enabled: true }).catch(() => {});
         chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: false }).catch(() => {});
     }
+});
+
+chrome.runtime.onStartup?.addListener(() => {
+    void runStorageMaintenance().catch((e) => console.warn('[Weft] storage maintenance retry failed', e));
 });
 
 // 最近一次保存的 snippet（用于给最近保存的内容打标签）
@@ -530,14 +567,12 @@ async function updateSessionContextMenus() {
             sessions = await Store.getSessions();
         }
 
-        // removeAll + full rebuild: guarantees deleted sessions are cleaned up
-        // (the old per-ID approach failed when service worker restarted and
-        //  sessionMenuIds was lost, leaving stale menu items)
+        // removeAll + full rebuild guarantees deleted Sessions are cleaned up
+        // even after the service worker restarts.
         await chrome.contextMenus.removeAll();
         await createStaticMenus();
 
         const sessionNames = Object.keys(sessions);
-        sessionMenuIds = [];
         for (const sessionName of sessionNames) {
             const menuId = `session-${sessionName}`;
             chrome.contextMenus.create({
@@ -546,8 +581,6 @@ async function updateSessionContextMenus() {
                 contexts: ["selection", "link", "page", "image"],
                 parentId: "saveToSession"
             });
-            sessionMenuIds.push(menuId);
-
             // Comment to Session submenu
             chrome.contextMenus.create({
                 id: `comment-${sessionName}`,
@@ -633,7 +666,7 @@ async function fetchImageAsDataUrl(imageUrl, sourcePageUrl) {
             if (!blob.type.startsWith('image/') || blob.size > MAX_IMAGE_SOURCE_BYTES) continue;
             const result = await blobToResizedDataUrl(blob);
             if (result) return result;
-        } catch (e) {
+        } catch {
             // Try next strategy
         } finally {
             clearTimeout(timer);
@@ -670,7 +703,7 @@ async function captureImageFromTab(tabId, imageUrl) {
                         const ctx = canvas.getContext('2d');
                         ctx.drawImage(img, 0, 0, w, h);
                         return canvas.toDataURL('image/jpeg', 0.85);
-                    } catch (e) {
+                    } catch {
                         // Canvas tainted by cross-origin image — cannot extract
                         return null;
                     }
@@ -718,7 +751,7 @@ async function sendNotification(title, message) {
             });
             return;
         }
-    } catch (e) {
+    } catch {
         // Content script not available (chrome:// pages, etc.)
     }
     // Fallback: OS notification with unique ID to avoid suppression
@@ -865,27 +898,25 @@ chrome.runtime.onConnect.addListener((port) => {
 function inferChangedSessionName(sessionChange) {
     const before = sessionChange?.oldValue || {};
     const after = sessionChange?.newValue || {};
-    const names = new Set([...Object.keys(before), ...Object.keys(after)]);
-    const changed = [];
+    const beforeNames = new Set(Object.keys(before));
+    const changedNames = [
+        ...Object.keys(after).filter((name) => !beforeNames.has(name)),
+        ...Object.keys(before).filter((name) => !Object.prototype.hasOwnProperty.call(after, name)),
+    ];
+    return changedNames.length === 1 ? changedNames[0] : null;
+}
 
-    for (const name of names) {
-        const oldItems = before[name];
-        const newItems = after[name];
-        if (!Array.isArray(oldItems) || !Array.isArray(newItems)) {
-            if (oldItems !== newItems) changed.push(name);
-        } else if (JSON.stringify(oldItems) !== JSON.stringify(newItems)) {
-            changed.push(name);
-        }
-        if (changed.length > 1) return null;
-    }
-
-    return changed[0] || null;
+function sessionNameSetChanged(sessionChange) {
+    const beforeNames = Object.keys(sessionChange?.oldValue || {}).sort();
+    const afterNames = Object.keys(sessionChange?.newValue || {}).sort();
+    return beforeNames.length !== afterNames.length
+        || beforeNames.some((name, index) => name !== afterNames[index]);
 }
 
 // Sync context menus when sessions change (e.g. from popup)
 chrome.storage.onChanged.addListener((changes, areaName) => {
     if (areaName !== 'local') return;
-    if (changes.sessions || changes.uiLanguage) {
+    if (changes.uiLanguage || (changes.sessions && sessionNameSetChanged(changes.sessions))) {
         void updateSessionContextMenus();
     }
     if (changes.uiLanguage) {
@@ -936,7 +967,7 @@ async function autoHighlightSnippet(tab, snippet) {
             type: 'highlightSnippets',
             snippets: [snippet],
         });
-    } catch (e) {
+    } catch {
         // Content script not available — silently ignore
     }
 }
@@ -1027,7 +1058,7 @@ async function sendSessionAnnotationCommand(command, sessionName, tabId, tabUrl)
                 : pageSnippets.length,
             setKey,
         };
-    } catch (e) {
+    } catch {
         return {
             active: false, state: 'hidden', highlighted: 0,
             total: pageSnippets.length, setKey, error: 'CONTENT_UNAVAILABLE',

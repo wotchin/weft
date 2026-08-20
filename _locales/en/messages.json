@@ -143,9 +143,6 @@
   "wb_nothing_to_export": {
     "message": "No snippets to export in this session."
   },
-  "wb_takeaways": {
-    "message": "Key Takeaways"
-  },
   "wb_smart_read": {
     "message": "Smart Read"
   },
@@ -194,14 +191,8 @@
   "smart_read_saving": {
     "message": "Creating session…"
   },
-  "smart_read_highlighting": {
-    "message": "Highlighting…"
-  },
   "smart_read_done": {
     "message": "Saved %s verified passages to “%n”."
-  },
-  "smart_read_done_partial": {
-    "message": "Saved %s passages to “%n”; %m could not be located on the page."
   },
   "smart_read_no_content": {
     "message": "Weft could not find enough readable content. If this is a subscriber article, make sure it is fully loaded and visible first."
@@ -248,9 +239,6 @@
   "smart_read_index_label": {
     "message": "Recommended links"
   },
-  "smart_read_highlighted": {
-    "message": "%h of %t passages highlighted"
-  },
   "smart_read_visible_only": {
     "message": "Only content currently rendered on the page was analyzed. Weft did not bypass an access gate or fetch hidden text."
   },
@@ -260,26 +248,17 @@
   "smart_read_sources": {
     "message": "Verified source:"
   },
-  "smart_read_reused": {
-    "message": "Reopened “%n”; this page and reading focus were already saved."
-  },
   "wb_deep_search": {
     "message": "Deep Search"
   },
   "wb_diagram": {
     "message": "Diagram"
   },
-  "wb_context_title": {
-    "message": "Session context"
-  },
   "wb_input_placeholder": {
     "message": "Ask this Session, or choose a scenario above…"
   },
   "wb_planning": {
     "message": "Planning…"
-  },
-  "wb_custom_placeholder": {
-    "message": "Enter your custom prompt…"
   },
   "wb_error_prefix": {
     "message": "Error"
@@ -334,12 +313,6 @@
   },
   "footer_tagline": {
     "message": "Weave knowledge into insight"
-  },
-  "popup_shown": {
-    "message": "%s shown"
-  },
-  "popup_shown_none": {
-    "message": "None on this page"
   },
   "time_just_now": {
     "message": "just now"
@@ -433,12 +406,6 @@
   },
   "wb_using_snippets": {
     "message": "%s snippets"
-  },
-  "wb_analysing": {
-    "message": "Analysing…"
-  },
-  "wb_highlighting": {
-    "message": "Highlighting…"
   },
   "sc_report": {
     "message": "Report"
@@ -629,9 +596,6 @@
   "settings_search_ok": {
     "message": "Search works — %s result(s) returned."
   },
-  "settings_search_fail": {
-    "message": "Search failed:"
-  },
   "settings_search_note_self": {
     "message": "Needs a SearXNG instance with its JSON API open — in practice, one you host yourself."
   },
@@ -640,9 +604,6 @@
   },
   "settings_search_note_brave": {
     "message": "Paid: Brave ended its free tier in 2026 and now bills per request."
-  },
-  "settings_search_json_note": {
-    "message": "The instance must have the JSON output format enabled (search.formats in its settings.yml). Most public instances turn it off, so this usually means running your own."
   },
   "menu_save_to_session": {
     "message": "Save to Session"
@@ -1199,17 +1160,11 @@
   "action_copy_failed": {
     "message": "Copy failed"
   },
-  "search_plan_complete": {
-    "message": "Searches complete. Generating answer…"
-  },
   "search_plan_empty": {
     "message": "Could not create a search plan. Try rephrasing your question."
   },
   "deep_search_need_session": {
     "message": "Deep Search starts from the current Session. Use Smart Read or save at least one relevant snippet first."
-  },
-  "deep_search_provider_required": {
-    "message": "Set up a web search provider in Settings before using Deep Search."
   },
   "search_plan_scope": {
     "message": "Based on “%s” · searches via %p"
@@ -1253,9 +1208,6 @@
   "wb_generated_output_source": {
     "message": "Weft output"
   },
-  "wb_generated_tag": {
-    "message": "generated"
-  },
   "wb_image_cached_hint": {
     "message": "Image cached — it can be sent to the model"
   },
@@ -1278,7 +1230,7 @@
     "message": "a webpage"
   },
   "wb_regarding_text": {
-    "message": "Regarding this text from %s:\n\n“%t”\n\n%q"
+    "message": "Question: %q\n\nContext from %s:\n\n“%t”"
   },
   "wb_word_count": {
     "message": "%s words"
@@ -1292,41 +1244,11 @@
   "pdf_page_label": {
     "message": "page %s"
   },
-  "wb_error_abort": {
-    "message": "The request was cancelled."
-  },
-  "wb_error_api_key": {
-    "message": "Add an API key in Settings before using AI features."
-  },
-  "wb_error_auth": {
-    "message": "The API key was rejected. Check your provider settings."
-  },
-  "wb_error_bad_request": {
-    "message": "The model could not process this request. Check your model settings."
-  },
-  "wb_error_context_length": {
-    "message": "The selected content is too long for this model."
-  },
-  "wb_error_empty_response": {
-    "message": "The model returned an empty response."
-  },
-  "wb_error_generic": {
-    "message": "Something went wrong. Please try again."
-  },
-  "wb_error_network": {
-    "message": "Weft could not reach the configured service. Check your network and endpoint."
-  },
   "wb_error_page_extraction": {
     "message": "Weft could not read this page. Reload it and try again."
   },
-  "wb_error_rate_limit": {
-    "message": "The service is busy or its usage limit was reached. Try again shortly."
-  },
   "wb_error_search": {
     "message": "Web search failed. Check the search provider settings and try again."
-  },
-  "wb_error_server": {
-    "message": "The service returned an error. Try again shortly."
   },
   "wb_error_session_changed": {
     "message": "The session changed while Weft was preparing the result. Please try again."
@@ -1336,9 +1258,6 @@
   },
   "wb_error_page_changed": {
     "message": "The source page changed during the operation. Return to the original page and try again."
-  },
-  "wb_error_timeout": {
-    "message": "The operation took too long. Please try again."
   },
   "diagram_copy_code": {
     "message": "Copy Code"
@@ -1520,9 +1439,6 @@
   "pdf_viewer_open_original": {
     "message": "Open original"
   },
-  "pdf_viewer_save_selection": {
-    "message": "Save to Session"
-  },
   "pdf_viewer_selection_actions": {
     "message": "PDF selection actions"
   },
@@ -1555,6 +1471,21 @@
   },
   "pdf_viewer_load_failed": {
     "message": "This PDF could not be opened in the Weft reader."
+  },
+  "pdf_viewer_too_many_pages": {
+    "message": "This PDF has too many pages. The Weft reader supports up to %s pages."
+  },
+  "pdf_viewer_timeout": {
+    "message": "Opening this PDF took too long. Try a smaller file or check your connection."
+  },
+  "pdf_viewer_page_too_complex": {
+    "message": "Page %s is too complex to display safely. Open the original PDF to view it."
+  },
+  "pdf_viewer_page_timeout": {
+    "message": "Page %s took too long to render. Change the zoom level or reopen the reader to retry."
+  },
+  "pdf_viewer_page_render_failed": {
+    "message": "Page %s could not be displayed. Open the original PDF to view it."
   },
   "pdf_viewer_selection_saved": {
     "message": "Selection saved to %s."

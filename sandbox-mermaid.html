@@ -30,6 +30,15 @@
             if (parentWindow !== window) parentWindow.postMessage(message, '*');
         }
 
+        function rejectsExternalSvgResource(svg) {
+            const source = String(svg || '');
+            // The sandbox CSP is the primary network boundary. Reject obvious
+            // resource-bearing attributes before the SVG reaches the live DOM
+            // as an additional fail-closed layer.
+            return /\b(?:href|xlink:href|src)\s*=\s*["']\s*(?:https?:|\/\/)/iu.test(source)
+                || /\burl\s*\(\s*["']?\s*(?:https?:|\/\/)/iu.test(source);
+        }
+
         /**
          * Mermaid emits most diagram colours in a <style> block and class
          * selectors. The parent page intentionally removes both from untrusted
@@ -125,6 +134,9 @@ ${code}`;
                 try {
                     const id = `mermaid-${++renderCounter}`;
                     const { svg } = await mermaid.render(id, safeCode);
+                    if (rejectsExternalSvgResource(svg)) {
+                        throw new Error('External resources are not allowed in diagrams.');
+                    }
                     container.innerHTML = svg;
                     const renderedRoot = container.querySelector('svg');
                     const renderedSvg = inlineSvgPresentation(renderedRoot);

@@ -3,8 +3,8 @@
     "name": "__MSG_extName__",
     "description": "__MSG_extDescription__",
     "default_locale": "en",
-    "version": "3.0.2",
-    "version_name": "3.0.2-beta",
+    "version": "3.1.0",
+    "version_name": "3.1.0-beta",
     "permissions": [
         "storage",
         "unlimitedStorage",
@@ -52,6 +52,6 @@
     },
     "content_security_policy": {
         "extension_pages": "script-src 'self'; object-src 'self'; img-src 'self' data:",
-        "sandbox": "sandbox allow-scripts allow-forms allow-popups allow-modals; script-src 'self' 'unsafe-inline' 'unsafe-eval'"
+        "sandbox": "sandbox allow-scripts; default-src 'none'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'unsafe-inline'; img-src data:; connect-src 'none'; object-src 'none'; frame-src 'none'; media-src 'none'; font-src 'none'; base-uri 'none'; form-action 'none'"
     }
 }

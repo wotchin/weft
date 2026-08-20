@@ -139,7 +139,7 @@ const renderMarkdown = (() => {
     function render(text) {
         // If the response already contains raw HTML (reports, tables, SVG), pass through
         if (/<(table|div|h[1-6]|ul|ol|svg|style|html|body|head)\b/i.test(text)) {
-            let html = text.replace(/```html\s*([\s\S]*?)```/g, '$1');
+            const html = text.replace(/```html\s*([\s\S]*?)```/g, '$1');
             return html;
         }
 

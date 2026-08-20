@@ -1,6 +1,6 @@
 # Weft 技术白皮书
 
-> 版本：3.0.2-beta ｜ 最后更新：2026-08-05 ｜ License: AGPL-3.0
+> 版本：3.1.0-beta ｜ 最后更新：2026-08-20 ｜ License: AGPL-3.0
 > 仓库：<https://github.com/wotchin/weft>
 
 ---
@@ -85,7 +85,7 @@ flowchart LR
 
   subgraph CONTENT["content-assist.js (任意页面)"]
     Toolbar[Selection Toolbar]
-    Highlight[Highlighter]
+    Highlight[Annotation Engine]
   end
 
   subgraph WB["chat.html (Side Panel / Window)"]
@@ -145,7 +145,7 @@ Weft 的状态完全在用户设备上，无远端同步，无云备份。它使
 | `sessions` | `{ [name]: snippet[] }` | 所有 Session 的所有片段 |
 | `chat` | `{ [name]: turn[] }` | 每 Session 的对话历史，**滑动窗口 `MAX_CHAT_TURNS=100`**（`lib/store.js`） |
 | `currentSession` | string | 当前激活的 Session |
-| `llmConfig` | 对象（schema v5） | 默认 `provider='openai'`, `model='gpt-5.6-luna'`, `maxTokens=2000`, `temperature=0.7`, `visionMode='auto'`, `reasoning='auto'` |
+| `llmConfig` | 对象（schema v8） | 默认 `provider='openai'`, `model='gpt-5.6-luna'`, `maxTokens=2000`, `temperature=0.7`, `visionMode='auto'`, `reasoning='off'` |
 | `pendingSmartReads` | 队列 | Smart Read 排队等待，`SMART_READ_REQUEST_QUEUE_LIMIT=64` |
 | `searchConfig` | 对象 | Deep Search 的服务商与参数 |
 
@@ -480,7 +480,7 @@ deepSearchBtn click
 
 - 用一个**全局递增的 `webNumber`** 作为 `[W#]` 编号，保证跨轮稳定性；
 - 每个 group 字符预算 = `totalGroups / groups.length`；每组内对每个结果再分配；**每组 ≤6 个结果**；
-- **URL 规范化**（复用 `Highlighter.comparableUrl`）：剥离 utm_* / fbclid / gclid / dclid / msclkid / gbraid / wbraid / yclid / twclid / mc_cid / mc_eid / vero_* / _hsenc / _hsmi / hscid / hsctatracking / mkt_tok / igshid 等参数；
+- **URL 规范化**（`canonicalSearchResultUrl`）：剥离常见 `utm_*` / `fbclid` / `gclid` / `mc_cid` / `mc_eid` 参数；
 - 按 canonical URL 去重；标题包含 W# 标签。
 
 ### 8.4 关键指令："补充，而非取代"

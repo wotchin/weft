@@ -122,8 +122,9 @@ _The inline preview is accelerated and silent. Click it to open the full-quality
 
 ## 🚀 Install
 
-### Option A — Store (recommended when available)
-Available soon on the Chrome Web Store. Until then, use the dev build below.
+### Option A — Chrome Web Store (recommended)
+
+[Install Weft from the Chrome Web Store](https://chromewebstore.google.com/detail/weft/obcegdkdebekhmaipdnnkpmhapjncnbm).
 
 ### Option B — Load unpacked (development / sideload)
 
@@ -161,7 +162,7 @@ What you see is what runs in the browser.
 | Rendering | `markdown.js`, `lib/render.js`, `lib/diagram-generator.js` | Markdown + citation + Mermaid rendering |
 | LLM layer | `lib/llm-client.js`, `lib/providers.js` | Multi-provider chatting, JSON mode, streaming |
 | Retrieval | `lib/rag-engine.js`, `lib/rag-indexer.js`, `lib/bm25.js`, `lib/vector-index.js`, `lib/tokenizer.js` | Hybrid BM25 + embedding RAG |
-| Extraction | `lib/page-extractor.js`, `lib/pdf-extractor.js`, `lib/smart-read.js`, `lib/highlighter.js` | Web/PDF extraction, source verification, on-page highlighting |
+| Extraction | `lib/page-extractor.js`, `lib/pdf-extractor.js`, `lib/smart-read.js`, `content-assist.js` | Web/PDF extraction, source verification, on-page highlighting |
 | Agent | `lib/agent-runner.js`, `lib/agent-tools.js` | Bounded JSON actions, local Session retrieval and deterministic calculations |
 | Search | `lib/search-provider.js` | User-approved SearXNG / Tavily / Brave searches |
 | Persistence | `lib/store.js`, `lib/idb.js` | chrome.storage + IndexedDB sessions, chat, images |

@@ -143,9 +143,6 @@
   "wb_nothing_to_export": {
     "message": "当前 Session 没有可导出的 Snippets。"
   },
-  "wb_takeaways": {
-    "message": "关键要点"
-  },
   "wb_smart_read": {
     "message": "智能阅读"
   },
@@ -194,14 +191,8 @@
   "smart_read_saving": {
     "message": "正在创建会话…"
   },
-  "smart_read_highlighting": {
-    "message": "正在标注页面…"
-  },
   "smart_read_done": {
     "message": "已将 %s 条核验原文保存到「%n」。"
-  },
-  "smart_read_done_partial": {
-    "message": "已将 %s 条原文保存到「%n」；另有 %m 条未能在页面中定位。"
   },
   "smart_read_no_content": {
     "message": "Weft 未找到足够的可读内容。如果这是会员文章，请先确认正文已经完整加载并显示。"
@@ -248,9 +239,6 @@
   "smart_read_index_label": {
     "message": "推荐链接"
   },
-  "smart_read_highlighted": {
-    "message": "已高亮 %h/%t 条原文"
-  },
   "smart_read_visible_only": {
     "message": "仅分析了页面当前已经渲染的内容；Weft 不会绕过访问限制，也不会抓取隐藏正文。"
   },
@@ -260,26 +248,17 @@
   "smart_read_sources": {
     "message": "核验原文："
   },
-  "smart_read_reused": {
-    "message": "已重新打开「%n」；这个页面和阅读重点此前已经保存。"
-  },
   "wb_deep_search": {
     "message": "深度搜索"
   },
   "wb_diagram": {
     "message": "生成图表"
   },
-  "wb_context_title": {
-    "message": "会话上下文"
-  },
   "wb_input_placeholder": {
     "message": "围绕当前 Session 提问，或从上方选择一个场景…"
   },
   "wb_planning": {
     "message": "规划中…"
-  },
-  "wb_custom_placeholder": {
-    "message": "输入你的自定义提示词…"
   },
   "wb_error_prefix": {
     "message": "错误"
@@ -334,12 +313,6 @@
   },
   "footer_tagline": {
     "message": "将所知织成洞见"
-  },
-  "popup_shown": {
-    "message": "已标注 %s 处"
-  },
-  "popup_shown_none": {
-    "message": "本页没有匹配内容"
   },
   "time_just_now": {
     "message": "刚刚"
@@ -433,12 +406,6 @@
   },
   "wb_using_snippets": {
     "message": "%s 条片段"
-  },
-  "wb_analysing": {
-    "message": "分析中…"
-  },
-  "wb_highlighting": {
-    "message": "标注中…"
   },
   "sc_report": {
     "message": "报告"
@@ -629,9 +596,6 @@
   "settings_search_ok": {
     "message": "搜索正常——返回了 %s 条结果。"
   },
-  "settings_search_fail": {
-    "message": "搜索失败："
-  },
   "settings_search_note_self": {
     "message": "SearXNG 实例需要自行部署。"
   },
@@ -640,9 +604,6 @@
   },
   "settings_search_note_brave": {
     "message": "付费：Brave 按请求量计费。"
-  },
-  "settings_search_json_note": {
-    "message": "该实例必须开启 JSON 输出格式，需要自建。"
   },
   "menu_save_to_session": {
     "message": "保存到会话"
@@ -1199,17 +1160,11 @@
   "action_copy_failed": {
     "message": "复制失败"
   },
-  "search_plan_complete": {
-    "message": "搜索完成，正在生成回答…"
-  },
   "search_plan_empty": {
     "message": "无法生成搜索计划，请换一种方式描述问题。"
   },
   "deep_search_need_session": {
     "message": "深度搜索会从当前 Session 出发。请先使用智能阅读，或至少保存一条相关片段。"
-  },
-  "deep_search_provider_required": {
-    "message": "使用深度搜索前，请先在设置中配置网络搜索服务。"
   },
   "search_plan_scope": {
     "message": "基于“%s” · 将通过 %p 搜索"
@@ -1253,9 +1208,6 @@
   "wb_generated_output_source": {
     "message": "Weft 生成结果"
   },
-  "wb_generated_tag": {
-    "message": "生成内容"
-  },
   "wb_image_cached_hint": {
     "message": "图片已缓存，可以发送给模型"
   },
@@ -1278,7 +1230,7 @@
     "message": "某个网页"
   },
   "wb_regarding_text": {
-    "message": "关于 %s 中的这段文字：\n\n“%t”\n\n%q"
+    "message": "问题：%q\n\n来自 %s 的上下文：\n\n“%t”"
   },
   "wb_word_count": {
     "message": "%s 字"
@@ -1292,41 +1244,11 @@
   "pdf_page_label": {
     "message": "第 %s 页"
   },
-  "wb_error_abort": {
-    "message": "请求已取消。"
-  },
-  "wb_error_api_key": {
-    "message": "请先在设置中添加 API 密钥，再使用 AI 功能。"
-  },
-  "wb_error_auth": {
-    "message": "API 密钥被拒绝，请检查服务商设置。"
-  },
-  "wb_error_bad_request": {
-    "message": "模型无法处理该请求，请检查模型设置。"
-  },
-  "wb_error_context_length": {
-    "message": "所选内容过长，超出了当前模型的上下文限制。"
-  },
-  "wb_error_empty_response": {
-    "message": "模型返回了空响应。"
-  },
-  "wb_error_generic": {
-    "message": "出现了问题，请重试。"
-  },
-  "wb_error_network": {
-    "message": "Weft 无法连接已配置的服务，请检查网络和接口地址。"
-  },
   "wb_error_page_extraction": {
     "message": "Weft 无法读取当前页面，请重新加载后重试。"
   },
-  "wb_error_rate_limit": {
-    "message": "服务正忙或使用额度已用完，请稍后重试。"
-  },
   "wb_error_search": {
     "message": "联网搜索失败，请检查搜索服务商设置后重试。"
-  },
-  "wb_error_server": {
-    "message": "服务返回错误，请稍后重试。"
   },
   "wb_error_session_changed": {
     "message": "Weft 准备结果时会话发生了变化，请重试。"
@@ -1336,9 +1258,6 @@
   },
   "wb_error_page_changed": {
     "message": "操作期间来源页面发生了变化，请返回原页面后重试。"
-  },
-  "wb_error_timeout": {
-    "message": "操作超时，请重试。"
   },
   "diagram_copy_code": {
     "message": "复制代码"
@@ -1520,9 +1439,6 @@
   "pdf_viewer_open_original": {
     "message": "打开原始 PDF"
   },
-  "pdf_viewer_save_selection": {
-    "message": "保存到 Session"
-  },
   "pdf_viewer_selection_actions": {
     "message": "PDF 划选操作"
   },
@@ -1555,6 +1471,21 @@
   },
   "pdf_viewer_load_failed": {
     "message": "无法在 Weft 阅读器中打开此 PDF。"
+  },
+  "pdf_viewer_too_many_pages": {
+    "message": "此 PDF 页数过多。Weft 阅读器最多支持 %s 页。"
+  },
+  "pdf_viewer_timeout": {
+    "message": "打开此 PDF 超时。请尝试更小的文件，或检查网络连接。"
+  },
+  "pdf_viewer_page_too_complex": {
+    "message": "第 %s 页过于复杂，无法安全显示。请打开原始 PDF 查看。"
+  },
+  "pdf_viewer_page_timeout": {
+    "message": "第 %s 页渲染超时。请调整缩放比例或重新打开阅读器后重试。"
+  },
+  "pdf_viewer_page_render_failed": {
+    "message": "无法显示第 %s 页。请打开原始 PDF 查看。"
   },
   "pdf_viewer_selection_saved": {
     "message": "已将划选内容保存到 %s。"

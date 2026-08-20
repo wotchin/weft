@@ -43,11 +43,43 @@ document.addEventListener('DOMContentLoaded', async () => {
     let toastTimer = null;
     let locatingUnknown = false;
     let locateQueued = false;
+    let locateController = null;
+    let locateAttemptDocument = null;
+    let locateAttemptSession = '';
+    let locateAttemptedKeys = new Set();
+    let locateBatchChainRemaining = 0;
+    let locateBatchChainDeadline = 0;
+    let locateRestartQueued = false;
+    let locateStoragePatchExpectations = [];
+    let locateStoragePatchTimer = null;
     let sessionLoadGeneration = 0;
     let storageRefreshTimer = null;
     let pagePositionFrame = null;
+    let pageOffsetFrame = null;
+    let pageOffsets = [];
+    let loadDeadlineTimer = null;
+    let viewerTimedOut = false;
+    let viewerDisposed = false;
+    let shutdownPromise = null;
     const viewerController = new AbortController();
     const MAX_RENDERED_PAGES = 12;
+    const MAX_PDF_PAGES = Number(PDFExtractor.DEFAULT_LIMITS?.maxPages) || 300;
+    const MAX_VIEWPORT_DIMENSION = 10_000;
+    const MAX_VIEWPORT_PIXELS = 25_000_000;
+    const MAX_CANVAS_DIMENSION = 8_192;
+    const MAX_CANVAS_PIXELS = 16_000_000;
+    const MAX_RENDER_TEXT_ITEMS = 20_000;
+    const MAX_RENDER_TEXT_CHARS = 1_000_000;
+    const PAGE_STAGE_TIMEOUT_MS = 30_000;
+    const MAX_LOCATE_UNIQUE_NEEDLES = 64;
+    const MAX_LOCATE_AUTO_BATCHES = 2;
+    const MAX_LOCATE_COMPARISONS = MAX_PDF_PAGES * MAX_LOCATE_UNIQUE_NEEDLES;
+    const MAX_LOCATE_PAGE_CHARS = Number(PDFExtractor.DEFAULT_LIMITS?.maxPageTextChars) || 250000;
+    const MAX_LOCATE_ITEMS_PER_PAGE = Number(PDFExtractor.DEFAULT_LIMITS?.maxItemsPerPage) || 50000;
+    const MAX_LOCATE_TOTAL_CHARS = 25_000_000;
+    const LOCATE_TIMEOUT_MS = 20_000;
+    const LOCATE_CHAIN_TIMEOUT_MS = 25_000;
+    const VIEWER_LOAD_TIMEOUT_MS = 180_000;
     const renderedPages = new Map();
     const renderingPages = new Map();
 
@@ -60,6 +92,187 @@ document.addEventListener('DOMContentLoaded', async () => {
         viewerStatus.textContent = value || '';
     }
 
+    function viewerAbortError() {
+        if (viewerTimedOut) {
+            const error = new Error('The PDF viewer load deadline was exceeded.');
+            error.name = 'TimeoutError';
+            error.code = 'PDF_VIEWER_TIMEOUT';
+            return error;
+        }
+        const reason = viewerController.signal.reason;
+        if (reason instanceof Error) return reason;
+        const error = new Error('The PDF viewer was closed.');
+        error.name = 'AbortError';
+        error.code = 'PDF_ABORTED';
+        return error;
+    }
+
+    function throwIfViewerAborted() {
+        if (viewerController.signal.aborted) throw viewerAbortError();
+    }
+
+    function waitWithSignal(value, signal, errorFactory = viewerAbortError) {
+        if (!signal) return Promise.resolve(value);
+        if (signal.aborted) return Promise.reject(errorFactory());
+        return new Promise((resolve, reject) => {
+            let settled = false;
+            const finish = (callback, result) => {
+                if (settled) return;
+                settled = true;
+                signal.removeEventListener('abort', onAbort);
+                callback(result);
+            };
+            const onAbort = () => finish(reject, errorFactory());
+            signal.addEventListener('abort', onAbort, { once: true });
+            Promise.resolve(value).then(
+                (result) => finish(resolve, result),
+                (error) => finish(reject, error)
+            );
+        });
+    }
+
+    function pageAbortError() {
+        const error = new Error('PDF page rendering was cancelled.');
+        error.name = 'AbortError';
+        error.code = 'PDF_PAGE_ABORTED';
+        return error;
+    }
+
+    function pageStageTimeoutError(stage) {
+        const error = new Error(`PDF page ${stage} exceeded its deadline.`);
+        error.name = 'TimeoutError';
+        error.code = 'PDF_PAGE_RENDER_TIMEOUT';
+        return error;
+    }
+
+    function pageResourceLimitError(detail) {
+        const error = new Error(`PDF page exceeds the safe ${detail} limit.`);
+        error.name = 'RangeError';
+        error.code = 'PDF_PAGE_RESOURCE_LIMIT';
+        return error;
+    }
+
+    function cancelPageState(state, reason = pageAbortError()) {
+        if (!state) return;
+        if (!state.controller.signal.aborted) state.controller.abort(reason);
+        try { state.renderTask?.cancel?.(); } catch {}
+        try { state.textLayer?.cancel?.(); } catch {}
+    }
+
+    async function waitForPageStage(factory, state, stage) {
+        if (state.controller.signal.aborted) {
+            throw state.controller.signal.reason instanceof Error
+                ? state.controller.signal.reason
+                : pageAbortError();
+        }
+        const timer = setTimeout(() => {
+            cancelPageState(state, pageStageTimeoutError(stage));
+        }, PAGE_STAGE_TIMEOUT_MS);
+        try {
+            return await waitWithSignal(
+                Promise.resolve().then(factory),
+                state.controller.signal,
+                () => state.controller.signal.reason instanceof Error
+                    ? state.controller.signal.reason
+                    : pageAbortError()
+            );
+        } finally {
+            clearTimeout(timer);
+        }
+    }
+
+    function validatedPageViewport(viewport) {
+        const width = Number(viewport?.width);
+        const height = Number(viewport?.height);
+        const pixels = width * height;
+        if (
+            !Number.isFinite(width) || !Number.isFinite(height) ||
+            width <= 0 || height <= 0 ||
+            width > MAX_VIEWPORT_DIMENSION || height > MAX_VIEWPORT_DIMENSION ||
+            !Number.isFinite(pixels) || pixels > MAX_VIEWPORT_PIXELS
+        ) throw pageResourceLimitError('viewport');
+        return { width, height, pixels };
+    }
+
+    function boundedCanvasOutput(viewport, deviceScale) {
+        const { width, height, pixels } = validatedPageViewport(viewport);
+        const requestedScale = Math.min(Math.max(Number(deviceScale) || 1, 1), 2);
+        const outputScale = Math.min(
+            requestedScale,
+            MAX_CANVAS_DIMENSION / width,
+            MAX_CANVAS_DIMENSION / height,
+            Math.sqrt(MAX_CANVAS_PIXELS / pixels)
+        );
+        if (!Number.isFinite(outputScale) || outputScale <= 0) {
+            throw pageResourceLimitError('canvas');
+        }
+        const canvasWidth = Math.max(1, Math.floor(width * outputScale));
+        const canvasHeight = Math.max(1, Math.floor(height * outputScale));
+        if (
+            canvasWidth > MAX_CANVAS_DIMENSION || canvasHeight > MAX_CANVAS_DIMENSION ||
+            canvasWidth * canvasHeight > MAX_CANVAS_PIXELS
+        ) throw pageResourceLimitError('canvas');
+        return { outputScale, canvasWidth, canvasHeight };
+    }
+
+    function boundedPlaceholderBox(widthValue, heightValue) {
+        const width = Number(widthValue);
+        const height = Number(heightValue);
+        if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) {
+            return { width: 816, height: 1056 };
+        }
+        const pixels = width * height;
+        const scale = Math.min(
+            1,
+            MAX_VIEWPORT_DIMENSION / width,
+            MAX_VIEWPORT_DIMENSION / height,
+            Math.sqrt(MAX_VIEWPORT_PIXELS / pixels)
+        );
+        return {
+            width: Math.max(1, Math.ceil(width * scale)),
+            height: Math.max(1, Math.ceil(height * scale)),
+        };
+    }
+
+    function validatedRenderTextItems(textContent) {
+        const items = Array.isArray(textContent?.items) ? textContent.items : null;
+        if (!items || items.length > MAX_RENDER_TEXT_ITEMS) {
+            throw pageResourceLimitError('text item');
+        }
+        let characters = 0;
+        for (const item of items) {
+            if (typeof item?.str !== 'string') continue;
+            characters += item.str.length;
+            if (characters > MAX_RENDER_TEXT_CHARS) {
+                throw pageResourceLimitError('text character');
+            }
+        }
+        return items;
+    }
+
+    function showPageError(pageNumber, error) {
+        const element = pageElement(pageNumber);
+        if (!element || viewerDisposed) return;
+        element.querySelectorAll('canvas,.textLayer').forEach((node) => node.remove());
+        element.classList.remove('is-rendered');
+        element.classList.add('has-render-error');
+        const placeholder = element.querySelector('.page-placeholder');
+        if (placeholder) {
+            const key = error?.code === 'PDF_PAGE_RESOURCE_LIMIT'
+                ? 'pdf_viewer_page_too_complex'
+                : error?.code === 'PDF_PAGE_RENDER_TIMEOUT'
+                    ? 'pdf_viewer_page_timeout'
+                    : 'pdf_viewer_page_render_failed';
+            const fallbacks = {
+                pdf_viewer_page_too_complex: 'Page %s is too complex to display safely. Open the original PDF to view it.',
+                pdf_viewer_page_timeout: 'Page %s took too long to render. Change the zoom level or reopen the reader to retry.',
+                pdf_viewer_page_render_failed: 'Page %s could not be displayed. Open the original PDF to view it.',
+            };
+            placeholder.textContent = message(key, fallbacks[key]).replace('%s', String(pageNumber));
+        }
+        pageObserver?.unobserve(element);
+    }
+
     function showToast(value) {
         viewerToast.textContent = value;
         viewerToast.classList.add('is-visible');
@@ -68,12 +281,24 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
     function fail(error) {
+        if (viewerDisposed) return;
         console.error('[Weft] PDF viewer failed:', error);
         viewerError.hidden = false;
-        viewerError.textContent = message(
+        const code = viewerTimedOut ? 'PDF_VIEWER_TIMEOUT' : String(error?.code || '');
+        const errors = {
+            PDF_TOO_MANY_PAGES: message(
+                'pdf_viewer_too_many_pages',
+                'This PDF has too many pages. The Weft reader supports up to %s pages.'
+            ).replace('%s', String(MAX_PDF_PAGES)),
+            PDF_VIEWER_TIMEOUT: message(
+                'pdf_viewer_timeout',
+                'Opening this PDF took too long. Try a smaller file or check your connection.'
+            ),
+        };
+        viewerError.textContent = errors[code] || message(
             'pdf_viewer_load_failed',
             'This PDF could not be opened in the Weft reader.'
-        ) + (error?.code ? ` (${error.code})` : '');
+        );
         setStatus('');
     }
 
@@ -211,7 +436,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         snippetList.appendChild(fragment);
     }
 
-    async function loadSession(name) {
+    async function loadSession(name, { locateUnknown = true } = {}) {
         const generation = ++sessionLoadGeneration;
         const sessions = await Store.getSessions();
         const names = Object.keys(sessions);
@@ -238,27 +463,44 @@ document.addEventListener('DOMContentLoaded', async () => {
             : [];
         renderSnippetList();
         reapplyHighlights();
-        if (pdfDocument) locateUnknownSnippetPages().catch(() => {});
+        if (pdfDocument && locateUnknown) requestUnknownPageLocation();
     }
 
     function pageElement(pageNumber) {
         return pdfPages.querySelector(`.pdf-page[data-page-number="${pageNumber}"]`);
     }
 
+    function refreshPageOffsets() {
+        pageOffsets = Array.from(pdfPages.children, (element) => element.offsetTop);
+    }
+
+    function schedulePageOffsetsRefresh() {
+        if (pageOffsetFrame !== null) return;
+        pageOffsetFrame = requestAnimationFrame(() => {
+            pageOffsetFrame = null;
+            refreshPageOffsets();
+            updateCurrentPage();
+        });
+    }
+
     function updateCurrentPage() {
         if (!pdfDocument) return;
-        const scrollTop = pdfScroll.scrollTop;
-        let bestPage = currentPage;
-        let bestDistance = Infinity;
-        for (const element of pdfPages.children) {
-            const distance = Math.abs(element.offsetTop - scrollTop - 18);
-            if (distance < bestDistance) {
-                bestDistance = distance;
-                bestPage = Number(element.dataset.pageNumber) || bestPage;
+        if (pageOffsets.length !== pdfDocument.numPages) refreshPageOffsets();
+        const target = pdfScroll.scrollTop + 18;
+        let low = 0;
+        let high = pageOffsets.length - 1;
+        let found = 0;
+        while (low <= high) {
+            const middle = (low + high) >> 1;
+            if (pageOffsets[middle] <= target) {
+                found = middle;
+                low = middle + 1;
+            } else {
+                high = middle - 1;
             }
         }
-        currentPage = bestPage;
-        pageInput.value = String(bestPage);
+        currentPage = Math.max(1, Math.min(pdfDocument.numPages, found + 1));
+        pageInput.value = String(currentPage);
     }
 
     function scheduleCurrentPageUpdate() {
@@ -280,30 +522,68 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     function disposeRenderedPages() {
         for (const data of renderedPages.values()) {
-            try { data.renderTask?.cancel?.(); } catch {}
-            try { data.textLayer?.cancel?.(); } catch {}
+            cancelPageState(data);
             try { data.page?.cleanup?.(); } catch {}
         }
         for (const data of renderingPages.values()) {
-            try { data.renderTask?.cancel?.(); } catch {}
-            try { data.textLayer?.cancel?.(); } catch {}
+            cancelPageState(data);
             try { data.page?.cleanup?.(); } catch {}
         }
         renderedPages.clear();
         renderingPages.clear();
     }
 
+    function destroyPdfRuntime() {
+        if (shutdownPromise) return shutdownPromise;
+        shutdownPromise = (async () => {
+            renderGeneration++;
+            pageObserver?.disconnect();
+            disposeRenderedPages();
+            window.cancelAnimationFrame(pageOffsetFrame);
+            pageOffsetFrame = null;
+            pageOffsets = [];
+            const task = loadingTask;
+            const worker = pdfWorker;
+            const port = workerPort;
+            loadingTask = null;
+            pdfWorker = null;
+            workerPort = null;
+            pdfDocument = null;
+            let forceTerminateTimer = null;
+            if (port) {
+                forceTerminateTimer = setTimeout(() => {
+                    try { port.terminate?.(); } catch {}
+                }, 1500);
+            }
+            const boundedCleanup = async (callback) => {
+                let timer = null;
+                try {
+                    await Promise.race([
+                        Promise.resolve().then(callback).catch(() => {}),
+                        new Promise((resolve) => { timer = setTimeout(resolve, 1600); }),
+                    ]);
+                } finally {
+                    clearTimeout(timer);
+                }
+            };
+            await boundedCleanup(() => task?.destroy?.());
+            await boundedCleanup(() => worker?.destroy?.());
+            if (forceTerminateTimer) clearTimeout(forceTerminateTimer);
+            try { port?.terminate?.(); } catch {}
+        })();
+        return shutdownPromise;
+    }
+
     function releaseRenderedPage(pageNumber) {
         const data = renderedPages.get(pageNumber);
         if (!data) return;
-        try { data.renderTask?.cancel?.(); } catch {}
-        try { data.textLayer?.cancel?.(); } catch {}
+        cancelPageState(data);
         try { data.page?.cleanup?.(); } catch {}
         renderedPages.delete(pageNumber);
         const element = pageElement(pageNumber);
         if (!element) return;
         element.querySelectorAll('canvas,.textLayer').forEach((node) => node.remove());
-        element.classList.remove('is-rendered');
+        element.classList.remove('is-rendered', 'has-render-error');
         // Re-observing resets the intersection state so returning to an
         // evicted page schedules a fresh render.
         pageObserver?.unobserve(element);
@@ -326,8 +606,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         disposeRenderedPages();
         pdfPages.innerHTML = '';
         if (!pdfDocument) return;
-        const width = Math.round(basePageSize.width * zoom);
-        const height = Math.round(basePageSize.height * zoom);
+        const placeholderBox = boundedPlaceholderBox(basePageSize.width * zoom, basePageSize.height * zoom);
+        const { width, height } = placeholderBox;
         const fragment = document.createDocumentFragment();
         for (let pageNumber = 1; pageNumber <= pdfDocument.numPages; pageNumber++) {
             const element = document.createElement('section');
@@ -343,11 +623,14 @@ document.addEventListener('DOMContentLoaded', async () => {
             fragment.appendChild(element);
         }
         pdfPages.appendChild(fragment);
+        refreshPageOffsets();
         const generation = renderGeneration;
         pageObserver = new IntersectionObserver((entries) => {
             for (const entry of entries) {
                 if (!entry.isIntersecting || generation !== renderGeneration) continue;
-                renderPage(Number(entry.target.dataset.pageNumber)).catch(fail);
+                renderPage(Number(entry.target.dataset.pageNumber)).catch((error) => {
+                    console.warn('[Weft] PDF page render failed:', error);
+                });
             }
         }, { root: pdfScroll, rootMargin: '1200px 0px', threshold: 0.01 });
         for (const element of pdfPages.children) pageObserver.observe(element);
@@ -359,38 +642,53 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (renderedPages.has(pageNumber)) return renderedPages.get(pageNumber);
         if (renderingPages.has(pageNumber)) return renderingPages.get(pageNumber).promise;
         const generation = renderGeneration;
-        const state = { promise: null, page: null, renderTask: null, textLayer: null };
+        const state = {
+            promise: null,
+            page: null,
+            renderTask: null,
+            textLayer: null,
+            controller: new AbortController(),
+        };
         state.promise = (async () => {
             const element = pageElement(pageNumber);
             if (!element) return null;
-            const page = await pdfDocument.getPage(pageNumber);
+            element.classList.remove('has-render-error');
+            const page = await waitForPageStage(
+                () => pdfDocument.getPage(pageNumber),
+                state,
+                'load'
+            );
             state.page = page;
             if (generation !== renderGeneration) {
-                try { page.cleanup?.(); } catch {}
-                return null;
+                throw pageAbortError();
             }
             const viewport = page.getViewport({ scale: zoom });
+            validatedPageViewport(viewport);
             element.style.width = `${Math.ceil(viewport.width)}px`;
             element.style.height = `${Math.ceil(viewport.height)}px`;
             element.style.setProperty('--scale-factor', String(zoom));
+            schedulePageOffsetsRefresh();
 
             const canvas = document.createElement('canvas');
-            const outputScale = Math.min(Number(globalThis.devicePixelRatio) || 1, 2);
-            canvas.width = Math.max(1, Math.floor(viewport.width * outputScale));
-            canvas.height = Math.max(1, Math.floor(viewport.height * outputScale));
+            const { outputScale, canvasWidth, canvasHeight } = boundedCanvasOutput(
+                viewport,
+                globalThis.devicePixelRatio
+            );
+            canvas.width = canvasWidth;
+            canvas.height = canvasHeight;
             canvas.style.width = `${Math.ceil(viewport.width)}px`;
             canvas.style.height = `${Math.ceil(viewport.height)}px`;
             element.appendChild(canvas);
             const transform = outputScale === 1 ? null : [outputScale, 0, 0, outputScale, 0, 0];
             state.renderTask = page.render({ canvas, viewport, transform, background: '#ffffff' });
-
-            const textContentPromise = page.getTextContent({
+            await waitForPageStage(() => state.renderTask.promise, state, 'canvas render');
+            const textContent = await waitForPageStage(() => page.getTextContent({
                 includeMarkedContent: false,
                 disableNormalization: false,
-            });
-            await state.renderTask.promise;
-            const textContent = await textContentPromise;
-            if (generation !== renderGeneration) return null;
+            }), state, 'text extraction');
+            const sourceItems = validatedRenderTextItems(textContent)
+                .filter((item) => typeof item?.str === 'string');
+            if (generation !== renderGeneration) throw pageAbortError();
             const textContainer = document.createElement('div');
             textContainer.className = 'textLayer';
             element.appendChild(textContainer);
@@ -399,13 +697,10 @@ document.addEventListener('DOMContentLoaded', async () => {
                 container: textContainer,
                 viewport,
             });
-            await state.textLayer.render();
-            if (generation !== renderGeneration) return null;
+            await waitForPageStage(() => state.textLayer.render(), state, 'text layer render');
+            if (generation !== renderGeneration) throw pageAbortError();
             const textItems = state.textLayer.textContentItemsStr || [];
             const textDivs = state.textLayer.textDivs || [];
-            const sourceItems = Array.isArray(textContent.items)
-                ? textContent.items.filter((item) => typeof item?.str === 'string')
-                : [];
             const textItemData = textItems.map((text, index) => ({
                 ...(sourceItems[index] || {}),
                 text,
@@ -414,6 +709,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 page,
                 renderTask: state.renderTask,
                 textLayer: state.textLayer,
+                controller: state.controller,
                 textItems,
                 textDivs,
                 textItemData,
@@ -424,8 +720,14 @@ document.addEventListener('DOMContentLoaded', async () => {
             pruneRenderedPages(pageNumber);
             return result;
         })().catch((error) => {
-            if (error?.name === 'RenderingCancelledException') return null;
-            throw error;
+            cancelPageState(state, error instanceof Error ? error : pageAbortError());
+            try { state.page?.cleanup?.(); } catch {}
+            const cancelled = error?.name === 'AbortError' || error?.name === 'RenderingCancelledException';
+            if (!cancelled && generation === renderGeneration && !viewerController.signal.aborted) {
+                console.warn(`[Weft] PDF page ${pageNumber} could not be rendered:`, error);
+                showPageError(pageNumber, error);
+            }
+            return null;
         }).finally(() => {
             if (renderingPages.get(pageNumber) === state) renderingPages.delete(pageNumber);
         });
@@ -433,69 +735,302 @@ document.addEventListener('DOMContentLoaded', async () => {
         return state.promise;
     }
 
-    async function locateUnknownSnippetPages() {
-        if (!pdfDocument || !currentSession) return;
+    function locateAbortError() {
+        const error = new Error('PDF snippet location was cancelled.');
+        error.name = 'AbortError';
+        error.code = 'PDF_LOCATE_ABORTED';
+        return error;
+    }
+
+    function startLocateBatchChain() {
+        locateBatchChainRemaining = MAX_LOCATE_AUTO_BATCHES;
+        locateBatchChainDeadline = Date.now() + LOCATE_CHAIN_TIMEOUT_MS;
+    }
+
+    function launchUnknownPageLocation() {
+        Promise.resolve().then(() => locateUnknownSnippetPages()).catch((error) => {
+            if (error?.name !== 'AbortError') console.warn('[Weft] PDF page location failed:', error);
+        });
+    }
+
+    function requestUnknownPageLocation() {
+        locateQueued = true;
+        // Session mutations invalidate both the needle set and any matches
+        // collected so far. Cancel promptly and let the finalizer restart once.
+        locateController?.abort(locateAbortError());
         if (locatingUnknown) {
-            locateQueued = true;
+            locateRestartQueued = true;
             return;
         }
+        if (!pdfDocument || viewerController.signal.aborted) return;
+        locateRestartQueued = false;
+        startLocateBatchChain();
+        locateQueued = false;
+        launchUnknownPageLocation();
+    }
+
+    function locateAttemptKey(snippet, needle) {
+        return `${String(snippet?.id || '')}\u0000${needle}`;
+    }
+
+    function nextUnattemptedNeedleBatch(needleGroups, attemptedKeys, limit) {
+        const pending = [];
+        for (const [needle, snippets] of needleGroups.entries()) {
+            const attemptKeys = snippets.map((snippet) => locateAttemptKey(snippet, needle));
+            if (attemptKeys.every((key) => attemptedKeys.has(key))) continue;
+            pending.push({ needle, snippets, attemptKeys, page: 0, ambiguous: false });
+        }
+        return {
+            searches: pending.slice(0, Math.max(1, limit)),
+            hasMore: pending.length > Math.max(1, limit),
+        };
+    }
+
+    function ensureLocateAttemptContext(documentValue, sessionName) {
+        if (locateAttemptDocument === documentValue && locateAttemptSession === sessionName) return;
+        locateAttemptDocument = documentValue;
+        locateAttemptSession = sessionName;
+        locateAttemptedKeys = new Set();
+    }
+
+    function rememberLocatorStoragePatch(sessionName, patches) {
+        const pages = new Map();
+        for (const patch of patches) {
+            const id = String(patch?.id || '');
+            const page = SourceUtils.pdfPageNumber(patch?.changes?.sourcePageNumber);
+            if (id && page) pages.set(id, page);
+        }
+        if (pages.size === 0) return null;
+        const expectation = { sessionName, pages };
+        locateStoragePatchExpectations.push(expectation);
+        locateStoragePatchExpectations = locateStoragePatchExpectations.slice(-MAX_LOCATE_AUTO_BATCHES);
+        clearTimeout(locateStoragePatchTimer);
+        locateStoragePatchTimer = setTimeout(() => {
+            locateStoragePatchExpectations = [];
+            locateStoragePatchTimer = null;
+        }, 5000);
+        return expectation;
+    }
+
+    function forgetLocatorStoragePatch(expectation) {
+        if (!expectation) return;
+        locateStoragePatchExpectations = locateStoragePatchExpectations
+            .filter((candidate) => candidate !== expectation);
+    }
+
+    function consumeExpectedLocatorStorageChange(sessions) {
+        for (let index = 0; index < locateStoragePatchExpectations.length; index++) {
+            const expectation = locateStoragePatchExpectations[index];
+            const snippets = sessions?.[expectation.sessionName];
+            if (!Array.isArray(snippets)) continue;
+            const actualPages = new Map(snippets.map((snippet) => [
+                String(snippet?.id || ''),
+                SourceUtils.pdfPageNumber(snippet?.sourcePageNumber),
+            ]));
+            const matches = [...expectation.pages.entries()]
+                .every(([id, page]) => actualPages.get(id) === page);
+            if (!matches) continue;
+            locateStoragePatchExpectations.splice(index, 1);
+            if (locateStoragePatchExpectations.length === 0) {
+                clearTimeout(locateStoragePatchTimer);
+                locateStoragePatchTimer = null;
+            }
+            return true;
+        }
+        return false;
+    }
+
+    async function locateUnknownSnippetPages() {
+        if (!pdfDocument || !currentSession || viewerController.signal.aborted) return;
+        if (locatingUnknown) {
+            requestUnknownPageLocation();
+            return;
+        }
+        if (locateBatchChainRemaining <= 0 || Date.now() >= locateBatchChainDeadline) return;
+        locateBatchChainRemaining--;
         const unknown = snippetsForDocument().filter((snippet) => {
             const page = SourceUtils.pdfPageNumber(snippet.sourcePageNumber);
             return !page || page > pdfDocument.numPages;
         });
         if (unknown.length === 0) return;
+
+        // Deduplicate identical selections before scanning. Besides avoiding
+        // repeated work, this places a hard ceiling on imported legacy data.
+        const needleGroups = new Map();
+        for (const snippet of unknown) {
+            const needle = SourceUtils.normalizePdfSelectionText(snippet.content);
+            if (needle.length < 2) continue;
+            if (!needleGroups.has(needle)) needleGroups.set(needle, []);
+            needleGroups.get(needle).push(snippet);
+        }
+        ensureLocateAttemptContext(pdfDocument, currentSession);
+        const { searches, hasMore } = nextUnattemptedNeedleBatch(
+            needleGroups,
+            locateAttemptedKeys,
+            MAX_LOCATE_UNIQUE_NEEDLES
+        );
+        if (searches.length === 0) return;
+
         locatingUnknown = true;
+        const controller = new AbortController();
+        locateController = controller;
         const sessionAtStart = currentSession;
-        const matches = new Map(unknown.map((snippet) => [snippet.id, []]));
-        const needles = new Map(unknown.map(
-            (snippet) => [snippet.id, SourceUtils.normalizePdfSelectionText(snippet.content)]
-        ));
+        const documentAtStart = pdfDocument;
+        let comparisons = 0;
+        let scannedChars = 0;
+        let scanComplete = true;
+        const abortFromViewer = () => controller.abort(viewerAbortError());
+        viewerController.signal.addEventListener('abort', abortFromViewer, { once: true });
+        const batchDeadlineMs = Math.max(
+            1,
+            Math.min(LOCATE_TIMEOUT_MS, locateBatchChainDeadline - Date.now())
+        );
+        const deadlineTimer = setTimeout(() => controller.abort(locateAbortError()), batchDeadlineMs);
         try {
-            for (let pageNumber = 1; pageNumber <= pdfDocument.numPages; pageNumber++) {
-                if (currentSession !== sessionAtStart) return;
+            for (let pageNumber = 1; pageNumber <= documentAtStart.numPages; pageNumber++) {
+                if (
+                    controller.signal.aborted || currentSession !== sessionAtStart ||
+                    pdfDocument !== documentAtStart
+                ) throw locateAbortError();
                 if (pageNumber === 1 || pageNumber % 5 === 0) {
                     setStatus(message('pdf_viewer_locating_progress', 'Locating saved selections… %s/%t')
-                        .replace('%s', String(pageNumber)).replace('%t', String(pdfDocument.numPages)));
+                        .replace('%s', String(pageNumber)).replace('%t', String(documentAtStart.numPages)));
                 }
-                const page = await pdfDocument.getPage(pageNumber);
-                const content = await page.getTextContent({
-                    includeMarkedContent: false,
-                    disableNormalization: false,
-                });
-                const pageText = canonicalPdfItemsText(content.items);
-                for (const snippet of unknown) {
-                    const needle = needles.get(snippet.id);
-                    if (needle && pageText.includes(needle)) matches.get(snippet.id).push(pageNumber);
+                let page = null;
+                try {
+                    const pagePromise = Promise.resolve(documentAtStart.getPage(pageNumber)).then((value) => {
+                        if (controller.signal.aborted) {
+                            try { value?.cleanup?.(); } catch {}
+                            throw locateAbortError();
+                        }
+                        return value;
+                    });
+                    page = await waitWithSignal(
+                        pagePromise,
+                        controller.signal,
+                        locateAbortError
+                    );
+                    const content = await waitWithSignal(page.getTextContent({
+                        includeMarkedContent: false,
+                        disableNormalization: false,
+                    }), controller.signal, locateAbortError);
+                    if (!Array.isArray(content?.items) || content.items.length > MAX_LOCATE_ITEMS_PER_PAGE) {
+                        scanComplete = false;
+                        break;
+                    }
+                    const pageText = canonicalPdfItemsText(content.items);
+                    if (pageText.length > MAX_LOCATE_PAGE_CHARS) {
+                        scanComplete = false;
+                        break;
+                    }
+                    scannedChars += pageText.length;
+                    if (scannedChars > MAX_LOCATE_TOTAL_CHARS) {
+                        scanComplete = false;
+                        break;
+                    }
+                    for (const search of searches) {
+                        if (search.ambiguous) continue;
+                        comparisons++;
+                        if (comparisons > MAX_LOCATE_COMPARISONS) {
+                            scanComplete = false;
+                            break;
+                        }
+                        if (!pageText.includes(search.needle)) continue;
+                        if (search.page) search.ambiguous = true;
+                        else search.page = pageNumber;
+                    }
+                    if (!scanComplete) break;
+                } finally {
+                    try { page?.cleanup?.(); } catch {}
                 }
-                await new Promise((resolve) => setTimeout(resolve, 0));
+                // Text normalization still happens on the UI thread. Yield so
+                // scrolling and Session changes can cancel between pages.
+                await waitWithSignal(
+                    new Promise((resolve) => setTimeout(resolve, 0)),
+                    controller.signal,
+                    locateAbortError
+                );
             }
+            if (!scanComplete || controller.signal.aborted || currentSession !== sessionAtStart) return;
+            for (const search of searches) {
+                for (const key of search.attemptKeys) locateAttemptedKeys.add(key);
+            }
+            // Continue with the next deterministic batch. Failed/ambiguous
+            // needles are remembered so the first 64 cannot starve later ones.
+            if (
+                hasMore && locateBatchChainRemaining > 0 &&
+                Date.now() < locateBatchChainDeadline
+            ) locateQueued = true;
             const patches = [];
-            for (const snippet of unknown) {
-                const pages = matches.get(snippet.id);
-                if (pages.length !== 1 || currentSession !== sessionAtStart) continue;
-                patches.push({
-                    id: snippet.id,
-                    changes: {
-                        sourceDocumentType: 'pdf',
-                        sourcePageNumber: pages[0],
-                    },
-                });
+            for (const search of searches) {
+                if (!search.page || search.ambiguous) continue;
+                for (const snippet of search.snippets) {
+                    patches.push({
+                        id: snippet.id,
+                        changes: {
+                            sourceDocumentType: 'pdf',
+                            sourcePageNumber: search.page,
+                        },
+                    });
+                }
             }
-            const updated = currentSession === sessionAtStart
-                ? await Store.updateSnippets(sessionAtStart, patches)
-                : 0;
+            let updated = 0;
+            if (patches.length > 0 && currentSession === sessionAtStart) {
+                const expectation = rememberLocatorStoragePatch(sessionAtStart, patches);
+                try {
+                    updated = await Store.updateSnippets(sessionAtStart, patches);
+                } catch (error) {
+                    forgetLocatorStoragePatch(expectation);
+                    throw error;
+                }
+                if (updated <= 0) forgetLocatorStoragePatch(expectation);
+            }
             if (updated > 0 && currentSession === sessionAtStart) {
-                await loadSession(sessionAtStart);
+                // The writer refreshes its own in-memory view without turning
+                // the resulting storage event into a fresh locator chain.
+                await loadSession(sessionAtStart, { locateUnknown: false });
                 showToast(message('pdf_viewer_pages_resolved', 'Located %s saved selection(s).').replace('%s', updated));
             }
+        } catch (error) {
+            if (error?.name !== 'AbortError') throw error;
         } finally {
+            clearTimeout(deadlineTimer);
+            viewerController.signal.removeEventListener('abort', abortFromViewer);
+            if (locateController === controller) locateController = null;
             locatingUnknown = false;
             if (pdfDocument) setStatus(message('pdf_viewer_ready', 'Ready'));
-            if (locateQueued) {
+            if (locateRestartQueued && pdfDocument && !viewerController.signal.aborted) {
+                locateRestartQueued = false;
                 locateQueued = false;
-                Promise.resolve().then(() => locateUnknownSnippetPages().catch(() => {}));
+                startLocateBatchChain();
+                launchUnknownPageLocation();
+            } else if (
+                locateQueued && locateBatchChainRemaining > 0 &&
+                Date.now() < locateBatchChainDeadline &&
+                pdfDocument && !viewerController.signal.aborted
+            ) {
+                locateQueued = false;
+                launchUnknownPageLocation();
+            } else {
+                locateQueued = false;
             }
         }
+    }
+
+    function startLoadDeadline() {
+        clearTimeout(loadDeadlineTimer);
+        loadDeadlineTimer = setTimeout(() => {
+            if (viewerController.signal.aborted) return;
+            viewerTimedOut = true;
+            const error = viewerAbortError();
+            viewerController.abort(error);
+            destroyPdfRuntime().catch(() => {});
+        }, VIEWER_LOAD_TIMEOUT_MS);
+    }
+
+    function clearLoadDeadline() {
+        clearTimeout(loadDeadlineTimer);
+        loadDeadlineTimer = null;
     }
 
     async function loadPdf() {
@@ -503,56 +1038,89 @@ document.addEventListener('DOMContentLoaded', async () => {
             fail({ code: 'PDF_UNSUPPORTED_URL' });
             return;
         }
+        startLoadDeadline();
         documentTitle.textContent = requestedTitle || sourceUrl;
         setStatus(message('pdf_viewer_downloading', 'Downloading PDF…'));
-        const downloaded = await PDFExtractor.fetchBytesFromUrl(sourceUrl, {
-            signal: viewerController.signal,
-            onProgress(progress) {
-                if (progress.phase !== 'download') return;
-                const loaded = Math.round((progress.loaded || 0) / 1024 / 1024 * 10) / 10;
-                setStatus(message('pdf_viewer_download_progress', 'Downloading PDF… %s MB').replace('%s', loaded));
-            },
-        });
-        setStatus(message('pdf_viewer_opening', 'Opening PDF…'));
-        pdfjs = await import(chrome.runtime.getURL('lib/vendor/pdfjs/pdf.min.mjs'));
-        const workerUrl = chrome.runtime.getURL('lib/vendor/pdfjs/pdf.worker.min.mjs');
-        pdfjs.GlobalWorkerOptions.workerSrc = workerUrl;
-        workerPort = new Worker(workerUrl, { type: 'module', name: 'weft-pdf-viewer' });
-        pdfWorker = new pdfjs.PDFWorker({ port: workerPort, verbosity: 0 });
-        await pdfWorker.promise;
-        const runtimeUrl = (path) => chrome.runtime.getURL(`lib/vendor/pdfjs/${path}`);
-        loadingTask = pdfjs.getDocument({
-            data: downloaded.bytes,
-            docBaseUrl: downloaded.responseUrl,
-            worker: pdfWorker,
-            cMapUrl: runtimeUrl('cmaps/'),
-            cMapPacked: true,
-            standardFontDataUrl: runtimeUrl('standard_fonts/'),
-            useSystemFonts: true,
-            useWasm: false,
-            useWorkerFetch: false,
-            isEvalSupported: false,
-            stopAtErrors: false,
-            verbosity: 0,
-        });
-        pdfDocument = await loadingTask.promise;
-        if (!Number.isInteger(pdfDocument.numPages) || pdfDocument.numPages < 1) throw new Error('PDF_EMPTY');
-        const firstPage = await pdfDocument.getPage(1);
-        const baseViewport = firstPage.getViewport({ scale: 1 });
-        basePageSize = { width: baseViewport.width, height: baseViewport.height };
-        try { firstPage.cleanup?.(); } catch {}
-        let metadataTitle = '';
-        try { metadataTitle = (await pdfDocument.getMetadata())?.info?.Title || ''; } catch {}
-        const title = requestedTitle || String(metadataTitle || '').trim() || sourceUrl.split('/').pop() || sourceUrl;
-        documentTitle.textContent = title;
-        document.title = `${title} — ${message('pdf_viewer_title', 'Weft PDF Reader')}`;
-        currentPage = Math.min(requestedPage, pdfDocument.numPages);
-        pageInput.max = String(pdfDocument.numPages);
-        pageCount.textContent = `/ ${pdfDocument.numPages}`;
-        setStatus(message('pdf_viewer_ready', 'Ready'));
-        renderSnippetList();
-        rebuildPagePlaceholders();
-        locateUnknownSnippetPages().catch((error) => console.warn('[Weft] PDF page location failed:', error));
+        try {
+            const downloaded = await PDFExtractor.fetchBytesFromUrl(sourceUrl, {
+                signal: viewerController.signal,
+                onProgress(progress) {
+                    if (progress.phase !== 'download') return;
+                    const loaded = Math.round((progress.loaded || 0) / 1024 / 1024 * 10) / 10;
+                    setStatus(message('pdf_viewer_download_progress', 'Downloading PDF… %s MB').replace('%s', loaded));
+                },
+            });
+            throwIfViewerAborted();
+            setStatus(message('pdf_viewer_opening', 'Opening PDF…'));
+            pdfjs = await waitWithSignal(
+                import(chrome.runtime.getURL('lib/vendor/pdfjs/pdf.min.mjs')),
+                viewerController.signal
+            );
+            throwIfViewerAborted();
+            const workerUrl = chrome.runtime.getURL('lib/vendor/pdfjs/pdf.worker.min.mjs');
+            pdfjs.GlobalWorkerOptions.workerSrc = workerUrl;
+            workerPort = new Worker(workerUrl, { type: 'module', name: 'weft-pdf-viewer' });
+            pdfWorker = new pdfjs.PDFWorker({ port: workerPort, verbosity: 0 });
+            await waitWithSignal(pdfWorker.promise, viewerController.signal);
+            throwIfViewerAborted();
+            const runtimeUrl = (path) => chrome.runtime.getURL(`lib/vendor/pdfjs/${path}`);
+            loadingTask = pdfjs.getDocument({
+                data: downloaded.bytes,
+                docBaseUrl: downloaded.responseUrl,
+                worker: pdfWorker,
+                cMapUrl: runtimeUrl('cmaps/'),
+                cMapPacked: true,
+                standardFontDataUrl: runtimeUrl('standard_fonts/'),
+                useSystemFonts: true,
+                useWasm: false,
+                useWorkerFetch: false,
+                isEvalSupported: false,
+                enableScripting: false,
+                stopAtErrors: false,
+                verbosity: 0,
+            });
+            pdfDocument = await waitWithSignal(loadingTask.promise, viewerController.signal);
+            throwIfViewerAborted();
+            if (!Number.isInteger(pdfDocument.numPages) || pdfDocument.numPages < 1) {
+                const error = new Error('The PDF does not contain any pages.');
+                error.code = 'PDF_EMPTY';
+                throw error;
+            }
+            if (pdfDocument.numPages > MAX_PDF_PAGES) {
+                const error = new Error('The PDF exceeds the viewer page limit.');
+                error.code = 'PDF_TOO_MANY_PAGES';
+                throw error;
+            }
+            const firstPage = await waitWithSignal(pdfDocument.getPage(1), viewerController.signal);
+            try {
+                const baseViewport = firstPage.getViewport({ scale: 1 });
+                basePageSize = { width: baseViewport.width, height: baseViewport.height };
+            } finally {
+                try { firstPage.cleanup?.(); } catch {}
+            }
+            let metadataTitle = '';
+            try {
+                metadataTitle = (await waitWithSignal(
+                    pdfDocument.getMetadata(),
+                    viewerController.signal
+                ))?.info?.Title || '';
+            } catch (error) {
+                if (viewerController.signal.aborted) throw error;
+            }
+            throwIfViewerAborted();
+            const title = requestedTitle || String(metadataTitle || '').trim() || sourceUrl.split('/').pop() || sourceUrl;
+            documentTitle.textContent = title;
+            document.title = `${title} — ${message('pdf_viewer_title', 'Weft PDF Reader')}`;
+            currentPage = Math.min(requestedPage, pdfDocument.numPages);
+            pageInput.max = String(pdfDocument.numPages);
+            pageCount.textContent = `/ ${pdfDocument.numPages}`;
+            setStatus(message('pdf_viewer_ready', 'Ready'));
+            renderSnippetList();
+            rebuildPagePlaceholders();
+            requestUnknownPageLocation();
+        } finally {
+            clearLoadDeadline();
+        }
     }
 
     function selectionPage(range) {
@@ -690,6 +1258,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     pdfScroll.addEventListener('scroll', scheduleCurrentPageUpdate, { passive: true });
 
     sessionSelect.addEventListener('change', async () => {
+        locateController?.abort(locateAbortError());
         currentSession = sessionSelect.value;
         await Store.setCurrentSession(currentSession);
         await loadSession(currentSession);
@@ -725,6 +1294,10 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     function onStorageChanged(changes, areaName) {
         if (areaName !== 'local' || (!changes.sessions && !changes.currentSession)) return;
+        const locatorOwnPatch = changes.sessions && consumeExpectedLocatorStorageChange(
+            changes.sessions.newValue
+        );
+        if (locatorOwnPatch && !changes.currentSession) return;
         clearTimeout(storageRefreshTimer);
         storageRefreshTimer = setTimeout(() => {
             const requested = typeof changes.currentSession?.newValue === 'string'
@@ -736,17 +1309,18 @@ document.addEventListener('DOMContentLoaded', async () => {
     chrome.storage.onChanged.addListener(onStorageChanged);
 
     window.addEventListener('pagehide', () => {
-        viewerController.abort();
+        viewerDisposed = true;
+        clearLoadDeadline();
+        viewerController.abort(viewerAbortError());
+        locateController?.abort(locateAbortError());
         selectionAssist.dispose();
         clearTimeout(storageRefreshTimer);
+        clearTimeout(locateStoragePatchTimer);
+        locateStoragePatchExpectations = [];
         window.cancelAnimationFrame(pagePositionFrame);
+        window.cancelAnimationFrame(pageOffsetFrame);
         chrome.storage.onChanged.removeListener(onStorageChanged);
-        renderGeneration++;
-        pageObserver?.disconnect();
-        disposeRenderedPages();
-        try { loadingTask?.destroy?.(); } catch {}
-        try { pdfWorker?.destroy?.(); } catch {}
-        try { workerPort?.terminate?.(); } catch {}
+        destroyPdfRuntime().catch(() => {});
     }, { once: true });
 
     try {
@@ -754,5 +1328,6 @@ document.addEventListener('DOMContentLoaded', async () => {
         await loadPdf();
     } catch (error) {
         fail(error);
+        await destroyPdfRuntime();
     }
 });

@@ -1,6 +1,6 @@
 {
   "name": "weft",
-  "version": "3.0.2",
+  "version": "3.1.0",
   "description": "Collect fragments from across your tabs and weave them into cited reports, rewrites, diagrams and fact-checks.",
   "license": "AGPL-3.0-only",
   "private": true,
@@ -8,8 +8,9 @@
   "scripts": {
     "lint": "eslint .",
     "format": "prettier --write \"**/*.{js,json,css,html,md}\"",
+    "vendor:mermaid": "node scripts/vendor-mermaid.mjs",
     "vendor:pdfjs": "node scripts/vendor-pdfjs.mjs",
-    "validate": "node scripts/validate-manifest.mjs && node scripts/validate-pdfjs.mjs && node scripts/package-files.mjs --check",
+    "validate": "node scripts/validate-manifest.mjs && node scripts/validate-mermaid.mjs && node scripts/validate-pdfjs.mjs && node scripts/package-files.mjs --check",
     "test": "node test/unit.mjs && node scripts/check-i18n.mjs",
     "test:i18n": "node scripts/check-i18n.mjs",
     "pack": "node scripts/pack.mjs",
@@ -17,6 +18,7 @@
   },
   "devDependencies": {
     "eslint": "^9.0.0",
+    "mermaid": "11.16.1",
     "pdfjs-dist": "6.2.108",
     "prettier": "^3.0.0"
   }
